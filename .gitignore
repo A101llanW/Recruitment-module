@@ -1,0 +1,34 @@
+
+# Visual Studio
+.vs/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Packages
+packages/
+*.nupkg
+
+# Published
+Publish/
+*.pubxml
+
+# Temporary/Cache
+.nexus/
+.nexus-sync/
+*.log
+*.tmp
+/tmp/
+
+# UI/Identity
+secrets.config
+app.config
+Web.config
+
+# AI / Editor
+.cursor/
+.vscode/
+.history/

@@ -1,0 +1,157 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Dashboard";
+}
+<div class="row">
+    <div class="col-md-3">
+        <div class="card text-white bg-primary mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Open Positions</h5>
+                <p class="card-text display-4">@ViewBag.OpenPositions</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Pending Applications</h5>
+                <p class="card-text display-4">@ViewBag.PendingApplications</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Scheduled Interviews</h5>
+                <p class="card-text display-4">@ViewBag.ScheduledInterviews</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Total Users</h5>
+                <p class="card-text display-4">@ViewBag.TotalUsers</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@using HR.Web.Models
+@{
+    var pendingImpersonation = ViewBag.PendingImpersonationRequests as List<ImpersonationRequest>;
+}
+
+@if (pendingImpersonation != null && pendingImpersonation.Any())
+{
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-warning shadow-sm">
+                <div class="card-header bg-warning text-dark font-weight-bold d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-exclamation-triangle mr-2"></i> System Elevation Requests</span>
+                    <span class="badge badge-dark">@pendingImpersonation.Count Pending</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th>SuperAdmin</th>
+                                    <th>Requested At</th>
+                                    <th class="text-right">Decision</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var req in pendingImpersonation)
+                                {
+                                    <tr>
+                                        <td class="align-middle"><strong>@req.RequestedBy</strong></td>
+                                        <td class="align-middle text-muted small">@req.RequestDate.ToString("HH:mm dd MMM yyyy")</td>
+                                        <td class="text-right">
+                                            @using (Html.BeginForm("HandleImpersonationRequest", "Dashboard", FormMethod.Post, new { @class = "d-inline" }))
+                                            {
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="requestId" value="@req.Id" />
+                                                <input type="hidden" name="approved" value="true" />
+                                                <div class="input-group input-group-sm d-inline-flex mr-2" style="width: auto;">
+                                                    <div class="input-group-prepend">
+                                                        <span class="input-group-text bg-white"><i class="far fa-clock"></i></span>
+                                                    </div>
+                                                    <select name="durationMinutes" class="form-control" style="width: 100px;">
+                                                        <option value="2">2 min</option>
+                                                        <option value="5">5 min</option>
+                                                        <option value="15">15 min</option>
+                                                        <option value="30">30 min</option>
+                                                        <option value="60" selected>1 hour</option>
+                                                        <option value="120">2 hours</option>
+                                                        <option value="240">4 hours</option>
+                                                    </select>
+                                                </div>
+                                                <button type="submit" class="btn btn-sm btn-success font-weight-bold px-3">
+                                                    <i class="fas fa-check mr-1"></i> Grant Access
+                                                </button>
+                                            }
+                                            @using (Html.BeginForm("HandleImpersonationRequest", "Dashboard", FormMethod.Post, new { @class = "d-inline ml-2" }))
+                                            {
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="requestId" value="@req.Id" />
+                                                <input type="hidden" name="approved" value="false" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger font-weight-bold px-3">
+                                                    <i class="fas fa-times mr-1"></i> Deny
+                                                </button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-light py-2">
+                    <small class="text-muted"><i class="fas fa-info-circle mr-1"></i> Approving a request grants temporary system-level access to this SuperAdmin for your company context.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (User != null && User.Identity != null && User.IsInRole("Admin"))
+{
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-tachometer-alt"></i> Quick Admin Actions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <a href="@Url.Action("UserManagement", "Admin")" class="btn btn-outline-primary btn-block mb-2">
+                                <i class="fas fa-users"></i> User Management
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="@Url.Action("SecurityLogs", "Admin")" class="btn btn-outline-danger btn-block mb-2">
+                                <i class="fas fa-shield-alt"></i> Security Logs
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="@Url.Action("Questions", "Admin")" class="btn btn-outline-warning btn-block mb-2">
+                                <i class="fas fa-question-circle"></i> Questions
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="@Url.Action("Index", "Applications")" class="btn btn-outline-success btn-block mb-2">
+                                <i class="fas fa-file-alt"></i> Applications
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+

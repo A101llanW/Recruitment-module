@@ -1,0 +1,108 @@
+@model HR.Web.Models.Interview
+
+@{
+    ViewBag.Title = "Edit Interview";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .card-blue {
+        background: #fafdff;
+        border-radius: 0.4rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        border: 1.2px solid #b2d7f7;
+        padding: 1.5rem;
+        margin-top: 1.2rem;
+    }
+
+    .page-title {
+        color: #0d2c4a;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+</style>
+
+<div class="mt-4">
+    <div class="card-blue">
+        <h2 class="page-title">
+            <i class="fas fa-edit"></i> Reschedule Interview
+        </h2>
+
+        @using (Html.BeginForm())
+        {
+            @Html.AntiForgeryToken()
+            @Html.HiddenFor(m => m.Id)
+            @Html.HiddenFor(m => m.ApplicationId)
+
+            <div class="form-row">
+                <div class="form-group col-12 col-md-6">
+                    @Html.LabelFor(m => m.InterviewerId, "Interviewer")
+                    @Html.DropDownList(
+                        "InterviewerId",
+                        null,
+                        "-- Select interviewer --",
+                        new { @class = "form-control" }
+                    )
+                    @Html.ValidationMessageFor(m => m.InterviewerId)
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group col-12 col-md-6">
+                    @Html.LabelFor(m => m.ScheduledAt, "Scheduled Date & Time")
+                    @Html.TextBoxFor(
+                        m => m.ScheduledAt,
+                        "{0:yyyy-MM-ddTHH:mm}",
+                        new
+                             {
+                            @class = "form-control",
+                            type = "datetime-local"
+                        }
+                    )
+                    <small class="form-text text-muted">
+                        Uses your device's date & time picker
+                    </small>
+                </div>
+
+                <div class="form-group col-12 col-md-6">
+                    @Html.LabelFor(m => m.Mode, "Mode")
+                    @Html.DropDownListFor(
+                        m => m.Mode,
+                        new SelectList(
+                            new[] { "Remote", "Onsite" },
+                            Model.Mode
+                        ),
+                        "-- Select mode --",
+                        new { @class = "form-control" }
+                    )
+                </div>
+            </div>
+
+            <div class="form-group">
+                @Html.LabelFor(m => m.Notes)
+                @Html.TextAreaFor(
+                    m => m.Notes,
+                    new
+                         {
+                        @class = "form-control",
+                        rows = 3,
+                        placeholder = "Optional notes for interviewer or candidate"
+                    }
+                )
+            </div>
+
+            <div class="d-flex flex-column flex-md-row">
+                <button type="submit" class="btn btn-blue mb-2 mb-md-0 mr-md-2">
+                    Save
+                </button>
+
+                @Html.ActionLink(
+                    "Back",
+                    "Index",
+                    null,
+                    new { @class = "btn btn-secondary" }
+                )
+            </div>
+        }
+    </div>
+</div>

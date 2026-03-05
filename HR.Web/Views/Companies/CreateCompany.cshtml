@@ -1,0 +1,188 @@
+@model HR.Web.Controllers.CreateCompanyViewModel
+@{
+    ViewBag.Title = "Create Company";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    :root {
+        --system-blue: #6fb8dc;
+        --system-dark: #0d2c4a;
+        --system-gray: #f8f9fa;
+        --border-color: #b2d7f7;
+    }
+
+    .page-wrapper {
+        padding: 30px 0;
+        background: #f6faff;
+        min-height: calc(100vh - 150px);
+    }
+
+    .form-card {
+        background: #ffffff;
+        border: 1.2px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(13, 44, 74, 0.05);
+        overflow: hidden;
+    }
+
+    .form-header {
+        background: var(--system-gray);
+        border-bottom: 1.2px solid var(--border-color);
+        padding: 20px 30px;
+    }
+
+    .form-header h3 {
+        color: var(--system-dark);
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .form-header h3 i {
+        margin-right: 12px;
+        color: var(--system-blue);
+    }
+
+    .form-body {
+        padding: 30px;
+    }
+
+    .control-label {
+        font-weight: 600;
+        color: var(--system-dark);
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+    }
+
+    .form-control-custom {
+        display: block;
+        width: 100%;
+        padding: 0.6rem 1rem;
+        font-size: 1rem;
+        color: #495057;
+        background-color: #fff;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    }
+
+    .form-control-custom:focus {
+        border-color: var(--system-blue);
+        outline: 0;
+        box-shadow: 0 0 0 0.2rem rgba(111, 184, 220, 0.25);
+    }
+
+    .slug-info {
+        margin-top: 8px;
+        padding: 10px 15px;
+        background: #f1f8fd;
+        border-radius: 4px;
+        border-left: 3px solid var(--system-blue);
+        font-family: inherit;
+        font-size: 0.85rem;
+        color: #555;
+    }
+
+    .slug-info code {
+        color: var(--system-dark);
+        font-weight: 600;
+    }
+
+    .action-row {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+        display: flex;
+        gap: 12px;
+    }
+
+
+
+    .text-danger-custom {
+        color: #dc3545;
+        font-size: 0.85rem;
+        margin-top: 5px;
+        display: block;
+    }
+
+    .field-hint {
+        font-size: 0.8rem;
+        color: #888;
+        margin-top: 5px;
+    }
+</style>
+
+<div class="page-wrapper">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <div class="form-card">
+                    <div class="form-header">
+                        <h3><i class="fas fa-plus-square"></i> New Company Registration</h3>
+                    </div>
+                    <div class="form-body">
+                        @using (Html.BeginForm("CreateCompany", "Companies", FormMethod.Post, new { id = "createCompanyForm" }))
+                        {
+                            @Html.AntiForgeryToken()
+
+                            if (!ViewData.ModelState.IsValid)
+                            {
+                                <div class="alert alert-danger" style="border-radius: 4px;">
+                                    <h5 class="mb-2"><i class="fas fa-exclamation-triangle mr-2"></i> Registration Errors</h5>
+                                    @Html.ValidationSummary(true, "", new { @class = "small m-0" })
+                                </div>
+                            }
+
+                            <div class="form-group mb-4">
+                                <label class="control-label" for="Name">Legal Company Name</label>
+                                @Html.TextBoxFor(m => m.Name, new { @class = "form-control-custom", placeholder = "Enter full company name", id = "Name" })
+                                @Html.ValidationMessageFor(m => m.Name, "", new { @class = "text-danger-custom" })
+                                <p class="field-hint">The company URL will be automatically generated from this name.</p>
+                            </div>
+
+                            <div class="form-group mb-2">
+                                <label class="control-label" for="LicenseExpiryDate">License Expiry Date</label>
+                                @Html.TextBoxFor(m => m.LicenseExpiryDate, "{0:yyyy-MM-dd}", new { @class = "form-control-custom", type = "date" })
+                                @Html.ValidationMessageFor(m => m.LicenseExpiryDate, "", new { @class = "text-danger-custom" })
+                                <p class="field-hint">Optional. If unspecified, a default 1-year license will be granted from today.</p>
+                            </div>
+
+                            if (!ViewData.ModelState.IsValid)
+                            {
+                                <div class="form-group mb-4 mt-3 p-3" style="background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px;">
+                                    <div class="form-check">
+                                        @Html.CheckBoxFor(m => m.IgnoreSimilarNameWarning, new { @class = "form-check-input", id = "IgnoreSimilarNameWarning", style = "margin-top: 0.3rem;" })
+                                        <label class="form-check-label text-danger font-weight-bold" for="IgnoreSimilarNameWarning" style="cursor: pointer; margin-left: 5px;">
+                                            I confirm this is not a duplicate company. Create anyway.
+                                        </label>
+                                    </div>
+                                </div>
+                            }
+
+                            <div class="action-row">
+                                <button type="submit" class="btn-blue">
+                                    <i class="fas fa-check-circle mr-1"></i> Confirm Registration
+                                </button>
+                                <a href="@Url.Action("Index")" class="btn-red" style="text-decoration: none;">
+                                    <i class="fas fa-times-circle mr-1"></i> Cancel
+                                </a>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="mt-4 text-center">
+                    <p class="text-muted small">
+                        <i class="fas fa-lock mr-1"></i> This is a restricted administrative action. All registrations are logged for audit purposes.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @Scripts.Render("~/Scripts/validation")
+}

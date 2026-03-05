@@ -1,0 +1,211 @@
+@model IEnumerable<HR.Web.Models.Company>
+@{
+    ViewBag.Title = "License Management";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .license-card {
+        transition: transform 0.2s;
+        border-left: 5px solid #ccc;
+    }
+    .license-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .status-active { border-left-color: #28a745; }
+    .status-inactive { border-left-color: #dc3545; }
+    .status-expiring { border-left-color: #ffc107; }
+</style>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2 class="d-flex align-items-center">
+            <i class="fas fa-key text-warning mr-3"></i> License Management
+        </h2>
+        <p class="text-muted">Renew, revoke, and manage company system licenses.</p>
+        <hr />
+    </div>
+</div>
+
+<div class="row">
+    @foreach (var company in Model)
+    {
+        var isExpiringSoon = company.LicenseExpiryDate.HasValue && 
+                           company.LicenseExpiryDate.Value <= DateTime.Now.AddDays(30) &&
+                           company.LicenseExpiryDate.Value > DateTime.Now;
+        var isExpired = company.LicenseExpiryDate.HasValue && company.LicenseExpiryDate.Value < DateTime.Now;
+        
+        var statusClass = !company.IsActive ? "status-inactive" : (isExpired ? "status-inactive" : (isExpiringSoon ? "status-expiring" : "status-active"));
+        
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 license-card @statusClass">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h4 class="card-title mb-0">@company.Name</h4>
+                        <span class="badge badge-@(company.IsActive ? "success" : "danger")">
+                            @(company.IsActive ? "Active" : "Revoked")
+                        </span>
+                    </div>
+                    <p class="text-muted small mb-3">Slug: <code>@company.Slug</code></p>
+                    
+                    <div class="mb-3">
+                        <label class="small text-muted d-block mb-1">License Expiry</label>
+                        @if (company.LicenseExpiryDate.HasValue)
+                        {
+                            <h5 class="@(isExpired ? "text-danger" : (isExpiringSoon ? "text-warning" : ""))">
+                                <i class="far fa-calendar-alt mr-1"></i>
+                                @company.LicenseExpiryDate.Value.ToString("MMM dd, yyyy")
+                            </h5>
+                            if (isExpired)
+                            {
+                                <span class="badge badge-danger">EXPIRED</span>
+                            }
+                            else if (isExpiringSoon)
+                            {
+                                <span class="badge badge-warning">EXPIRING SOON</span>
+                            }
+                        }
+                        else
+                        {
+                            <h5 class="text-muted">No expiry set</h5>
+                        }
+                    </div>
+
+                    <div class="d-flex flex-column gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-primary btn-block extend-btn" 
+                                data-id="@company.Id" data-name="@company.Name">
+                            <i class="fas fa-history mr-2"></i> Renew / Extend
+                        </button>
+                        
+                        <button type="button" class="btn btn-outline-@(company.IsActive ? "danger" : "success") btn-block toggle-btn" 
+                                data-id="@company.Id" data-name="@company.Name" data-active="@company.IsActive.ToString().ToLower()">
+                            <i class="fas fa-@(company.IsActive ? "hand-paper" : "play") mr-2"></i>
+                            @(company.IsActive ? "Revoke License" : "Activate License")
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Extend License Modal -->
+<div class="modal fade" id="extendModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Renew License</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Extend license for: <strong id="extend-name"></strong></p>
+                <div class="form-group">
+                    <label>Duration:</label>
+                    <select id="extend-preset" class="form-control">
+                        <option value="1" data-unit="Months">1 Month</option>
+                        <option value="3" data-unit="Months">3 Months</option>
+                        <option value="6" data-unit="Months" selected>6 Months</option>
+                        <option value="12" data-unit="Months">1 Year</option>
+                        <option value="24" data-unit="Months">2 Years</option>
+                        <option value="custom">Custom...</option>
+                    </select>
+                </div>
+                <div id="custom-duration-container" style="display:none; border: 1px solid #ddd; padding: 15px; border-radius: 4px; background: #f9f9f9;">
+                    <label class="small text-muted">Custom Duration:</label>
+                    <div class="row">
+                        <div class="col-xs-7">
+                            <input type="number" id="custom-value" class="form-control" placeholder="Value" min="1" value="30" />
+                        </div>
+                        <div class="col-xs-5">
+                            <select id="custom-unit" class="form-control">
+                                <option value="Days">Days</option>
+                                <option value="Months">Months</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-extend">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            var selectedId = 0;
+
+            $('.extend-btn').click(function () {
+                selectedId = $(this).data('id');
+                $('#extend-name').text($(this).data('name'));
+                $('#extendModal').modal('show');
+            });
+
+            $('#extend-preset').change(function() {
+                if ($(this).val() === 'custom') {
+                    $('#custom-duration-container').slideDown(200);
+                } else {
+                    $('#custom-duration-container').slideUp(200);
+                }
+            });
+
+            $('#save-extend').click(function () {
+                var presetValue = $('#extend-preset').val();
+                var value, unit;
+
+                if (presetValue === 'custom') {
+                    value = $('#custom-value').val();
+                    unit = $('#custom-unit').val();
+                    if (!value || value <= 0) {
+                        alert('Please enter a valid numeric value.');
+                        return;
+                    }
+                } else {
+                    value = presetValue;
+                    unit = $('#extend-preset option:selected').data('unit');
+                }
+
+                $.post('@Url.Action("ExtendLicense")', {
+                    id: selectedId,
+                    value: value,
+                    unit: unit,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                }, function (res) {
+                    if (res.success) {
+                        alert(res.message);
+                        location.reload();
+                    } else {
+                        alert('Error: ' + res.message);
+                    }
+                });
+            });
+
+            $('.toggle-btn').click(function () {
+                var id = $(this).data('id');
+                var name = $(this).data('name');
+                var active = $(this).data('active'); // jQuery auto-converts "true"/"false" strings to boolean
+                var action = active ? 'REVOKE' : 'ACTIVATE';
+                
+                if (confirm('Are you sure you want to ' + action + ' the license for ' + name + '?')) {
+                    $.post('@Url.Action("ToggleStatus")', {
+                        id: id,
+                        __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                    }, function (res) {
+                        if (res.success) {
+                            alert(res.message);
+                            location.reload();
+                        } else {
+                            alert('Error: ' + res.message);
+                        }
+                    });
+                }
+            });
+        });
+    </script>
+}
+
+@Html.AntiForgeryToken()

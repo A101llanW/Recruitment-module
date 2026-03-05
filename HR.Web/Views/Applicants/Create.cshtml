@@ -1,0 +1,59 @@
+@model HR.Web.Models.Applicant
+
+@{
+    ViewBag.Title = "Create Applicant";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<h2 class="mb-4">Create Applicant</h2>
+
+<div class="pb-5">
+    @using (Html.BeginForm())
+    {
+        @Html.AntiForgeryToken()
+
+        <div class="form-group">
+            @Html.LabelFor(m => m.FullName)
+            @Html.TextBoxFor(m => m.FullName, new { @class = "form-control" })
+            @Html.ValidationMessageFor(m => m.FullName, "", new { @class = "text-danger small" })
+        </div>
+
+        <div class="form-group">
+            @Html.LabelFor(m => m.Email)
+            @Html.TextBoxFor(m => m.Email, new
+            {
+                @class = "form-control",
+                type = "email",
+                autocomplete = "email"
+            })
+            @Html.ValidationMessageFor(m => m.Email, "", new { @class = "text-danger small" })
+        </div>
+
+        <div class="form-group">
+            @Html.LabelFor(m => m.Phone)
+            @Html.TextBoxFor(m => m.Phone, new
+            {
+                @class = "form-control",
+                type = "tel",
+                autocomplete = "tel"
+            })
+        </div>
+
+        <div class="d-flex flex-column flex-md-row mt-4">
+            <button type="submit" class="btn btn-blue mb-2 mb-md-0 mr-md-2">
+                Save
+            </button>
+
+            @Html.ActionLink(
+                "Back",
+                "Index",
+                null,
+                new { @class = "btn btn-red" }
+            )
+        </div>
+    }
+</div>
+
+@section Scripts {
+    @Scripts.Render("~/bundles/jqueryval")
+}

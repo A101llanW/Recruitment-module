@@ -1,0 +1,590 @@
+@model IEnumerable<HR.Web.Models.Position>
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Positions";
+    var isAdmin = ViewBag.IsAdmin != null ? (bool)ViewBag.IsAdmin : false;
+    var allPositions = ViewBag.AllPositions as IEnumerable<HR.Web.Models.Position> ?? Model;
+    var displayPositions = isAdmin ? allPositions : Model;
+    
+    // Helper function to safely get Responsibilities property
+    Func<HR.Web.Models.Position, string> getResponsibilities = (p) => {
+        try {
+            var prop = p.GetType().GetProperty("Responsibilities");
+            if (prop != null) {
+                var value = prop.GetValue(p);
+                return value != null ? value.ToString() : "";
+            }
+        } catch {}
+        return "";
+    };
+    
+    // Helper function to safely get Qualifications property
+    Func<HR.Web.Models.Position, string> getQualifications = (p) => {
+        try {
+            var prop = p.GetType().GetProperty("Qualifications");
+            if (prop != null) {
+                var value = prop.GetValue(p);
+                return value != null ? value.ToString() : "";
+            }
+        } catch {}
+        return "";
+    };
+    
+    // Helper function to format salary with currency
+    Func<HR.Web.Models.Position, decimal?, string> formatSalary = (p, amount) => {
+        if (!amount.HasValue) return "";
+        try {
+            var currencyProp = p.GetType().GetProperty("Currency");
+            string currency = "KES";
+            if (currencyProp != null) {
+                var currencyValue = currencyProp.GetValue(p);
+                currency = currencyValue != null ? currencyValue.ToString() : "KES";
+            }
+            if (string.IsNullOrEmpty(currency)) currency = "KES";
+            
+            // Use actual Unicode characters
+            var symbols = new Dictionary<string, string> {
+                {"KES", "KSh"}, 
+                {"USD", "$"}, 
+                {"EUR", "€"}, 
+                {"GBP", "£"}, 
+                {"CAD", "C$"}, 
+                {"AUD", "A$"},
+                {"JPY", "¥"}, 
+                {"CHF", "CHF"}, 
+                {"CNY", "¥"}, 
+                {"INR", "₹"}, 
+                {"BRL", "R$"}
+            };
+            
+            var symbol = symbols.ContainsKey(currency) ? symbols[currency] : "KSh";
+            var formatted = amount.Value.ToString("N0");
+            
+            // CHF: symbol after number with space
+            if (currency == "CHF") {
+                return formatted + " " + symbol;
+            }
+            
+            // KES: symbol before with space
+            if (currency == "KES") {
+                return symbol + " " + formatted;
+            }
+            
+            // JPY and CNY: symbol before, no space
+            if (currency == "JPY" || currency == "CNY") {
+                return symbol + formatted;
+            }
+            
+            // Multi-character symbols: add space
+            if (symbol.Length > 1) {
+                return symbol + " " + formatted;
+            }
+            
+            // Single character symbols: no space
+            return symbol + formatted;
+        } catch {
+            return amount.Value.ToString("C");
+        }
+    };
+}
+
+<style>
+    body {
+        font-size: 0.97rem;
+        background: #f6faff;
+        min-height: 100vh;
+    }
+    .pos-detail-card {
+        background: #fafdff;
+        border-radius: 0.4rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        border: 1.2px solid #b2d7f7;
+        padding: 1.2rem;
+    }
+    .position-item { 
+        cursor: pointer; 
+        border: none;
+        border-bottom: 1px solid #e6f3fb;
+        background: #fafdff;
+        transition: all 0.2s;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 0.4rem;
+    }
+    .position-item:hover {
+        background: #eaf4fb;
+    }
+    .position-item.active { 
+        box-shadow: 0 0 8px 2px #007bff, 0 0 0 2px #fff inset;
+        border-radius: 6px;
+        background: rgba(0,123,255,0.08);
+        border-left: 3px solid #007bff;
+        border-bottom: 1px solid #007bff;
+    }
+    .position-item.active h5 {
+        color: #007bff !important;
+        font-weight: 600;
+    }
+    .position-item.active p {
+        color: #333 !important;
+    }
+    .position-item.active .text-muted {
+        color: #007bff !important;
+        opacity: 0.9;
+    }
+    .position-item.active small {
+        color: #007bff !important;
+        opacity: 0.9;
+    }
+    .text-truncate { 
+        white-space: nowrap; 
+        overflow: hidden; 
+        text-overflow: ellipsis; 
+    }
+    .list-group {
+        background: transparent;
+        border: none;
+    }
+    .card-title, h4, h5 {
+        color: #0d2c4a;
+        font-weight: 600;
+    }
+    .btn-blue {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        border: none;
+        transition: background 0.2s;
+        font-size: 0.97rem;
+        padding: 0.5rem 1.2rem;
+        border-radius: 0.4rem;
+        font-weight: 600;
+    }
+    .btn-blue:hover {
+        background: #3498db;
+        color: #fff;
+    }
+    .btn-primary {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        border: none;
+        transition: background 0.2s;
+    }
+    .btn-primary:hover {
+        background: #3498db;
+        color: #fff;
+    }
+    .btn-outline-primary {
+        border-color: #6fb8dc;
+        color: #6fb8dc;
+    }
+    .btn-outline-primary:hover {
+        background: #6fb8dc;
+        color: #0d2c4a;
+    }
+    .text-muted {
+        color: #6c757d !important;
+    }
+    .modal-content {
+        border-radius: 0.4rem;
+    }
+    .modal-header {
+        background: #f6faff;
+        border-bottom: 1px solid #e6f3fb;
+    }
+    .modal-body {
+        background: #fafdff;
+    }
+    .modal-footer {
+        background: #f6faff;
+        border-top: 1px solid #e6f3fb;
+    }
+    .gap-2 {
+        gap: 0.5rem;
+    }
+    .d-flex.gap-2 {
+        display: flex;
+        flex-wrap: wrap;
+    }
+</style>
+
+@if (ViewBag.IsSuperAdmin == true && ViewBag.IsReadOnly == true)
+{
+    <div class="mb-4 d-flex justify-content-between align-items-center bg-white p-3 rounded shadow-sm border-left border-primary" style="border-left-width: 4px !important;">
+        <div>
+            <h4 class="mb-1">Positions for <span class="text-primary">@ViewBag.SelectedCompanyName</span></h4>
+            <p class="text-muted mb-0 small"><i class="fas fa-info-circle"></i> Companies Management View: Read-only access to all positions.</p>
+        </div>
+        <a href="@Url.Action("Index", "Positions", new { companyId = (int?)null })" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-building mr-1"></i> Switch Company
+        </a>
+    </div>
+}
+
+@if (isAdmin)
+{
+    <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <a class="btn btn-blue" href="@Url.Action("Create", "Positions")">
+                    <i class="fas fa-plus"></i> New Position
+                </a>
+            </div>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-secondary active" id="filterAll">
+                    <i class="fas fa-list"></i> All Positions
+                </button>
+                <button type="button" class="btn btn-success" id="filterOpen">
+                    <i class="fas fa-unlock"></i> Open Only
+                </button>
+                <button type="button" class="btn btn-secondary" id="filterClosed">
+                    <i class="fas fa-lock"></i> Closed Only
+                </button>
+            </div>
+        </div>
+    </div>
+}
+else if (!Request.IsAuthenticated)
+{
+    <div class="mb-4 bg-white p-3 rounded shadow-sm border-left border-info" style="border-left-width: 4px !important;">
+        <h4 class="mb-1"><i class="fas fa-globe mr-2"></i> Public Careers Portal</h4>
+        <p class="text-muted mb-0">Browse open opportunities across our network. You will be prompted to sign in or create an account when applying.</p>
+    </div>
+}
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible" role="alert">
+        <i class="fas fa-check-circle"></i> @TempData["SuccessMessage"]
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-warning alert-dismissible" role="alert">
+        <i class="fas fa-exclamation-triangle"></i> @TempData["ErrorMessage"]
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+}
+
+@if (!displayPositions.Any())
+{
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> @(isAdmin ? "No positions found." : "No positions available at this time.")
+    </div>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-8">
+            <div class="list-group">
+                @foreach (var p in displayPositions)
+                {
+                    <a class="list-group-item list-group-item-action position-item"
+                       href="#"
+                       data-title="@p.Title"
+                       data-desc="@(p.Description ?? "")"
+                       data-responsibilities="@getResponsibilities(p)"
+                       data-qualifications="@getQualifications(p)"
+                       data-dept="@(p.Department != null ? p.Department.Name : "")"
+                       data-posted="@p.PostedOn.ToShortDateString()"
+                       data-range="@(p.SalaryMin.HasValue && p.SalaryMax.HasValue ? formatSalary(p, p.SalaryMin) + " - " + formatSalary(p, p.SalaryMax) : "Salary Varies")"
+                       data-is-open="@p.IsOpen.ToString().ToLower()"
+                       data-url-edit="@Url.Action("Edit", "Positions", new { id = p.Id })"
+                       data-url-delete="@Url.Action("Delete", "Positions", new { id = p.Id })"
+                       data-url-apply="@(Request.IsAuthenticated ? Url.Action("Questionnaire", "Applications", new { positionId = p.Id }) : Url.Action("Register", "Account", new { returnUrl = Url.Action("Questionnaire", "Applications", new { positionId = p.Id }) }))"
+                       data-url-applications="@Url.Action("Index", "Applications", new { positionId = p.Id })#appsCards-@p.Id">
+                        <div class="d-flex w-100 justify-content-between align-items-start mb-2">
+                            <div class="flex-grow-1">
+                                <h5 class="mb-1">@p.Title</h5>
+                                <small class="text-muted d-block">@(p.Department != null ? p.Department.Name : "No Department")</small>
+                                @if (!Request.IsAuthenticated || (ViewBag.IsSuperAdmin == true && ViewBag.SelectedCompanyId == null))
+                                {
+                                    <small class="text-info d-block" style="font-size: 0.85em; margin-top: 2px;">
+                                        <i class="fas fa-building"></i> @(p.Company != null ? p.Company.Name : "Unknown Company")
+                                    </small>
+                                }
+                            </div>
+                            <div class="text-right ml-3">
+                                <span class="badge badge-@(p.IsOpen ? "success" : "secondary") mb-1">
+                                    @(p.IsOpen ? "Open" : "Closed")
+                                </span>
+                                <br/>
+                                <small class="text-muted d-block">@p.PostedOn.ToShortDateString()</small>
+                                @if (p.SalaryMin.HasValue)
+                                {
+                                    <small class="text-muted d-block">@formatSalary(p, p.SalaryMin)</small>
+                                }
+                            </div>
+                        </div>
+                        <p class="mb-2">@(string.IsNullOrEmpty(p.Description) ? "No description available." : (p.Description.Length > 150 ? p.Description.Substring(0, 150) + "..." : p.Description))</p>
+                    </a>
+                }
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div id="positionDetail" class="pos-detail-card" style="display:none;">
+                <h4 id="posTitle" class="mb-3"></h4>
+                <p class="text-muted mb-2" id="posDept"></p>
+                <p class="mb-2"><strong>Posted:</strong> <span id="posPosted"></span></p>
+                <p class="mb-3"><strong>Salary:</strong> <span id="posRange"></span></p>
+                <div class="d-flex flex-wrap gap-2">
+@* Conditional sidebar action buttons for admin/user on details card *@
+@if (isAdmin)
+{
+    <a id="posEdit" class="btn btn-sm btn-secondary" href="#">
+        <i class="fas fa-edit"></i> Edit
+    </a>
+    <a id="posViewApplications" class="btn btn-sm btn-warning" href="#">
+        <i class="fas fa-list-ul"></i> View Applications
+    </a>
+    <a id="posDelete" class="btn btn-sm btn-danger" href="#">
+        <i class="fas fa-trash"></i> Delete
+    </a>
+}
+else if (ViewBag.IsReadOnly != true)
+{
+    <a id="posApply" class="btn btn-sm btn-blue" href="#">
+        <i class="fas fa-paper-plane"></i> @(Request.IsAuthenticated ? "Apply" : "Sign In to Apply")
+    </a>
+}
+                    <button id="posViewDetails" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-eye"></i> View Details
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal -->
+<div class="modal fade" id="positionModal" tabindex="-1" role="dialog" aria-labelledby="positionModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalPosTitle">Position</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-2" id="modalPosDept"></p>
+        <div id="modalPosDesc" class="mb-3"></div>
+        <div id="modalPosResponsibilities" class="mb-3" style="display:none;">
+          <strong class="d-block mb-2" style="color: #0d2c4a;">Key Responsibilities:</strong>
+          <div id="modalPosResponsibilitiesContent" style="white-space: pre-line; line-height: 1.8; color: #333;"></div>
+        </div>
+        <div id="modalPosQualifications" class="mb-3" style="display:none;">
+          <strong class="d-block mb-2" style="color: #0d2c4a;">Required Qualifications:</strong>
+          <div id="modalPosQualificationsContent" style="white-space: pre-line; line-height: 1.8; color: #333;"></div>
+        </div>
+        <p class="mb-2"><strong>Posted:</strong> <span id="modalPosPosted"></span></p>
+        <p class="mb-2"><strong>Salary:</strong> <span id="modalPosRange"></span></p>
+      </div>
+      <div class="modal-footer">
+@if (isAdmin)
+{
+    <a id="modalEdit" class="btn btn-secondary" href="#">
+        <i class="fas fa-edit"></i> Edit
+    </a>
+    <a id="modalViewApplications" class="btn btn-warning" href="#">
+        <i class="fas fa-list-ul"></i> View Applications
+    </a>
+    <a id="modalDelete" class="btn btn-danger" href="#">
+        <i class="fas fa-trash"></i> Delete
+    </a>
+}
+else if (ViewBag.IsReadOnly != true)
+{
+    <a id="modalApply" class="btn btn-blue" href="#">
+        <i class="fas fa-paper-plane"></i> @(Request.IsAuthenticated ? "Apply" : "Sign In to Apply")
+    </a>
+}
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            // Wait for DOM and jQuery to be ready
+            if (typeof jQuery === 'undefined') {
+                console.error('jQuery is not loaded');
+                return;
+            }
+
+            jQuery(document).ready(function ($) {
+                var items = document.querySelectorAll('.position-item');
+                var title = document.getElementById('posTitle');
+                var dept = document.getElementById('posDept');
+                var posted = document.getElementById('posPosted');
+                var range = document.getElementById('posRange');
+                var detail = document.getElementById('positionDetail');
+                var linkEdit = document.getElementById('posEdit');
+                var linkDelete = document.getElementById('posDelete');
+                var linkApply = document.getElementById('posApply');
+                var linkViewApplications = document.getElementById('posViewApplications');
+
+                // Check if required elements exist
+                if (!title || !dept || !posted || !range || !detail) {
+                    console.error('Required DOM elements not found');
+                    return;
+                }
+
+                function makeActive(el) {
+                    if (!el) return;
+                    items.forEach(function (i) { i.classList.remove('active'); });
+                    el.classList.add('active');
+                    if (title) title.textContent = el.getAttribute('data-title') || '';
+                    if (dept) dept.textContent = el.getAttribute('data-dept') || '';
+                    if (posted) posted.textContent = el.getAttribute('data-posted') || '';
+                    if (range) range.textContent = el.getAttribute('data-range') || '';
+                    if (linkEdit) { linkEdit.href = el.getAttribute('data-url-edit') || '#'; }
+                    if (linkDelete) { linkDelete.href = el.getAttribute('data-url-delete') || '#'; }
+                    if (linkApply) { linkApply.href = el.getAttribute('data-url-apply') || '#'; }
+                    if (linkViewApplications) { linkViewApplications.href = el.getAttribute('data-url-applications') || '#'; }
+                    if (detail) detail.style.display = '';
+                }
+
+                items.forEach(function (el) {
+                    el.addEventListener('click', function () { makeActive(el); });
+                });
+
+                // modal elements
+                var modalTitle = document.getElementById('modalPosTitle');
+                var modalDesc = document.getElementById('modalPosDesc');
+                var modalResponsibilities = document.getElementById('modalPosResponsibilities');
+                var modalResponsibilitiesContent = document.getElementById('modalPosResponsibilitiesContent');
+                var modalQualifications = document.getElementById('modalPosQualifications');
+                var modalQualificationsContent = document.getElementById('modalPosQualificationsContent');
+                var modalDept = document.getElementById('modalPosDept');
+                var modalPosted = document.getElementById('modalPosPosted');
+                var modalRange = document.getElementById('modalPosRange');
+                var modalEdit = document.getElementById('modalEdit');
+                var modalDelete = document.getElementById('modalDelete');
+                var modalApply = document.getElementById('modalApply');
+                var modalViewApplications = document.getElementById('modalViewApplications');
+
+                function populateModal(src) {
+                    if (!src) return;
+                    if (modalTitle) modalTitle.textContent = src.getAttribute('data-title') || '';
+                    var descText = src.getAttribute('data-desc') || '';
+                    if (modalDesc) {
+                        modalDesc.textContent = descText || 'No description provided.';
+                        modalDesc.style.display = descText ? 'block' : 'none';
+                    }
+                    var respText = src.getAttribute('data-responsibilities') || '';
+                    if (modalResponsibilities && modalResponsibilitiesContent) {
+                        if (respText) {
+                            modalResponsibilitiesContent.textContent = respText;
+                            modalResponsibilities.style.display = 'block';
+                        } else {
+                            modalResponsibilities.style.display = 'none';
+                        }
+                    }
+                    var qualText = src.getAttribute('data-qualifications') || '';
+                    if (modalQualifications && modalQualificationsContent) {
+                        if (qualText) {
+                            modalQualificationsContent.textContent = qualText;
+                            modalQualifications.style.display = 'block';
+                        } else {
+                            modalQualifications.style.display = 'none';
+                        }
+                    }
+                    if (modalDept) modalDept.textContent = src.getAttribute('data-dept') || '';
+                    if (modalPosted) modalPosted.textContent = src.getAttribute('data-posted') || '';
+                    if (modalRange) modalRange.innerHTML = src.getAttribute('data-range') || '';
+                    if (modalEdit) modalEdit.href = src.getAttribute('data-url-edit') || '#';
+                    if (modalDelete) modalDelete.href = src.getAttribute('data-url-delete') || '#';
+                    if (modalApply) modalApply.href = src.getAttribute('data-url-apply') || '#';
+                    if (modalViewApplications) modalViewApplications.href = src.getAttribute('data-url-applications') || '#';
+                }
+
+
+                var cardView = document.getElementById('posViewDetails');
+                if (cardView) {
+                    cardView.addEventListener('click', function () {
+                        var active = document.querySelector('.position-item.active');
+                        if (!active) return;
+                        populateModal(active);
+                        var modal = $('#positionModal');
+                        if (modal.length) {
+                            modal.modal('show');
+                        }
+                    });
+                }
+
+                // Admin filter functionality
+                var filterAll = document.getElementById('filterAll');
+                var filterOpen = document.getElementById('filterOpen');
+                var filterClosed = document.getElementById('filterClosed');
+                
+                if (filterAll && filterOpen && filterClosed) {
+                    function setActiveFilter(activeBtn) {
+                        [filterAll, filterOpen, filterClosed].forEach(function(btn) {
+                            btn.classList.remove('active');
+                        });
+                        activeBtn.classList.add('active');
+                    }
+                    
+                    function filterPositions(filterType) {
+                        var items = document.querySelectorAll('.position-item');
+                        items.forEach(function(item) {
+                            var isOpen = item.getAttribute('data-is-open') === 'true';
+                            var show = false;
+                            
+                            switch(filterType) {
+                                case 'all':
+                                    show = true;
+                                    break;
+                                case 'open':
+                                    show = isOpen;
+                                    break;
+                                case 'closed':
+                                    show = !isOpen;
+                                    break;
+                            }
+                            
+                            item.style.display = show ? '' : 'none';
+                        });
+                        
+                        // Update detail card visibility
+                        var detail = document.getElementById('positionDetail');
+                        if (detail) {
+                            var visibleItems = Array.from(items).filter(function(item) {
+                                return item.style.display !== 'none';
+                            });
+                            if (visibleItems.length === 0) {
+                                detail.style.display = 'none';
+                            }
+                        }
+                    }
+                    
+                    filterAll.addEventListener('click', function() {
+                        setActiveFilter(filterAll);
+                        filterPositions('all');
+                    });
+                    
+                    filterOpen.addEventListener('click', function() {
+                        setActiveFilter(filterOpen);
+                        filterPositions('open');
+                    });
+                    
+                    filterClosed.addEventListener('click', function() {
+                        setActiveFilter(filterClosed);
+                        filterPositions('closed');
+                    });
+                }
+            });
+        })();
+    </script>
+}
+
+
+

@@ -1,0 +1,113 @@
+@model HR.Web.Models.Department
+@{
+    ViewBag.Title = "Create Department";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    body {
+        font-size: 1rem;
+        background: #f6faff;
+        min-height: 100vh;
+    }
+    .form-group {
+        margin-bottom: 2.2rem !important;
+        width: 100%;
+        text-align: left;
+    }
+    .form-control {
+        font-size: 1.05rem;
+        padding: 0.7rem 1rem;
+        border-radius: 0.7rem;
+        border: 1.5px solid #b2d7f7;
+        background: #fafdff;
+        max-width: 350px;
+        margin-left: 0;
+        text-align: left;
+    }
+    .form-control:focus {
+        border-color: #6fb8dc;
+        box-shadow: 0 0 0 0.15rem #b2d7f7;
+    }
+    label.font-weight-bold {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #0d2c4a;
+        width: 100%;
+        text-align: left;
+    }
+    .form-text {
+        font-size: 0.95rem;
+        margin-top: 0.3rem;
+        margin-bottom: 0.7rem;
+        width: 100%;
+        text-align: left;
+    }
+    .btn-blue {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        border: none;
+        transition: background 0.2s;
+        font-size: 1.05rem;
+        padding: 0.7rem 2.2rem;
+        border-radius: 0.7rem;
+        font-weight: 600;
+        margin-right: 0.7rem;
+    }
+    .btn-blue:hover {
+        background: #3498db;
+        color: #fff;
+    }
+    .btn-link {
+        color: #3498db;
+        text-decoration: none;
+        font-size: 1.05rem;
+        font-weight: 500;
+        padding: 0.7rem 1.5rem;
+        border-radius: 0.7rem;
+        margin-left: 0.7rem;
+    }
+    .btn-link:hover {
+        color: #0d2c4a;
+        text-decoration: underline;
+        background: #eaf4fb;
+    }
+    .d-flex.gap-2.mt-4, .d-flex.justify-content-center.gap-2.mt-4 {
+        gap: 1.2rem !important;
+        margin-top: 2.2rem !important;
+        justify-content: flex-start !important;
+    }
+</style>
+
+<div class="container" style="max-width: 700px; margin-top: 2.5rem;">
+    <h3 style="font-size: 1.25rem; font-weight: 600; color: #0d2c4a; margin-bottom: 2rem;">Create Department</h3>
+    @using (Html.BeginForm()) {
+        @Html.AntiForgeryToken()
+        @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+        <div class="form-group mb-3">
+            @Html.LabelFor(m => m.Name, "Department Name", htmlAttributes: new { @class = "font-weight-bold" })
+            @Html.TextBoxFor(m => m.Name, new { @class = "form-control", placeholder = "Department Name" })
+            <small class="form-text text-muted mb-1">e.g., Human Resources, Engineering, Marketing</small>
+            @Html.ValidationMessageFor(m => m.Name, "", new { @class = "text-danger" })
+        </div>
+        <div class="form-group mb-3">
+            @Html.LabelFor(m => m.Description, "Description", htmlAttributes: new { @class = "font-weight-bold" })
+            @Html.TextAreaFor(m => m.Description, 3, 60, new { @class = "form-control", placeholder = "Brief description of the department" })
+            <small class="form-text text-muted mb-1">e.g., Handles employee relations, recruitment, and benefits.</small>
+            @Html.ValidationMessageFor(m => m.Description, "", new { @class = "text-danger" })
+        </div>
+        <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-blue px-4">Save</button>
+            @Html.ActionLink("Back","Index", null, new { @class = "btn btn-red btn-sm" })
+        </div>
+    }
+</div>
+
+
+
+
+
+
+
+

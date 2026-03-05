@@ -1,0 +1,408 @@
+@model HR.Web.ViewModels.CandidateRankingsViewModel
+
+@{
+    ViewBag.Title = "Candidate Rankings";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .force-capitalize { text-transform: capitalize; }
+    .filters-panel {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        margin-bottom: 2rem;
+        border-left: 4px solid #6fb8dc;
+    }
+    .position-section {
+        margin-bottom: 2.5rem;
+        border: 1px solid #e0e0e0;
+        border-radius: 0.5rem;
+        overflow: hidden;
+    }
+    .position-header {
+        background: #f0f7ff;
+        padding: 1rem 1.5rem;
+        border-bottom: 2px solid #6fb8dc;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .position-header:hover {
+        background: #e8f3ff;
+    }
+    .position-header h4 {
+        margin: 0;
+        color: #0d2c4a;
+        font-weight: 600;
+    }
+    .position-badge {
+        background: #6fb8dc;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+    }
+    .candidates-list {
+        padding: 1.5rem;
+    }
+    .candidate-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid #f0f0f0;
+        transition: background 0.2s;
+    }
+    .candidate-row:hover {
+        background: #fafbfc;
+    }
+    .candidate-info {
+        flex: 1;
+    }
+    .candidate-name {
+        font-weight: 600;
+        color: #0d2c4a;
+        margin-bottom: 0.25rem;
+    }
+    .candidate-email {
+        font-size: 0.9rem;
+        color: #666;
+    }
+    .candidate-score {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 120px;
+    }
+    .score-badge {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #6fb8dc;
+        margin-bottom: 0.25rem;
+    }
+    .score-label {
+        font-size: 0.85rem;
+        color: #666;
+    }
+    .candidate-actions {
+        margin-left: 1.5rem;
+        white-space: nowrap;
+    }
+    .candidate-actions a {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+        margin-left: 0.5rem;
+    }
+    .no-candidates {
+        padding: 2rem;
+        text-align: center;
+        color: #999;
+    }
+    .filter-btn {
+        background: #6fb8dc;
+        color: white;
+        border: none;
+        padding: 0.5rem 1.2rem;
+        border-radius: 0.4rem;
+        cursor: pointer;
+        font-weight: 600;
+    }
+    .filter-btn:hover {
+        background: #3498db;
+    }
+    .position-select {
+        max-width: 400px;
+        padding: 0.5rem 0.7rem;
+        border: 1.2px solid #b2d7f7;
+        border-radius: 0.4rem;
+    }
+    .rank-badge {
+        display: inline-block;
+        background: #e8f3ff;
+        border: 2px solid #6fb8dc;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        text-align: center;
+        line-height: 26px;
+        font-weight: 700;
+        color: #6fb8dc;
+        margin-right: 0.5rem;
+    }
+    .expanded-row {
+        background: #f9f9f9;
+        padding: 1rem;
+        border-top: 1px solid #e0e0e0;
+    }
+    .expanded-row .detail-label {
+        font-weight: 600;
+        color: #0d2c4a;
+        margin-top: 0.5rem;
+    }
+    .expanded-row .detail-value {
+        color: #666;
+        margin-bottom: 0.5rem;
+    }
+</style>
+
+<div class="container-fluid">
+    <h2 class="mb-4">Candidate Rankings by Position</h2>
+
+    <!-- Filter Panel -->
+    <div class="filters-panel">
+        <h5 style="margin-top: 0; margin-bottom: 1rem;">Filter Candidates</h5>
+        <form method="get" action="@Url.Action("CandidateRankings", "Admin")" class="form-inline">
+            <label for="positionFilter" class="mr-2">Select Position:</label>
+            <select name="positionId" id="positionFilter" class="position-select mr-2">
+                <option value="">-- All Positions --</option>
+                @if (Model?.Positions != null)
+                {
+                    @foreach (var pos in Model.Positions)
+                    {
+                        <option value="@pos.Id" @(ViewBag.SelectedPositionId == pos.Id ? "selected" : "")>
+                            @pos.Title
+                        </option>
+                    }
+                }
+            </select>
+            <button type="submit" class="filter-btn">Apply Filter</button>
+        </form>
+    </div>
+
+    <!-- Candidates by Position -->
+    @if (Model?.CandidatesByPosition != null && Model.CandidatesByPosition.Count > 0)
+    {
+        @foreach (var positionGroup in Model.CandidatesByPosition)
+        {
+            <div class="position-section">
+                <div class="position-header" onclick="togglePositionCandidates(this)">
+                    <div>
+                        <h4>@positionGroup.Key.Title</h4>
+                        <small style="color: #666;">@positionGroup.Key.Department?.Name</small>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <span class="position-badge">@positionGroup.Value.Count applicant@(positionGroup.Value.Count != 1 ? "s" : "")</span>
+                        @if (positionGroup.Value.Count > 5)
+                        {
+                            <button type="button" class="btn btn-sm btn-warning" onclick="evaluateCandidatesForPosition(@positionGroup.Key.Id, 10)">
+                                <i class="fas fa-robot"></i> AI Evaluate Top 10
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <div class="candidates-list position-candidates">
+                    @if (positionGroup.Value.Count > 0)
+                    {
+                        var rankedCandidates = positionGroup.Value.OrderByDescending(c => c.TotalScore).ToList();
+                        @for (int i = 0; i < rankedCandidates.Count; i++)
+                        {
+                            var candidate = rankedCandidates[i];
+                            <div class="candidate-row" onclick="toggleCandidateDetails(this)">
+                                <div class="candidate-info">
+                                    <span class="rank-badge">@(i + 1)</span>
+                                    <span class="candidate-name force-capitalize">@candidate.CandidateName</span>
+                                    <div class="candidate-email">@candidate.CandidateEmail</div>
+                                </div>
+                                <div class="candidate-score">
+                                    <div class="score-badge">@candidate.TotalScore</div>
+                                    <div class="score-label">Points</div>
+                                </div>
+                                <div class="candidate-actions">
+                                    <a href="@Url.Action("ViewApplicationDetails", "Admin", new { applicationId = candidate.ApplicationId })" class="btn btn-sm btn-info">View Details</a>
+                                    <a href="@Url.Action("ScheduleInterview", "Admin", new { applicationId = candidate.ApplicationId })" class="btn btn-sm btn-primary">Schedule Interview</a>
+                                </div>
+                            </div>
+
+                            <!-- Expandable Details Row -->
+                            <div class="expanded-row" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="detail-label">Applied On:</div>
+                                        <div class="detail-value">@candidate.AppliedDate.ToShortDateString()</div>
+
+                                        <div class="detail-label">Questionnaire Score:</div>
+                                        <div class="detail-value">@candidate.QuestionnaireScore / @candidate.MaxQuestionnaireScore</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="detail-label">Status:</div>
+                                        <div class="detail-value">
+                                            <span class="badge badge-@(candidate.Status == "Pending" ? "warning" : candidate.Status == "Rejected" ? "danger" : "success")">
+                                                @candidate.Status
+                                            </span>
+                                        </div>
+
+                                        <div class="detail-label">Position:</div>
+                                        <div class="detail-value">@positionGroup.Key.Title</div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="no-candidates">No candidates have applied for this position yet.</div>
+                    }
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="alert alert-info" role="alert">
+            <strong>No candidates found.</strong> Either no positions have applications yet, or your filter returned no results.
+        </div>
+    }
+</div>
+
+@section Scripts {
+<script>
+    function togglePositionCandidates(element) {
+        var listContainer = element.nextElementSibling;
+        if (listContainer) {
+            var isVisible = listContainer.style.display !== 'none';
+            listContainer.style.display = isVisible ? 'none' : 'block';
+            element.style.opacity = isVisible ? '0.7' : '1';
+        }
+    }
+
+    function toggleCandidateDetails(element) {
+        var nextRow = element.nextElementSibling;
+        if (nextRow && nextRow.classList.contains('expanded-row')) {
+            var isVisible = nextRow.style.display !== 'none';
+            nextRow.style.display = isVisible ? 'none' : 'block';
+            element.style.background = isVisible ? '' : '#f0f7ff';
+        }
+    }
+
+    function evaluateCandidatesForPosition(positionId, targetCount) {
+        if (!confirm('Evaluate candidates using AI? This will analyze answers for plagiarism, fluency, spelling, completeness, and quality to recommend the top ' + targetCount + ' candidates.')) {
+            return;
+        }
+
+        // Show loading state
+        var button = event.target;
+        var originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Evaluating...';
+        button.disabled = true;
+
+        $.ajax({
+            url: '@Url.Action("EvaluateCandidates", "Admin")',
+            type: 'POST',
+            data: {
+                positionId: positionId,
+                targetCount: targetCount
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Create modal to show evaluation results
+                    showEvaluationResults(response);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error evaluating candidates');
+            },
+            complete: function() {
+                // Restore button state
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        });
+    }
+
+    function showEvaluationResults(response) {
+        var modal = $('<div class="modal fade" id="evaluationResultsModal" tabindex="-1">' +
+            '<div class="modal-dialog modal-lg">' +
+                '<div class="modal-content">' +
+                    '<div class="modal-header">' +
+                        '<h5 class="modal-title">AI Candidate Evaluation Results</h5>' +
+                        '<button type="button" class="close" data-dismiss="modal">&times;</button>' +
+                    '</div>' +
+                    '<div class="modal-body">' +
+                        '<div class="alert alert-info">' +
+                            '<strong>Summary:</strong> ' + response.summary.totalCandidates + ' candidates evaluated, ' + response.summary.evaluatedCandidates + ' recommended' +
+                            (response.summary.evaluationMethod ? ' (' + response.summary.evaluationMethod + ')' : '') +
+                        '</div>' +
+                        '<div class="row">' +
+                            '<div class="col-md-6">' +
+                                '<h6>Recommended Candidates</h6>' +
+                                '<div class="list-group" id="recommendedCandidates"></div>' +
+                            '</div>' +
+                            '<div class="col-md-6">' +
+                                '<h6>Key Findings</h6>' +
+                                '<ul id="keyFindings"></ul>' +
+                            '</div>' +
+                        '</div>' +
+                        '<h6>Recommendations</h6>' +
+                        '<ul id="recommendations"></ul>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>');
+
+        // Add modal to page
+        $('body').append(modal);
+
+        // Populate evaluation data
+        var candidatesHtml = '';
+        response.evaluations.forEach(function(eval) {
+            var statusClass = eval.recommended ? 'list-group-item-success' : 'list-group-item-light';
+            var flagHtml = eval.redFlags && eval.redFlags.length > 0 ? 
+                '<span class="badge badge-danger ml-2">' + eval.redFlags.length + ' flags</span>' : '';
+            candidatesHtml += '<div class="list-group-item ' + statusClass + '">' +
+                '<div class="d-flex justify-content-between align-items-center">' +
+                    '<div>' +
+                        '<strong>' + eval.candidateName + '</strong><br>' +
+                        '<small class="text-muted">' + eval.candidateEmail + '</small>' +
+                    '</div>' +
+                    '<div class="text-right">' +
+                        '<span class="badge badge-primary">' + eval.totalScore.toFixed(1) + ' pts</span>' +
+                        flagHtml +
+                    '</div>' +
+                '</div>' +
+                (eval.reasoning ? '<div class="mt-2"><small><strong>AI Reasoning:</strong> ' + eval.reasoning + '</small></div>' : '') +
+            '</div>';
+        });
+        $('#recommendedCandidates').html(candidatesHtml);
+
+        var findingsHtml = '';
+        if (response.summary.keyFindings) {
+            response.summary.keyFindings.forEach(function(finding) {
+                findingsHtml += '<li>' + finding + '</li>';
+            });
+        }
+        $('#keyFindings').html(findingsHtml);
+
+        var recommendationsHtml = '';
+        if (response.recommendations) {
+            response.recommendations.forEach(function(rec) {
+                recommendationsHtml += '<li>' + rec + '</li>';
+            });
+        }
+        $('#recommendations').html(recommendationsHtml);
+
+        // Show modal
+        $('#evaluationResultsModal').modal('show');
+
+        // Clean up on modal hide
+        $('#evaluationResultsModal').on('hidden.bs.modal', function () {
+            $(this).remove();
+        });
+    }
+
+    // Auto-expand first position
+    document.addEventListener('DOMContentLoaded', function () {
+        var firstPosition = document.querySelector('.position-header');
+        if (firstPosition) {
+            // Keep first position expanded by default
+            // Uncomment to auto-collapse on load:
+            // var list = firstPosition.nextElementSibling;
+            // if (list) list.style.display = 'block';
+        }
+    });
+</script>
+}

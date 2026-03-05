@@ -1,0 +1,232 @@
+@model HR.Web.ViewModels.CreateUserViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "New User";
+}
+
+<style>
+    :root {
+        --system-blue: #6fb8dc;
+        --system-dark: #0d2c4a;
+        --border-color: #b2d7f7;
+        --bg-light: #f6faff;
+    }
+
+    .dashboard-wrapper {
+        padding: 40px 0;
+        background: var(--bg-light);
+        min-height: calc(100vh - 150px);
+    }
+
+    .content-card {
+        background: #fff;
+        border: 1.2px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        max-width: 800px;
+        margin: 0 auto;
+        overflow: hidden;
+    }
+
+    .card-header-system {
+        background: #fafbfc;
+        border-bottom: 1.2px solid var(--border-color);
+        padding: 20px 30px;
+    }
+
+    .card-header-system h4 {
+        margin: 0;
+        font-weight: 700;
+        color: var(--system-dark);
+    }
+
+    .form-section {
+        padding: 30px;
+    }
+
+    .info-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .form-control {
+        height: 45px;
+        border-color: var(--border-color);
+    }
+
+    .custom-checkbox-container {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 6px;
+        border: 1px solid var(--border-color);
+        margin-top: 10px;
+    }
+
+    .btn-blue {
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .btn-blue:hover {
+        background: #2980b9;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+</style>
+
+<div class="dashboard-wrapper">
+    <div class="container">
+        <div class="content-card">
+            <div class="card-header-system d-flex justify-content-between align-items-center">
+                <div>
+                    <h4><i class="fas fa-user-plus mr-2 text-primary"></i> Manual User Provisioning</h4>
+                    <p class="text-muted small mb-0 mt-1">Direct account creation for organizational members</p>
+                </div>
+                <a href="@Url.Action("GlobalUserManagement")" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to List
+                </a>
+            </div>
+            
+            <div class="form-section">
+                @using (Html.BeginForm())
+                {
+                    @Html.AntiForgeryToken()
+                    
+                    if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle mr-2"></i> <strong>Validation Failure:</strong> Please correct the errors below.
+                            @Html.ValidationSummary(true, "", new { @class = "small mt-2" })
+                        </div>
+                    }
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="FirstName">First Name</label>
+                            @Html.TextBoxFor(m => m.FirstName, new { @class = "form-control", placeholder = "User's first name..." })
+                            @Html.ValidationMessageFor(m => m.FirstName, "", new { @class = "text-danger small" })
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="LastName">Last Name</label>
+                            @Html.TextBoxFor(m => m.LastName, new { @class = "form-control", placeholder = "User's last name..." })
+                            @Html.ValidationMessageFor(m => m.LastName, "", new { @class = "text-danger small" })
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="UserName">Account Username</label>
+                            @Html.TextBoxFor(m => m.UserName, new { @class = "form-control", placeholder = "Unique system identifier..." })
+                            @Html.ValidationMessageFor(m => m.UserName, "", new { @class = "text-danger small" })
+                        </div>
+                        <div class="col-md-3 mb-4">
+                            <label class="info-label" for="Email">Primary Email Address</label>
+                            @Html.TextBoxFor(m => m.Email, new { @class = "form-control", placeholder = "member@company.com" })
+                            @Html.ValidationMessageFor(m => m.Email, "", new { @class = "text-danger small" })
+                        </div>
+                        <div class="col-md-3 mb-4">
+                            <label class="info-label" for="Phone">Contact Phone</label>
+                            @Html.TextBoxFor(m => m.Phone, new { @class = "form-control", placeholder = "+1234567890" })
+                            @Html.ValidationMessageFor(m => m.Phone, "", new { @class = "text-danger small" })
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="Password">Initial Credential (Password)</label>
+                            @Html.PasswordFor(m => m.Password, new { @class = "form-control", placeholder = "Minimum 6 characters..." })
+                            @Html.ValidationMessageFor(m => m.Password, "", new { @class = "text-danger small" })
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="ConfirmPassword">Verify Credential</label>
+                            @Html.PasswordFor(m => m.ConfirmPassword, new { @class = "form-control", placeholder = "Repeat password..." })
+                            @Html.ValidationMessageFor(m => m.ConfirmPassword, "", new { @class = "text-danger small" })
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="Role">System Authority Level</label>
+                            @{
+                                var roles = new List<SelectListItem> {
+                                    new SelectListItem { Value = "Client", Text = "Standard Access (Client)" },
+                                    new SelectListItem { Value = "Admin", Text = "Elevated Control (Admin)" },
+                                    new SelectListItem { Value = "SuperAdmin", Text = "Master Authority (SuperAdmin)" }
+                                };
+                            }
+                            @Html.DropDownListFor(m => m.Role, roles, "-- Select Role --", new { @class = "form-control custom-select" })
+                            @Html.ValidationMessageFor(m => m.Role, "", new { @class = "text-danger small" })
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="CompanyId">Organization Assignment</label>
+                            @Html.DropDownListFor(m => m.CompanyId, new SelectList(Model.Companies, "Id", "Name"), "System (Global/No Company)", new { @class = "form-control custom-select" })
+                            <span class="text-muted small">Leave empty for Global/Super Admins.</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-4">
+                        <div class="custom-checkbox-container">
+                            <div class="custom-control custom-checkbox">
+                                @Html.CheckBoxFor(m => m.RequirePasswordChange, new { @class = "custom-control-input", id = "RequirePasswordChange" })
+                                <label class="custom-control-label font-weight-bold pt-1" for="RequirePasswordChange" style="cursor: pointer; color: var(--system-dark);">
+                                    Security Enforcement: Force password rotation on first authentication
+                                </label>
+                            </div>
+                            <p class="text-muted small mt-2 mb-0 ml-4">
+                                Highly recommended for manually provisioned accounts to ensure the user sets their own private credential upon login.
+                            </p>
+                        </div>
+                    </div>
+
+                    <hr class="my-4" />
+
+                    <div class="d-flex justify-content-end align-items-center">
+                        <a href="@Url.Action("GlobalUserManagement")" class="text-muted mr-4" style="text-decoration: none; font-weight: 600;">
+                            Cancel
+                        </a>
+                        <button type="submit" class="btn-blue" style="padding: 12px 35px;">
+                            <i class="fas fa-user-check mr-2"></i> Confirm Provisioning
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            $('form').submit(function(e) {
+                var role = $('#Role').val();
+                
+                if (role === 'Admin') {
+                    if (!confirm('SECURITY ALERT: You are granting Elevated Control (Admin) to this user. This allows them to manage company data. Continue?')) {
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+
+                if (role === 'SuperAdmin') {
+                    if (!confirm('CRITICAL SECURITY ALERT: You are granting MASTER AUTHORITY (SuperAdmin). This user will have UNRESTRICTED access to ALL organizations and system settings. Continue?')) {
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+        });
+    </script>
+}

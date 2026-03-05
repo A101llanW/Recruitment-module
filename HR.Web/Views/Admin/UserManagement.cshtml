@@ -1,0 +1,164 @@
+@model IEnumerable<HR.Web.ViewModels.UserManagementViewModel>
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "User Management";
+}
+
+<style>
+    :root {
+        --system-blue: #6fb8dc;
+        --system-dark: #0d2c4a;
+        --border-color: #b2d7f7;
+        --bg-light: #f6faff;
+    }
+
+    .dashboard-wrapper {
+        padding: 20px 0;
+        background: var(--bg-light);
+        min-height: calc(100vh - 150px);
+    }
+
+    .stat-card {
+        background: #fff;
+        border: 1.2px solid var(--border-color);
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+    }
+
+    .stat-card h1 {
+        margin: 0;
+        font-weight: 700;
+        color: var(--system-dark);
+        font-size: 2.5rem;
+    }
+
+    .stat-card p {
+        margin: 5px 0 0;
+        color: #6c757d;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .stat-primary { border-top: 4px solid var(--system-blue); }
+    .stat-success { border-top: 4px solid #28a745; }
+    .stat-danger { border-top: 4px solid #dc3545; }
+
+    .content-card {
+        background: #fff;
+        border: 1.2px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-top: 20px;
+        overflow: hidden;
+    }
+
+    .card-header-system {
+        background: #fafbfc;
+        border-bottom: 1.2px solid var(--border-color);
+        padding: 15px 25px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .card-header-system h4 {
+        margin: 0;
+        font-weight: 600;
+        color: var(--system-dark);
+        display: flex;
+        align-items: center;
+    }
+
+    .card-header-system h4 i {
+        margin-right: 10px;
+        color: var(--system-blue);
+    }
+</style>
+
+<div class="dashboard-wrapper">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-12 mb-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 style="color: var(--system-dark); font-weight: 700; margin: 0;">User <span style="font-weight: 300;">Management</span></h2>
+                        <p class="text-muted m-0">Manage access and authority for your organization's users</p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="@Url.Action("SecurityLogs", "Admin")" class="btn-blue" style="text-decoration: none; background: #5a9ab8;">
+                            <i class="fas fa-shield-alt mr-2"></i> Security Logs
+                        </a>
+                        <a href="@Url.Action("Index", "Dashboard")" class="btn-red" style="text-decoration: none;">
+                            <i class="fas fa-arrow-left mr-2"></i> Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (TempData["SuccessMessage"] != null)
+        {
+            <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+                <i class="fas fa-check-circle mr-2"></i> @TempData["SuccessMessage"]
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+        }
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stat-card stat-primary">
+                    <h1>@Model.Count()</h1>
+                    <p>Total Members</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card stat-success">
+                    <h1>@Model.Count(u => !u.IsLocked)</h1>
+                    <p>Active Accounts</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card stat-danger">
+                    <h1>@Model.Count(u => u.IsLocked)</h1>
+                    <p>Restricted Access</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="card-header-system">
+                <h4><i class="fas fa-list-ul"></i> Organization Members</h4>
+            </div>
+            @Html.Partial("_GlobalUserList", Model)
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            $('.table').DataTable({
+                "pageLength": 25,
+                "order": [[0, "asc"]],
+                "dom": '<"p-3 d-flex justify-content-between align-items-center"fB>t<"p-3 d-flex justify-content-between align-items-center"ip>',
+                "language": {
+                    "search": "",
+                    "searchPlaceholder": "Search members..."
+                }
+            });
+            
+            // Style the search input to match system
+            $('.dataTables_filter input').addClass('form-control').css({
+                'border-radius': '4px',
+                'border': '1px solid var(--border-color)',
+                'padding': '8px 15px'
+            });
+        });
+    </script>
+}

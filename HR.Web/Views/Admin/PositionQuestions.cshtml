@@ -1,0 +1,241 @@
+@model HR.Web.Controllers.PositionQuestionViewModel
+@{
+    ViewBag.Title = "Position Questions - " + Model.Position.Title;
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4">
+    <h2>Question Assignment: @Model.Position.Title</h2>
+    <p class="text-muted">Assign and order questions for this position</p>
+
+    @if (TempData["Message"] != null)
+    {
+        <div class="alert alert-success">@TempData["Message"]</div>
+    }
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Available Questions</h5>
+                    <small>Drag questions to the right to assign them</small>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    <div id="availableQuestions" class="question-list">
+                        @foreach (var question in Model.AvailableQuestions)
+                        {
+                            var isAssigned = Model.AssignedQuestions.Any(aq => aq.QuestionId == question.Id);
+                            <div class="question-item @(isAssigned ? "assigned" : "")" 
+                                 data-question-id="@question.Id" 
+                                 data-question-text="@question.Text"
+                                 data-question-type="@question.Type">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>@question.Text</strong>
+                                        <br/>
+                                        <small class="text-muted">Type: @question.Type</small>
+                                    </div>
+                                    <button class="btn btn-sm btn-primary assign-btn" 
+                                            @(isAssigned ? "disabled" : "")>
+                                        @(isAssigned ? "Assigned" : "Assign")
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Assigned Questions</h5>
+                    <small>Drag to reorder, click remove to unassign</small>
+                </div>
+                <div class="card-body">
+                    <div id="assignedQuestions" class="question-list sortable">
+                        @if (Model.AssignedQuestions.Any())
+                        {
+                            foreach (var pq in Model.AssignedQuestions)
+                            {
+                                <div class="question-item assigned" 
+                                     data-question-id="@pq.QuestionId" 
+                                     data-question-text="@pq.Question.Text"
+                                     data-question-type="@pq.Question.Type">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="flex-grow-1">
+                                            <span class="drag-handle">⋮⋮</span>
+                                            <strong>@pq.Question.Text</strong>
+                                            <br/>
+                                            <small class="text-muted">Type: @pq.Question.Type | Order: @(pq.Order)</small>
+                                        </div>
+                                        <button class="btn btn-sm btn-danger remove-btn">Remove</button>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-muted text-center py-4">
+                                <em>No questions assigned yet. Drag questions from the left.</em>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <button id="saveAssignments" class="btn btn-success">Save Assignments</button>
+        <a href="@Url.Action("Details", "Positions", new { id = Model.PositionId })" class="btn btn-link">Back to Position</a>
+    </div>
+</div>
+
+<style>
+.question-item {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 8px;
+    background: white;
+    transition: all 0.2s ease;
+}
+
+.question-item:hover {
+    border-color: #007bff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.question-item.assigned {
+    opacity: 0.6;
+    background: #f8f9fa;
+}
+
+.question-list.sortable .question-item {
+    cursor: move;
+}
+
+.drag-handle {
+    margin-right: 10px;
+    color: #999;
+    font-size: 12px;
+}
+
+.question-list.sortable .question-item:hover .drag-handle {
+    color: #333;
+}
+
+.sortable-ghost {
+    opacity: 0.4;
+    background: #f0f8ff;
+}
+
+.sortable-drag {
+    opacity: 1;
+    transform: rotate(2deg);
+}
+</style>
+
+@section Scripts {
+<script src="~/Scripts/Sortable.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Initialize sortable for assigned questions
+    var assignedQuestions = document.getElementById('assignedQuestions');
+    var sortable = Sortable.create(assignedQuestions, {
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        dragClass: 'sortable-drag',
+        handle: '.drag-handle',
+        onEnd: function() {
+            updateOrderNumbers();
+        }
+    });
+
+    // Handle assign button clicks
+    $('.assign-btn').click(function() {
+        var questionItem = $(this).closest('.question-item');
+        assignQuestion(questionItem);
+    });
+
+    // Handle remove button clicks
+    $(document).on('click', '.remove-btn', function() {
+        var questionItem = $(this).closest('.question-item');
+        removeQuestion(questionItem);
+    });
+
+    // Handle double-click to assign
+    $('#availableQuestions .question-item:not(.assigned)').dblclick(function() {
+        assignQuestion($(this));
+    });
+
+    function assignQuestion(questionItem) {
+        if (questionItem.hasClass('assigned')) return;
+
+        var clonedItem = questionItem.clone();
+        clonedItem.addClass('assigned');
+        clonedItem.find('.assign-btn').replaceWith('<button class="btn btn-sm btn-danger remove-btn">Remove</button>');
+        clonedItem.find('.d-flex').prepend('<span class="drag-handle">⋮⋮</span>');
+        
+        $('#assignedQuestions').append(clonedItem);
+        
+        questionItem.addClass('assigned');
+        questionItem.find('.assign-btn').prop('disabled', true).text('Assigned');
+        
+        updateOrderNumbers();
+    }
+
+    function removeQuestion(questionItem) {
+        var questionId = questionItem.data('question-id');
+        var originalItem = $('#availableQuestions').find('[data-question-id="' + questionId + '"]');
+        
+        originalItem.removeClass('assigned');
+        originalItem.find('.assign-btn').prop('disabled', false).text('Assign');
+        
+        questionItem.remove();
+        updateOrderNumbers();
+    }
+
+    function updateOrderNumbers() {
+        $('#assignedQuestions .question-item').each(function(index) {
+            $(this).find('.text-muted').html(function(_, html) {
+                return html.replace(/Order: \d+/, 'Order: ' + (index + 1));
+            });
+        });
+    }
+
+    // Save assignments
+    $('#saveAssignments').click(function() {
+        var assignments = [];
+        $('#assignedQuestions .question-item').each(function(index) {
+            assignments.push({
+                QuestionId: $(this).data('question-id'),
+                Order: index + 1
+            });
+        });
+
+        $.ajax({
+            url: '@Url.Action("SavePositionQuestions", "Admin")',
+            type: 'POST',
+            data: {
+                positionId: @Model.PositionId,
+                assignments: assignments,
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+            },
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error saving assignments');
+            }
+        });
+    });
+});
+</script>
+}

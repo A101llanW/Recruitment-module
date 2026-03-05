@@ -1,0 +1,113 @@
+@model List<HR.Web.Controllers.PositionScoringStatistics>
+@{
+    ViewBag.Title = "Scoring Statistics";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>📈 Scoring Statistics & Analytics</h2>
+        <a href="@Url.Action("EnhancedCandidateRankings", "Admin")" class="btn btn-outline-primary">
+            Back to Rankings
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Position Performance Comparison</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th>Position / Department</th>
+                                    <th class="text-center">Applications</th>
+                                    <th class="text-center">Avg Score</th>
+                                    <th class="text-center">Top Score</th>
+                                    <th class="text-center">Quality Meter</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var stat in Model)
+                                {
+                                    var qualityClass = stat.AverageScore >= 70 ? "success" : 
+                                                      stat.AverageScore >= 50 ? "warning" : "danger";
+                                    
+                                    <tr>
+                                        <td>
+                                            <strong>@stat.PositionTitle</strong>
+                                            <br/>
+                                            <small class="text-muted">@stat.DepartmentName</small>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge badge-pill badge-info">@stat.ApplicationCount</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <strong>@stat.AverageScore.ToString("F1")%</strong>
+                                        </td>
+                                        <td class="text-center text-success">
+                                            <strong>@stat.TopCandidateScore.ToString("F1")%</strong>
+                                        </td>
+                                        <td style="width: 200px;">
+                                            <div class="progress" style="height: 10px; margin-top: 8px;">
+                                                <div class="progress-bar bg-@qualityClass" 
+                                                     role="progressbar" 
+                                                     style="width: @stat.AverageScore%"></div>
+                                            </div>
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="@Url.Action("EnhancedCandidateRankings", "Admin", new { positionId = stat.PositionId })" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                View Candidates
+                                            </a>
+                                        </td>
+                                    </tr>
+                                }
+                                @if (!Model.Any())
+                                {
+                                    <tr>
+                                        <td colspan="6" class="text-center py-5 text-muted">
+                                            No scoring data available yet.
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6>Insights</h6>
+                </div>
+                <div class="card-body">
+                    <p class="small">
+                        <i class="fas fa-info-circle text-info"></i> 
+                        Average scores help you identify which positions are attracting the highest quality candidates.
+                    </p>
+                    <p class="small">
+                        <i class="fas fa-lightbulb text-warning"></i>
+                        If average scores are too low, consider revising the job description or the interview questions.
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 text-right">
+            <form action="@Url.Action("BulkRecalculateScores", "Admin")" method="post" onsubmit="return confirm('Recalculate ALL scores?');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-warning">
+                    <i class="fas fa-sync"></i> Force Global Recalculation
+                </button>
+            </form>
+        </div>
+    </div>
+</div>

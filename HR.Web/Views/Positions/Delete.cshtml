@@ -1,0 +1,129 @@
+@model HR.Web.Models.Position
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Delete Position";
+    
+    // Get counts of related records
+    var applicationsCount = 0;
+    var interviewsCount = 0;
+    var onboardingsCount = 0;
+    var positionQuestionsCount = 0;
+    
+    try
+    {
+        using (var uow = new HR.Web.Data.UnitOfWork())
+        {
+            applicationsCount = uow.Applications.GetAll().Count(a => a.PositionId == Model.Id);
+            var applications = uow.Applications.GetAll().Where(a => a.PositionId == Model.Id).ToList();
+            interviewsCount = uow.Interviews.GetAll().Count(i => applications.Any(a => a.Id == i.ApplicationId));
+            onboardingsCount = uow.Onboardings.GetAll().Count(o => applications.Any(a => a.Id == o.ApplicationId));
+            positionQuestionsCount = uow.PositionQuestions.GetAll().Count(pq => pq.PositionId == Model.Id);
+        }
+    }
+    catch
+    {
+        // If there's an error getting counts, we'll show 0
+    }
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-exclamation-triangle"></i> Delete Position
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <h5><i class="fas fa-question-circle"></i> Are you sure?</h5>
+                        <p class="mb-2">Are you sure you want to delete <strong>@Model.Title</strong>?</p>
+                        <p class="text-muted small mb-3">This action cannot be undone and will also delete all associated records.</p>
+                        
+                        <div class="bg-light p-3 rounded mb-3">
+                            <h6 class="text-danger mb-2"><i class="fas fa-exclamation-triangle"></i> The following will be deleted:</h6>
+                            <ul class="mb-0 small">
+                                <li><strong>Position:</strong> @Model.Title</li>
+                                @if (applicationsCount > 0)
+                                {
+                                    <li><strong>Applications:</strong> @applicationsCount application(s)</li>
+                                }
+                                @if (interviewsCount > 0)
+                                {
+                                    <li><strong>Interviews:</strong> @interviewsCount interview(s)</li>
+                                }
+                                @if (onboardingsCount > 0)
+                                {
+                                    <li><strong>Onboarding Records:</strong> @onboardingsCount onboarding record(s)</li>
+                                }
+                                @if (positionQuestionsCount > 0)
+                                {
+                                    <li><strong>Position Questions:</strong> @positionQuestionsCount question(s)</li>
+                                }
+                                @if (applicationsCount == 0 && interviewsCount == 0 && onboardingsCount == 0 && positionQuestionsCount == 0)
+                                {
+                                    <li class="text-muted">No associated records found</li>
+                                }
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    @using (Html.BeginForm("Delete", "Positions", new { id = Model.Id }, FormMethod.Post, new { @class = "d-inline" }))
+                    {
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Delete Position
+                        </button>
+                        <a href="@Url.Action("Index", "Positions")" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

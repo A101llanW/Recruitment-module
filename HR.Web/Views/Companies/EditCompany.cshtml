@@ -1,0 +1,219 @@
+@model HR.Web.Controllers.EditCompanyViewModel
+@{
+    ViewBag.Title = "Edit Company";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    :root {
+        --system-blue: #6fb8dc;
+        --system-dark: #0d2c4a;
+        --border-color: #b2d7f7;
+    }
+
+    .edit-wrapper {
+        padding: 30px 0;
+        background: #f6faff;
+        min-height: calc(100vh - 150px);
+    }
+
+    .edit-card {
+        background: #fff;
+        border: 1.2px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(13, 44, 74, 0.05);
+        overflow: hidden;
+    }
+
+    .edit-header {
+        background: #f8f9fa;
+        border-bottom: 1.2px solid var(--border-color);
+        padding: 20px 30px;
+    }
+
+    .edit-header h3 {
+        margin: 0;
+        color: var(--system-dark);
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+    }
+
+    .edit-header h3 i {
+        margin-right: 12px;
+        color: var(--system-blue);
+    }
+
+    .edit-body {
+        padding: 30px;
+    }
+
+    .control-label {
+        font-weight: 600;
+        color: var(--system-dark);
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+    }
+
+    .form-control-custom {
+        display: block;
+        width: 100%;
+        padding: 0.6rem 1rem;
+        font-size: 1rem;
+        color: #495057;
+        background-color: #fff;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    }
+
+    .form-control-custom:focus {
+        border-color: var(--system-blue);
+        outline: 0;
+        box-shadow: 0 0 0 0.2rem rgba(111, 184, 220, 0.25);
+    }
+
+    .status-group {
+        background: #fdfdfe;
+        border: 1px solid #eee;
+        border-radius: 6px;
+        padding: 15px;
+        margin-top: 10px;
+    }
+
+    .checkbox-custom {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        padding: 8px 0;
+    }
+
+    .checkbox-custom input {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+
+    .license-info {
+        margin-top: 8px;
+        padding: 12px;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .license-expired { background: #fff5f5; color: #c92a2a; border: 1px solid #ffc9c9; }
+    .license-warning { background: #fff9db; color: #f08c00; border: 1px solid #ffe066; }
+    .license-good { background: #ebfbee; color: #2b8a3e; border: 1px solid #b2f2bb; }
+
+    .action-row {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+        display: flex;
+        gap: 12px;
+    }
+
+    .btn-save { /* Removed to use .btn-blue */ }
+    .btn-cancel { /* Removed to use .btn-red */ }
+
+    .help-hint {
+        font-size: 0.8rem;
+        color: #888;
+        margin-top: 5px;
+    }
+</style>
+
+<div class="edit-wrapper">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <div class="edit-card">
+                    <div class="edit-header">
+                        <h3><i class="fas fa-edit"></i> Edit Company Configuration</h3>
+                    </div>
+                    <div class="edit-body">
+                        @using (Html.BeginForm("EditCompany", "Companies", FormMethod.Post, new { id = "editCompanyForm" }))
+                        {
+                            @Html.AntiForgeryToken()
+                            @Html.HiddenFor(m => m.Id)
+
+                            if (!ViewData.ModelState.IsValid)
+                            {
+                                <div class="alert alert-danger mb-4">
+                                    <h5 class="mb-2"><i class="fas fa-exclamation-circle mr-2"></i> Update Failed</h5>
+                                    @Html.ValidationSummary(true, "", new { @class = "small m-0" })
+                                </div>
+                            }
+
+                            <div class="form-group mb-4">
+                                <label class="control-label" for="Name">Display Name</label>
+                                @Html.TextBoxFor(m => m.Name, new { @class = "form-control-custom" })
+                                @Html.ValidationMessageFor(m => m.Name, "", new { @class = "text-danger small mt-1 d-block" })
+                            </div>
+
+                            <div class="form-group mb-4">
+                                <label class="control-label" for="Slug">URL Slug</label>
+                                @Html.TextBoxFor(m => m.Slug, new { @class = "form-control-custom" })
+                                @Html.ValidationMessageFor(m => m.Slug, "", new { @class = "text-danger small mt-1 d-block" })
+                                <p class="help-hint">Changing the slug will break existing links to this company's portal.</p>
+                            </div>
+
+                            <div class="form-group mb-4">
+                                <label class="control-label">Access Status</label>
+                                <div class="status-group">
+                                    <label class="checkbox-custom m-0">
+                                        @Html.CheckBoxFor(m => m.IsActive)
+                                        <span style="font-weight: 500;">Authorized and Active</span>
+                                    </label>
+                                    <p class="help-hint m-0 mt-1">When disabled, users from this company will be blocked from system access.</p>
+                                </div>
+                            </div>
+
+                            <div class="form-group mb-2">
+                                <label class="control-label" for="LicenseExpiryDate">Licensing Period</label>
+                                @Html.TextBoxFor(m => m.LicenseExpiryDate, "{0:yyyy-MM-dd}", new { @class = "form-control-custom", type = "date" })
+                                @Html.ValidationMessageFor(m => m.LicenseExpiryDate, "", new { @class = "text-danger small mt-1 d-block" })
+                                
+                                @if (Model.LicenseExpiryDate.HasValue)
+                                {
+                                    var daysRemaining = (Model.LicenseExpiryDate.Value - DateTime.Now).Days;
+                                    var statusClass = daysRemaining < 0 ? "license-expired" : (daysRemaining <= 30 ? "license-warning" : "license-good");
+                                    
+                                    <div class="license-info @statusClass">
+                                        <i class="fas fa-@(daysRemaining < 0 ? "exclamation-circle" : (daysRemaining <= 30 ? "clock" : "check-circle")) mr-2"></i>
+                                        @if (daysRemaining < 0) {
+                                            <strong>Expired @Math.Abs(daysRemaining) days ago</strong>
+                                        } else {
+                                            <span>Valid for next <strong>@daysRemaining days</strong></span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="action-row">
+                                <button type="submit" class="btn-blue">
+                                    <i class="fas fa-save mr-1"></i> Update Configuration
+                                </button>
+                                <a href="@Url.Action("Index")" class="btn-red" style="text-decoration: none;">
+                                    <i class="fas fa-times mr-1"></i> Cancel
+                                </a>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="mt-4 text-center">
+                    <p class="text-muted small">
+                        <i class="fas fa-history mr-1"></i> All modifications are recorded in the system audit logs.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @Scripts.Render("~/bundles/jqueryval")
+}

@@ -1,0 +1,489 @@
+@model HR.Web.Controllers.QuestionnairePreviewViewModel
+@{
+    ViewBag.Title = "Questionnaire Preview - " + Model.Position.Title;
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>📋 Questionnaire Preview</h2>
+            <p class="text-muted">Position: <strong>@Model.Position.Title</strong></p>
+        </div>
+        <div>
+            <a href="@Url.Action("Test", "Questionnaire", new { positionId = Model.Position.Id })" class="btn btn-primary">
+                🧪 Test Questionnaire
+            </a>
+            <a href="@Url.Action("Builder", "Questionnaire", new { positionId = Model.Position.Id })" class="btn btn-outline-secondary ml-2">
+                🔧 Edit Questionnaire
+            </a>
+            <a href="@Url.Action("PositionQuestions", "Admin", new { positionId = Model.Position.Id })" class="btn btn-outline-info ml-2">
+                ⚙️ Manage Questions
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Questionnaire (@Model.Questions.Count questions)</h5>
+                    <small class="text-muted">Preview how candidates will see this questionnaire</small>
+                </div>
+                <div class="card-body">
+                    @if (Model.Questions.Any())
+                    {
+                        <form id="previewForm">
+                            @for (int i = 0; i < Model.Questions.Count; i++)
+                            {
+                                var question = Model.Questions[i];
+                                <div class="question-container mb-4" data-question-id="@question.QuestionId">
+                                    <div class="d-flex align-items-start mb-2">
+                                        <span class="question-number badge badge-primary mr-2">@(i + 1)</span>
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-1">@question.QuestionText</h6>
+                                            <small class="text-muted">Type: @question.QuestionType</small>
+                                            @if (question.IsRequired)
+                                            {
+                                                <span class="text-danger ml-2">*</span>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    @switch (question.QuestionType.ToLower())
+                                    {
+                                        case "choice":
+                                            <div class="ml-4">
+                                                @foreach (var option in question.Options)
+                                                {
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" 
+                                                               name="question_@question.QuestionId" 
+                                                               value="@option.Text" id="option_@option.Id">
+                                                        <label class="form-check-label" for="option_@option.Id">
+                                                            @option.Text
+                                                            <small class="text-muted">(@option.Points pts)</small>
+                                                        </label>
+                                                    </div>
+                                                }
+                                            </div>
+                                            break;
+
+                                        case "rating":
+                                            <div class="ml-4">
+                                                <div class="rating-container">
+                                                    @for (int rating = 1; rating <= 5; rating++)
+                                                    {
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" 
+                                                                   name="question_@question.QuestionId" 
+                                                                   value="@rating" id="rating_@question.QuestionId_@rating">
+                                                            <label class="form-check-label" for="rating_@question.QuestionId_@rating">
+                                                                @rating
+                                                            </label>
+                                                        </div>
+                                                    }
+                                                    <small class="text-muted ml-2">(1 = Poor, 5 = Excellent)</small>
+                                                </div>
+                                            </div>
+                                            break;
+
+                                        case "number":
+                                            <div class="ml-4">
+                                                <input type="number" class="form-control" 
+                                                       name="question_@question.QuestionId" 
+                                                       placeholder="Enter a number">
+                                            </div>
+                                            break;
+
+                                        case "text":
+                                        default:
+                                            <div class="ml-4">
+                                                <textarea class="form-control" 
+                                                          name="question_@question.QuestionId" 
+                                                          rows="3" 
+                                                          placeholder="Enter your answer here..."></textarea>
+                                            </div>
+                                            break;
+                                    }
+                                </div>
+                            }
+
+                            <div class="text-center mt-4">
+                                <button type="button" class="btn btn-outline-primary" onclick="simulateSubmit()">
+                                    🧪 Simulate Submit
+                                </button>
+                                <button type="button" class="btn btn-outline-info ml-2" onclick="calculatePreviewScore()">
+                                    📊 Calculate Score
+                                </button>
+                            </div>
+                        </form>
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-5">
+                            <h4>No questions assigned</h4>
+                            <p>This position doesn't have any questions in its questionnaire yet.</p>
+                            <a href="@Url.Action("Builder", "Questionnaire", new { positionId = Model.Position.Id })" 
+                               class="btn btn-primary">
+                                Build Questionnaire
+                            </a>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <!-- Questionnaire Statistics -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6>📊 Questionnaire Statistics</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="stat-item">
+                                <h4 class="text-primary">@Model.Questions.Count</h4>
+                                <small class="text-muted">Total Questions</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="stat-item">
+                                <h4 class="text-success">@Model.Questions.Count(q => q.IsRequired)</h4>
+                                <small class="text-muted">Required</small>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    @if (Model.Questions.Any())
+                    {
+                        var maxScore = Model.Questions.Sum(q => (q.Options != null && q.Options.Any()) ? q.Options.Max(o => o.Points) : 0m);
+                        <div class="text-center">
+                            <h4 class="text-info">@maxScore</h4>
+                            <small class="text-muted">Max Possible Score</small>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Question Types Breakdown -->
+            @if (Model.Questions.Any())
+            {
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6>📋 Question Types</h6>
+                    </div>
+                    <div class="card-body">
+                        @foreach (var group in Model.Questions.GroupBy(q => q.QuestionType))
+                        {
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span>@group.Key</span>
+                                <span class="badge badge-info">@group.Count()</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Quick Actions -->
+            <div class="card">
+                <div class="card-header">
+                    <h6>⚡ Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="@Url.Action("Test", "Questionnaire", new { positionId = Model.Position.Id })" 
+                           class="btn btn-outline-primary btn-sm">
+                            🧪 Take Test
+                        </a>
+                        <a href="@Url.Action("Builder", "Questionnaire", new { positionId = Model.Position.Id })" 
+                           class="btn btn-outline-secondary btn-sm">
+                            🔧 Edit Questions
+                        </a>
+                        <button class="btn btn-outline-info btn-sm" onclick="exportQuestionnaire()">
+                            📤 Export Questions
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="cloneQuestionnaire()">
+                            📋 Clone to Another Position
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Score Preview Modal -->
+<div class="modal fade" id="scorePreviewModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📊 Score Preview</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body" id="scorePreviewContent">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="sr-only">Calculating...</span>
+                    </div>
+                    <p class="mt-2">Calculating score based on preview answers...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Clone Modal -->
+<div class="modal fade" id="cloneModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📋 Clone Questionnaire</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Target Position:</label>
+                    <select id="targetPosition" class="form-control">
+                        <option value="">Select a position...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="executeClone()">Clone</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.question-container {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 16px;
+    background: #fafafa;
+    transition: all 0.2s ease;
+}
+
+.question-container:hover {
+    border-color: #007bff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.question-number {
+    font-size: 1.2em;
+    min-width: 30px;
+    text-align: center;
+}
+
+.rating-container .form-check-inline {
+    margin-right: 0.5rem;
+}
+
+.stat-item {
+    padding: 0.5rem;
+}
+
+.form-check {
+    margin-bottom: 0.5rem;
+}
+
+.form-check-label {
+    cursor: pointer;
+}
+
+.question-container .form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+</style>
+
+@section Scripts {
+<script>
+$(document).ready(function() {
+    // Load positions for clone modal
+    loadPositions();
+});
+
+function simulateSubmit() {
+    // Fill in some sample answers for testing
+    $('#previewForm input[type="radio"]:first').prop('checked', true);
+    $('#previewForm textarea').val('This is a sample answer for testing purposes.');
+    $('#previewForm input[type="number"]').val('5');
+    
+    alert('Sample answers have been filled in. You can now calculate the score.');
+}
+
+function calculatePreviewScore() {
+    $('#scorePreviewModal').modal('show');
+    
+    // Collect answers
+    var answers = [];
+    $('.question-container').each(function() {
+        var questionId = $(this).data('question-id');
+        var answer = '';
+        
+        // Get answer based on question type
+        if ($(this).find('input[type="radio"]:checked').length > 0) {
+            answer = $(this).find('input[type="radio"]:checked').val();
+        } else if ($(this).find('textarea').length > 0) {
+            answer = $(this).find('textarea').val();
+        } else if ($(this).find('input[type="number"]').length > 0) {
+            answer = $(this).find('input[type="number"]').val();
+        }
+        
+        answers.push({
+            questionId: questionId,
+            answer: answer
+        });
+    });
+    
+    // Calculate score (simplified for preview)
+    var totalScore = 0;
+    var maxScore = 0;
+    var results = [];
+    
+    $('.question-container').each(function() {
+        var questionText = $(this).find('h6').text();
+        var questionType = $(this).find('.text-muted').text().replace('Type: ', '');
+        var answer = '';
+        var score = 0;
+        var questionMax = 0;
+        
+        // Get answer and calculate score
+        if ($(this).find('input[type="radio"]:checked').length > 0) {
+            var selectedOption = $(this).find('input[type="radio"]:checked').siblings('label');
+            answer = selectedOption.contents().filter(function() {
+                return this.nodeType === 3;
+            }).text().trim();
+            
+            // Extract points from the label
+            var pointsText = selectedOption.find('.text-muted').text();
+            if (pointsText) {
+                score = parseInt(pointsText.match(/\d+/)[0]);
+            }
+            questionMax = Math.max(questionMax, score);
+        } else if ($(this).find('textarea').val()) {
+            answer = $(this).find('textarea').val();
+            score = answer.length > 100 ? 8 : answer.length > 50 ? 5 : 2;
+            questionMax = 10;
+        } else if ($(this).find('input[type="number"]').val()) {
+            answer = $(this).find('input[type="number"]').val();
+            score = Math.min(10, parseInt(answer) * 2);
+            questionMax = 10;
+        }
+        
+        totalScore += score;
+        maxScore += questionMax;
+        
+        results.push({
+            question: questionText,
+            answer: answer,
+            score: score,
+            maxScore: questionMax
+        });
+    });
+    
+    var percentage = maxScore > 0 ? (totalScore / maxScore * 100).toFixed(1) : 0;
+    
+    // Display results
+    var html = '<div class="text-center mb-4">';
+    html += '<h3>Total Score: ' + totalScore + ' / ' + maxScore + '</h3>';
+    html += '<div class="progress" style="height: 25px;">';
+    html += '<div class="progress-bar bg-' + (percentage >= 80 ? 'success' : percentage >= 60 ? 'warning' : 'danger') + '" ';
+    html += 'role="progressbar" style="width: ' + percentage + '%">' + percentage + '%</div>';
+    html += '</div>';
+    html += '</div>';
+    
+    html += '<h5>Question Breakdown:</h5>';
+    results.forEach(function(result, index) {
+        html += '<div class="mb-3">';
+        html += '<h6>Q' + (index + 1) + ': ' + result.question + '</h6>';
+        html += '<p class="mb-1"><strong>Answer:</strong> ' + (result.answer || 'Not answered') + '</p>';
+        html += '<p class="mb-0"><strong>Score:</strong> ' + result.score + ' / ' + result.maxScore + '</p>';
+        html += '</div>';
+    });
+    
+    $('#scorePreviewContent').html(html);
+}
+
+function loadPositions() {
+    // This would normally load from API
+    var positions = [
+        { id: 1, title: 'Senior Software Engineer' },
+        { id: 2, title: 'Junior Developer' },
+        { id: 3, title: 'Project Manager' }
+    ];
+    
+    var select = $('#targetPosition');
+    positions.forEach(function(pos) {
+        if (pos.id !== @Model.Position.Id) {
+            select.append('<option value="' + pos.id + '">' + pos.title + '</option>');
+        }
+    });
+}
+
+function exportQuestionnaire() {
+    var questions = [];
+    $('.question-container').each(function() {
+        var questionId = $(this).data('question-id');
+        var questionText = $(this).find('h6').text();
+        var questionType = $(this).find('.text-muted').text().replace('Type: ', '');
+        
+        questions.push({
+            id: questionId,
+            text: questionText,
+            type: questionType
+        });
+    });
+    
+    var dataStr = JSON.stringify(questions, null, 2);
+    var dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    var exportFileDefaultName = 'questionnaire_@Model.Position.Title.Replace(" ", "_")_' + new Date().toISOString().slice(0,10) + '.json';
+    
+    var linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+}
+
+function cloneQuestionnaire() {
+    $('#cloneModal').modal('show');
+}
+
+function executeClone() {
+    var targetPositionId = $('#targetPosition').val();
+    if (!targetPositionId) {
+        alert('Please select a target position');
+        return;
+    }
+    
+    $.ajax({
+        url: '@Url.Action("CloneQuestionnaire", "Questionnaire")',
+        type: 'POST',
+        data: {
+            sourcePositionId: @Model.Position.Id,
+            targetPositionId: targetPositionId,
+            __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+        },
+        success: function(response) {
+            if (response.success) {
+                alert(response.message);
+                $('#cloneModal').modal('hide');
+            } else {
+                alert('Error: ' + response.message);
+            }
+        },
+        error: function() {
+            alert('Error cloning questionnaire');
+        }
+    });
+}
+</script>
+}

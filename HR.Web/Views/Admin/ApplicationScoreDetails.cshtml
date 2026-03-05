@@ -1,0 +1,211 @@
+@model HR.Web.Controllers.ApplicationScoreDetailsViewModel
+@{
+    Layout = null;
+}
+
+<div class="modal-header">
+    <h4 class="modal-title">
+        <i class="fas fa-user-check"></i> 
+        Application Score Details - @Model.Application.Applicant.FullName
+    </h4>
+    <button type="button" class="close" data-dismiss="modal">&times;</button>
+</div>
+
+<div class="modal-body">
+    <!-- Candidate Overview -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h5><i class="fas fa-user"></i> Candidate Information</h5>
+            <table class="table table-sm">
+                <tr>
+                    <td><strong>Name:</strong></td>
+                    <td>@Model.Application.Applicant.FullName</td>
+                </tr>
+                <tr>
+                    <td><strong>Email:</strong></td>
+                    <td>@Model.Application.Applicant.Email</td>
+                </tr>
+                <tr>
+                    <td><strong>Position:</strong></td>
+                    <td>@Model.Application.Position.Title</td>
+                </tr>
+                <tr>
+                    <td><strong>Applied:</strong></td>
+                    <td>@Model.Application.AppliedOn.ToString("MMM dd, yyyy")</td>
+                </tr>
+                <tr>
+                    <td><strong>Status:</strong></td>
+                    <td><span class="badge badge-info">@Model.Application.Status</span></td>
+                </tr>
+            </table>
+        </div>
+        <div class="col-md-4 text-center">
+            <h5><i class="fas fa-trophy"></i> Total Score</h5>
+            <div class="score-display">
+                <h2 class="@(Model.TotalScore >= 70 ? "text-success" : Model.TotalScore >= 50 ? "text-warning" : "text-danger")">
+                    @Model.TotalScore.ToString("F1")
+                </h2>
+                <small class="text-muted">out of @Model.MaxScore</small>
+                <div class="progress mt-2">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated @(Model.TotalScore >= 70 ? "bg-success" : Model.TotalScore >= 50 ? "bg-warning" : "bg-danger")" 
+                         style="width: @Model.Percentage%">
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3">
+                <span class="badge badge-@(Model.Percentage >= 80 ? "success" : Model.Percentage >= 60 ? "warning" : "danger")">
+                    Rank: @Model.Rank
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Question Breakdown -->
+    <div class="mt-4">
+        <h5><i class="fas fa-list-ol"></i> Question-by-Question Breakdown</h5>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped">
+                <thead class="thead-dark">
+                    <tr>
+                        <th>#</th>
+                        <th>Question</th>
+                        <th>Type</th>
+                        <th>Candidate's Answer</th>
+                        <th>Score</th>
+                        <th>Max Score</th>
+                        <th>%</th>
+                        <th>Rank</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var detail in Model.ScoreBreakdown.OrderBy(d => d.Order))
+                    {
+                        <tr class="@(detail.Score >= detail.MaxScore * 0.8 ? "table-success" : detail.Score >= detail.MaxScore * 0.6 ? "table-warning" : "")">
+                            <td class="text-center">@detail.Order</td>
+                            <td class="small">@detail.QuestionText</td>
+                            <td>
+                                <span class="badge badge-secondary">@detail.QuestionType</span>
+                            </td>
+                            <td class="answer-text">
+                                @if (!string.IsNullOrEmpty(detail.Answer))
+                                {
+                                    <span class="text-success">@detail.Answer</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted"><em>Not answered</em></span>
+                                }
+                            </td>
+                            <td class="text-center score-cell">
+                                <strong>@detail.Score.ToString("F1")</strong>
+                                @if (detail.Score >= detail.MaxScore * 0.8)
+                                {
+                                    <i class="fas fa-star text-warning"></i>
+                                }
+                                else if (detail.Score >= detail.MaxScore * 0.6)
+                                {
+                                    <i class="fas fa-star-half-alt text-info"></i>
+                                }
+                            </td>
+                            <td class="text-center">@detail.MaxScore</td>
+                            <td class="text-center">
+                                <small>@detail.Percentage.ToString("F1")%</small>
+                            </td>
+                            <td class="text-center">
+                                @if (detail.Percentage >= 80)
+                                {
+                                    <span class="badge badge-success">Excellent</span>
+                                }
+                                else if (detail.Percentage >= 60)
+                                {
+                                    <span class="badge badge-warning">Good</span>
+                                }
+                                else if (detail.Percentage >= 40)
+                                {
+                                    <span class="badge badge-info">Fair</span>
+                                }
+                                else
+                                {
+                                    <span class="badge badge-secondary">Poor</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Score Summary -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h6><i class="fas fa-chart-bar"></i> Score Summary</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 text-center">
+                            <small class="text-muted">Questions Answerered</small>
+                            <h4>@Model.ScoreBreakdown.Count(d => !string.IsNullOrEmpty(d.Answer))</h4>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <small class="text-muted">Average Score</small>
+                            <h4>@Model.ScoreBreakdown.Where(d => !string.IsNullOrEmpty(d.Answer)).Average(d => d.Score).ToString("F1")</h4>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <small class="text-muted">Total Points</small>
+                            <h4>@Model.TotalScore.ToString("F1")</h4>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <small class="text-muted">Final Rank</small>
+                            <h4><span class="badge badge-primary">#@Model.Rank</span></h4>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(Model.Application.ScoreReason))
+                    {
+                        <div class="mt-3">
+                            <small class="text-muted"><strong>Score Reason:</strong> @Model.Application.ScoreReason</small>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+</div>
+
+<style>
+.score-display {
+    padding: 20px;
+    border-radius: 8px;
+    background: #f8f9fa;
+    border: 2px solid #dee2e6;
+}
+
+.answer-text {
+    max-width: 200px;
+    word-wrap: break-word;
+    font-size: 0.9em;
+}
+
+.score-cell {
+    position: relative;
+}
+
+.table-success {
+    background-color: #d4edda !important;
+}
+
+.table-warning {
+    background-color: #fff3cd !important;
+}
+
+.progress {
+    height: 8px;
+    border-radius: 4px;
+}
+</style>

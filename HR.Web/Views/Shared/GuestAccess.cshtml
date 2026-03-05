@@ -1,0 +1,60 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Access Required";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 text-center">
+            <div class="card shadow-sm border-0 p-5" style="border-radius: 15px; background: #fafdff; border: 1.2px solid #b2d7f7 !important;">
+                <div class="mb-4">
+                    <i class="fas fa-user-lock fa-4x text-info mb-3"></i>
+                    <h2 class="font-weight-bold" style="color: #0d2c4a;">Authentication Required</h2>
+                </div>
+                
+                <p class="lead mb-5 text-muted">@ViewBag.Message</p>
+                
+                <div class="d-flex flex-column gap-3">
+                    <a href="@Url.Action("Login", "Account", new { returnUrl = Request.RawUrl })" class="btn btn-blue btn-lg mb-3" style="border-radius: 10px; font-weight: 600;">
+                        <i class="fas fa-sign-in-alt mr-2"></i> Log In to Your Account
+                    </a>
+                    <a href="@Url.Action("Register", "Account", new { returnUrl = Request.RawUrl })" class="btn btn-outline-primary btn-lg" style="border-radius: 10px; font-weight: 600;">
+                        <i class="fas fa-user-plus mr-2"></i> Create a New Account
+                    </a>
+                </div>
+                
+                <div class="mt-5">
+                    <a href="@Url.Action("Index", "Positions")" class="text-muted">
+                        <i class="fas fa-arrow-left mr-1"></i> Back to Job Postings
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-blue {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        border: none;
+        transition: all 0.3s;
+    }
+    .btn-blue:hover {
+        background: #3498db;
+        color: #fff;
+        transform: translateY(-2px);
+    }
+    .btn-outline-primary {
+        border-color: #6fb8dc;
+        color: #6fb8dc;
+    }
+    .btn-outline-primary:hover {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        transform: translateY(-2px);
+    }
+    .gap-3 {
+        gap: 1rem;
+    }
+</style>

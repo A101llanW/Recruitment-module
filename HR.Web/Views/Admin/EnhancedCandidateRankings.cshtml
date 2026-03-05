@@ -1,0 +1,344 @@
+@model HR.Web.Controllers.EnhancedCandidateRankingsViewModel
+@{
+    ViewBag.Title = "Enhanced Candidate Rankings";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>📊 Enhanced Candidate Rankings</h2>
+        <div>
+            <a href="@Url.Action("ScoringStatistics", "Admin")" class="btn btn-outline-info">
+                📈 Scoring Statistics
+            </a>
+            <button id="recalculateAllScores" class="btn btn-warning ml-2">
+                🔄 Recalculate All Scores
+            </button>
+        </div>
+    </div>
+
+    <!-- Position Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <label class="font-weight-bold">Filter by Position:</label>
+                    @Html.DropDownList("positionFilter", 
+                        new SelectList(Model.Positions, "Id", "Title", Model.SelectedPositionId),
+                        "All Positions",
+                        new { @class = "form-control", id = "positionFilter" })
+                </div>
+                <div class="col-md-4">
+                    <button id="exportRankings" class="btn btn-outline-secondary btn-block">
+                        📤 Export Rankings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (TempData["Message"] != null)
+    {
+        <div class="alert alert-success">@TempData["Message"]</div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+
+    <!-- Rankings by Position -->
+    @foreach (var kvp in Model.RankingsByPosition)
+    {
+        var position = kvp.Key;
+        var rankings = kvp.Value;
+        
+        <div class="card mb-4 position-card" data-position-id="@position.Id">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <strong>@position.Title</strong>
+                    <small class="text-muted ml-2">@position.Department?.Name</small>
+                </h5>
+                <div class="d-flex align-items-center">
+                    <span class="badge badge-info mr-2">@rankings.Count candidates</span>
+                    <button class="btn btn-sm btn-outline-primary recalculate-position" data-position-id="@position.Id">
+                        🔄 Recalculate
+                    </button>
+                    <a href="@Url.Action("PositionQuestions", "Admin", new { positionId = position.Id })" class="btn btn-sm btn-outline-secondary ml-2">
+                        ⚙️ Questions
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                @if (rankings.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover rankings-table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Candidate</th>
+                                    <th>Score</th>
+                                    <th>Percentage</th>
+                                    <th>Progress</th>
+                                    <th>Applied</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (int i = 0; i < rankings.Count; i++)
+                                {
+                                    var ranking = rankings[i];
+                                    var percentageClass = ranking.Percentage >= 80 ? "success" : 
+                                                         ranking.Percentage >= 60 ? "warning" : "danger";
+                                    
+                                    <tr class="candidate-row" data-application-id="@ranking.ApplicationId">
+                                        <td><strong>#@(i + 1)</strong></td>
+                                        <td>
+                                            <div>
+                                                <strong>@ranking.CandidateName</strong>
+                                                <br/>
+                                                <small class="text-muted">@ranking.CandidateEmail</small>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <strong>@ranking.TotalScore</strong> / @ranking.MaxScore
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-@percentageClass">
+                                                @ranking.Percentage.ToString("F1")%
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="progress" style="height: 20px;">
+                                                <div class="progress-bar bg-@percentageClass" 
+                                                     role="progressbar" 
+                                                     style="width: @ranking.Percentage%">
+                                                    @ranking.Percentage.ToString("F1")%
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <small>@ranking.AppliedDate.ToString("MMM dd, yyyy")</small>
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-@(ranking.Status == "Shortlisted" ? "success" : 
+                                                              ranking.Status == "Rejected" ? "danger" : "secondary")">
+                                                @ranking.Status
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="btn-group" role="group">
+                                                <button class="btn btn-sm btn-outline-info view-details" 
+                                                        data-application-id="@ranking.ApplicationId" 
+                                                        title="View Score Details">
+                                                    📊
+                                                </button>
+                                                <a href="@Url.Action("ViewApplicationDetails", "Admin", new { applicationId = ranking.ApplicationId })" 
+                                                   class="btn btn-sm btn-outline-primary" title="View Application">
+                                                    👁️
+                                                </a>
+                                                <a href="@Url.Action("ScheduleInterview", "Admin", new { applicationId = ranking.ApplicationId })" 
+                                                   class="btn btn-sm btn-outline-success" title="Schedule Interview">
+                                                    📅
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted py-4">
+                        <em>No candidates have applied for this position yet.</em>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (!Model.RankingsByPosition.Any())
+    {
+        <div class="text-center text-muted py-5">
+            <h4>No positions found or no applications received.</h4>
+            <p>Try adjusting your filters or check back later.</p>
+        </div>
+    }
+</div>
+
+<!-- Score Details Modal -->
+<div class="modal fade" id="scoreDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Score Breakdown Details</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body" id="scoreDetailsContent">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading score details...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.progress {
+    min-width: 100px;
+}
+
+.rankings-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.candidate-row {
+    transition: all 0.2s ease;
+}
+
+.position-card {
+    transition: box-shadow 0.2s ease;
+}
+
+.position-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.btn-group .btn {
+    padding: 0.25rem 0.5rem;
+}
+
+.badge {
+    font-size: 0.85em;
+}
+</style>
+
+@section Scripts {
+<script>
+$(document).ready(function() {
+    // Position filter
+    $('#positionFilter').change(function() {
+        var positionId = $(this).val();
+        var url = positionId ? '@Url.Action("EnhancedCandidateRankings", "Admin", new { positionId = "__PLACEHOLDER__" })'.replace('__PLACEHOLDER__', positionId) 
+                               : '@Url.Action("EnhancedCandidateRankings", "Admin")';
+        window.location.href = url;
+    });
+
+    // View score details
+    $('.view-details').click(function() {
+        var applicationId = $(this).data('application-id');
+        loadScoreDetails(applicationId);
+    });
+
+    function loadScoreDetails(applicationId) {
+        $('#scoreDetailsModal').modal('show');
+        
+        $.ajax({
+            url: '@Url.Action("ApplicationScoreDetails", "Admin")',
+            type: 'GET',
+            data: { applicationId: applicationId },
+            success: function(response) {
+                $('#scoreDetailsContent').html(response);
+            },
+            error: function() {
+                $('#scoreDetailsContent').html('<div class="alert alert-danger">Error loading score details</div>');
+            }
+        });
+    }
+
+    // Recalculate scores for position
+    $('.recalculate-position').click(function() {
+        var positionId = $(this).data('position-id');
+        var btn = $(this);
+        
+        if (confirm('Recalculate scores for all applications in this position?')) {
+            btn.prop('disabled', true).html('🔄 Calculating...');
+            
+            $.ajax({
+                url: '@Url.Action("RecalculateScores", "Admin")',
+                type: 'POST',
+                data: {
+                    positionId: positionId,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                },
+                success: function(response) {
+                    if (response.success) {
+                        location.reload();
+                    } else {
+                        alert('Error: ' + response.message);
+                        btn.prop('disabled', false).html('🔄 Recalculate');
+                    }
+                },
+                error: function() {
+                    alert('Error recalculating scores');
+                    btn.prop('disabled', false).html('🔄 Recalculate');
+                }
+            });
+        }
+    });
+
+    // Recalculate all scores
+    $('#recalculateAllScores').click(function() {
+        if (confirm('Recalculate scores for ALL applications? This may take a moment.')) {
+            window.location.href = '@Url.Action("BulkRecalculateScores", "Admin")';
+        }
+    });
+
+    // Export rankings
+    $('#exportRankings').click(function() {
+        var positionId = $('#positionFilter').val();
+        var url = positionId ? '@Url.Action("ExportRankings", "Admin", new { positionId = "__PLACEHOLDER__" })'.replace('__PLACEHOLDER__', positionId)
+                               : '@Url.Action("ExportRankings", "Admin", new { positionId = 0 })';
+        window.open(url, '_blank');
+    });
+
+    // Auto-refresh scores every 30 seconds (optional)
+    setInterval(function() {
+        $('.candidate-row').each(function() {
+            var applicationId = $(this).data('application-id');
+            updateScoreRealtime(applicationId);
+        });
+    }, 30000);
+
+    function updateScoreRealtime(applicationId) {
+        $.ajax({
+            url: '@Url.Action("UpdateApplicationScore", "Admin")',
+            type: 'POST',
+            data: { applicationId: applicationId },
+            success: function(response) {
+                if (response.success) {
+                    // Update the score display in the table
+                    var row = $('.candidate-row[data-application-id="' + applicationId + '"]');
+                    row.find('td:nth-child(3)').html('<strong>' + response.score + '</strong> / ' + response.maxScore);
+                    row.find('td:nth-child(4) .badge').text(response.percentage.toFixed(1) + '%');
+                    
+                    // Update progress bar
+                    var progressBar = row.find('.progress-bar');
+                    progressBar.css('width', response.percentage + '%').text(response.percentage.toFixed(1) + '%');
+                    
+                    // Update progress bar color
+                    progressBar.removeClass('bg-success bg-warning bg-danger');
+                    if (response.percentage >= 80) {
+                        progressBar.addClass('bg-success');
+                    } else if (response.percentage >= 60) {
+                        progressBar.addClass('bg-warning');
+                    } else {
+                        progressBar.addClass('bg-danger');
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+}

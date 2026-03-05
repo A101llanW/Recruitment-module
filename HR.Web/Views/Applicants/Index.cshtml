@@ -1,0 +1,159 @@
+@model IEnumerable<HR.Web.Models.Applicant>
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Applicants";
+    var interviewers = ViewBag.Interviewers as List<HR.Web.Models.User>;
+    var interviewedAppIds = ViewBag.InterviewedAppIds as List<int> ?? new List<int>();
+
+    Func<HR.Web.Models.Applicant, string> getProficiencyDisplay = (applicant) => {
+        if (applicant.Applications == null || !applicant.Applications.Any())
+            return "N/A";
+        var latest = applicant.Applications.OrderByDescending(a => a.AppliedOn).FirstOrDefault();
+        if (latest == null || string.IsNullOrEmpty(latest.WorkExperienceLevel))
+            return "N/A";
+        int val;
+        if (!int.TryParse(latest.WorkExperienceLevel, out val))
+            return latest.WorkExperienceLevel;
+        switch (val) {
+            case 0: return "No direct experience";
+            case 1: return "Less than 1 year";
+            case 2: return "1-2 years";
+            case 4: return "3-5 years";
+            case 6: return "5+ years";
+            default: return val + " years";
+        }
+    };
+
+    Func<HR.Web.Models.Applicant, int> getProficiencyValue = (applicant) => {
+        if (applicant.Applications == null || !applicant.Applications.Any())
+            return -1;
+        var latest = applicant.Applications.OrderByDescending(a => a.AppliedOn).FirstOrDefault();
+        if (latest == null || string.IsNullOrEmpty(latest.WorkExperienceLevel))
+            return -1;
+        int val;
+        if (int.TryParse(latest.WorkExperienceLevel, out val))
+            return val;
+        return -1;
+    };
+
+    Func<HR.Web.Models.Applicant, HR.Web.Models.Application> getLatestUninterviewedApp = (applicant) => {
+        if (applicant.Applications == null || !applicant.Applications.Any())
+            return null;
+        return applicant.Applications
+            .Where(a => !interviewedAppIds.Contains(a.Id) && a.Status != "On Hold")
+            .OrderByDescending(a => a.AppliedOn)
+            .FirstOrDefault();
+    };
+
+    Func<HR.Web.Models.Applicant, HR.Web.Models.Application> getLatestApp = (applicant) => {
+        if (applicant.Applications == null || !applicant.Applications.Any())
+            return null;
+        return applicant.Applications
+            .OrderByDescending(a => a.AppliedOn)
+            .FirstOrDefault();
+    };
+}
+
+<div class="mt-4">
+    <h2 class="mb-3">Applicants</h2>
+    <div class="d-flex justify-content-between mb-3">
+        <input type="text"
+               id="searchBar"
+               class="form-control w-100 w-md-50"
+               placeholder="Search applicants...">
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped" id="applicantsTable">
+            <thead class="table-dark">
+                <tr>
+                    <th>Name</th>
+                    <th class="d-none d-md-table-cell">Email</th>
+                    <th class="d-none d-md-table-cell">Phone</th>
+                    <th>
+                        <a href="@Url.Action("Index", new { sortOrder = ViewBag.ProficiencySortParam })" class="text-white text-decoration-none">
+                            Proficiency (Years)
+                            @{
+                            if (ViewBag.ProficiencySortParam == "proficiency_desc")
+                            {
+                <i class="fas fa-sort-up"></i> }
+                            else if (ViewBag.ProficiencySortParam == "")
+                            {
+<i class="fas fa-sort-down"></i> 
+                            }
+                            else
+                            {
+<i class="fas fa-sort"></i>
+                            }
+                                }
+                        </a>
+                    </th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="applicantTable">
+                @foreach (var item in Model)
+                {
+                    var latestApp = getLatestUninterviewedApp(item);
+                    var latestAppForHold = getLatestApp(item);
+                <tr data-proficiency="@getProficiencyValue(item)">
+                    <td>@item.FullName</td>
+                    <td class="d-none d-md-table-cell">@item.Email</td>
+                    <td class="d-none d-md-table-cell">@item.Phone</td>
+                    <td>@getProficiencyDisplay(item)</td>
+                    <td>
+                        <div class="d-flex flex-column flex-md-row">
+                            <a href="@Url.Action("Details", "Applicants", new { id = item.Id })"
+                               class="btn btn-sm btn-info mb-1 mb-md-0 mr-md-1">
+                                <i class="fas fa-user"></i> View
+                            </a>
+
+                            @if (latestAppForHold != null)
+                            {
+                                if (latestAppForHold.Status != "On Hold")
+                                {
+                                    using (Html.BeginForm("PutOnHold", "Applications", FormMethod.Post))
+                                    {
+                                        @Html.AntiForgeryToken()
+                                        @Html.Hidden("applicationId", latestAppForHold.Id)
+                                        <button type="submit"
+                                                class="btn btn-sm btn-warning mb-1 mb-md-0 mr-md-1">
+                                            Put On Hold
+                                        </button>
+                                    }
+                                }
+                                else
+                                {
+                                    using (Html.BeginForm("ReleaseHold", "Applications", FormMethod.Post))
+                                    {
+                                        @Html.AntiForgeryToken()
+                                        @Html.Hidden("applicationId", latestAppForHold.Id)
+                                        <button type="submit"
+                                                class="btn btn-sm btn-primary mb-1 mb-md-0 mr-md-1">
+                                            Release Hold
+                                        </button>
+                                    }
+                                    <span class="badge badge-secondary">On Hold</span>
+                                }
+                            }
+                        </div>
+                    </td>
+
+                </tr>}
+            </tbody>
+        </table>
+    </div>
+    </div>
+
+    <script>
+        document.getElementById('searchBar').addEventListener('input', function () {
+            const filter = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#applicantTable tr');
+            rows.forEach(row => {
+                const name = row.cells[0].textContent.toLowerCase();
+                row.style.display = name.includes(filter) ? '' : 'none';
+            });
+        });
+    </script>
+
+

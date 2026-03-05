@@ -1,0 +1,364 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Reports";
+}
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-bar"></i> Generate Reports</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>Available Reports</h5>
+                            <div class="list-group">
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1"><i class="fas fa-users"></i> Candidates Report</h6>
+                                        </div>
+                                        <div class="btn-group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="previewReport('candidate')">
+                                                <i class="fas fa-eye"></i> Preview
+                                            </button>
+                                            <button class="btn btn-primary btn-sm" onclick="generateReport('candidate')">
+                                                <i class="fas fa-download"></i> Generate
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1"><i class="fas fa-file-alt"></i> Applications Report</h6>
+                                        </div>
+                                        <div class="btn-group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="previewReport('application')">
+                                                <i class="fas fa-eye"></i> Preview
+                                            </button>
+                                            <button class="btn btn-primary btn-sm" onclick="generateReport('application')">
+                                                <i class="fas fa-download"></i> Generate
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1"><i class="fas fa-calendar"></i> Interviews Report</h6>
+                                        </div>
+                                        <div class="btn-group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="previewReport('interview')">
+                                                <i class="fas fa-eye"></i> Preview
+                                            </button>
+                                            <button class="btn btn-primary btn-sm" onclick="generateReport('interview')">
+                                                <i class="fas fa-download"></i> Generate
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1"><i class="fas fa-building"></i> Departments Report</h6>
+                                        </div>
+                                        <div class="btn-group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="previewReport('department')">
+                                                <i class="fas fa-eye"></i> Preview
+                                            </button>
+                                            <button class="btn btn-primary btn-sm" onclick="generateReport('department')">
+                                                <i class="fas fa-download"></i> Generate
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1"><i class="fas fa-briefcase"></i> Positions Report</h6>
+                                        </div>
+                                        <div class="btn-group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="previewReport('position')">
+                                                <i class="fas fa-eye"></i> Preview
+                                            </button>
+                                            <button class="btn btn-primary btn-sm" onclick="generateReport('position')">
+                                                <i class="fas fa-download"></i> Generate
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1"><i class="fas fa-shield-alt"></i> Security Report</h6>
+                                        </div>
+                                        <div class="btn-group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="previewReport('security')">
+                                                <i class="fas fa-eye"></i> Preview
+                                            </button>
+                                            <button class="btn btn-primary btn-sm" onclick="generateReport('security')">
+                                                <i class="fas fa-download"></i> Generate
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>Recent Reports</h5>
+                            <div id="recentReports">
+                                <div class="text-muted">
+                                    <p>No reports generated yet. Select a report type from the left to get started.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Modal -->
+<div class="modal fade" id="loadingModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-body text-center p-5">
+                <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
+                <h4>Processing Report</h4>
+                <p class="text-muted">Please wait while we prepare your data...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white border-0">
+                <h5 class="modal-title"><i class="fas fa-eye me-2"></i> Report Preview</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0 bg-light" style="max-height: 80vh; overflow-y: auto;">
+                <div class="bg-white border-bottom p-2 d-flex justify-content-between align-items-center" id="paginationControls" style="display:none !important;">
+                    <div class="text-muted small ml-2 font-weight-bold">
+                        <i class="fas fa-file-alt mr-1"></i> Multi-page report preview
+                    </div>
+                    <nav aria-label="Report pagination">
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item" id="prevPage">
+                                <a class="page-link" href="#" onclick="changePage(-1)"><i class="fas fa-chevron-left"></i> Previous</a>
+                            </li>
+                            <li class="page-item disabled">
+                                <span class="page-link">Page <span id="currentPage">1</span> of <span id="totalPages">1</span></span>
+                            </li>
+                            <li class="page-item" id="nextPage">
+                                <a class="page-link" href="#" onclick="changePage(1)">Next <i class="fas fa-chevron-right"></i></a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+                <div id="previewContent" class="bg-white mx-auto shadow-sm my-4" style="max-width: 900px; min-height: 1000px; padding: 20px;">
+                    <!-- Report content will be injected here -->
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0 shadow-sm justify-content-between p-3">
+                <div class="d-flex align-items-center bg-white p-2 rounded border shadow-sm" style="border-left: 4px solid #3498db !important;">
+                    <i class="fas fa-file-export text-primary mr-3 ml-1"></i>
+                    <div class="mr-3">
+                        <small class="text-uppercase font-weight-bold text-muted d-block" style="font-size: 10px; line-height: 1;">Download Format</small>
+                        <label for="modalReportFormat" class="mb-0 font-weight-bold" style="font-size: 13px;">Select File Type:</label>
+                    </div>
+                    <select id="modalReportFormat" class="form-control form-control-sm font-weight-bold border-0 bg-light" style="width: auto; height: 38px; cursor: pointer;">
+                        <option value="pdf" selected>PDF</option>
+                        <option value="csv">CSV</option>
+                    </select>
+                </div>
+                <div class="d-flex align-items-center">
+                    <input type="hidden" id="currentReportType" />
+                    <button type="button" class="btn btn-outline-secondary px-4 mr-2 shadow-sm" data-dismiss="modal">
+                        <i class="fas fa-times mr-1"></i> Close
+                    </button>
+                    <button type="button" class="btn btn-primary px-5 shadow" onclick="downloadFromPreview()" style="height: 45px; font-weight: 600;">
+                        <i class="fas fa-cloud-download-alt mr-2"></i> DOWNLOAD NOW
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+        var allPages = [];
+        var currentPage = 1;
+        var totalPages = 1;
+
+        function previewReport(reportType) {
+            $('#currentReportType').val(reportType);
+            $('#loadingModal').modal('show');
+            $('#paginationControls').attr('style', 'display:none !important');
+            
+            $.ajax({
+                url: '@Url.Action("Preview", "ReportGenerator")',
+                type: 'POST',
+                data: { reportType: reportType },
+                success: function(response) {
+                    $('#loadingModal').modal('hide');
+                    if (response.success) {
+                        $('#previewContent').html(response.html);
+                        setupPagination();
+                        $('#previewModal').modal('show');
+                    } else {
+                        alert(response.message);
+                    }
+                },
+                error: function() {
+                    $('#loadingModal').modal('hide');
+                    alert('Error connecting to server.');
+                }
+            });
+        }
+
+        function setupPagination() {
+            allPages = $('#previewContent .report-frame').toArray();
+            if (allPages.length <= 1) {
+                $('#paginationControls').attr('style', 'display:none !important');
+                return;
+            }
+            
+            totalPages = allPages.length;
+            currentPage = 1;
+            
+            $('#paginationControls').attr('style', 'display:flex !important');
+            $('#totalPages').text(totalPages);
+            
+            renderPage();
+        }
+
+        function renderPage() {
+            $(allPages).hide();
+            $('.page-break').hide();
+            
+            $(allPages[currentPage - 1]).show();
+            
+            $('#currentPage').text(currentPage);
+            
+            $('#prevPage').toggleClass('disabled', currentPage === 1);
+            $('#nextPage').toggleClass('disabled', currentPage === totalPages);
+        }
+
+        function changePage(delta) {
+            var newPage = currentPage + delta;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                renderPage();
+                $('.modal-body').animate({ scrollTop: 0 }, 'slow');
+            }
+        }
+
+        function downloadFromPreview() {
+            var reportType = $('#currentReportType').val();
+            var format = $('#modalReportFormat').val();
+            
+            if (format === 'pdf') {
+                // Show all pages and breaks for the full PDF capture
+                $(allPages).show();
+                $('.page-break').show();
+                
+                // Set fixed height for preview container to capture full content
+                $('#previewContent').css('height', 'auto');
+                var opt = {
+                    margin:       0.5,
+                    filename:     reportType + '_Report_' + new Date().getTime() + '.pdf',
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 2, useCORS: true },
+                    jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+                };
+                
+                // Show loading state while generating PDF
+                $('#loadingModal').modal('show');
+                $('#previewModal').modal('hide');
+                
+                html2pdf().set(opt).from(document.getElementById('previewContent')).save().then(function() {
+                    $('#loadingModal').modal('hide');
+                    $('body').removeClass('modal-open');
+                    $('.modal-backdrop').remove();
+                    // Restore preview to current page
+                    renderPage();
+                }).catch(function(err) {
+                    console.error('PDF Error:', err);
+                    $('#loadingModal').modal('hide');
+                    $('body').removeClass('modal-open');
+                    $('.modal-backdrop').remove();
+                    alert('Error creating PDF. Please try again.');
+                });
+            } else {
+                $('#previewModal').modal('hide');
+                // Small delay to let preview modal close properly before showing loading
+                setTimeout(function() {
+                    generateReport(reportType, format);
+                }, 300);
+            }
+        }
+
+        function generateReport(reportType, format) {
+            // Default to PDF if no format is provided (e.g. direct click from list)
+            if (!format) format = 'pdf'; 
+            $('#loadingModal').modal('show');
+            
+            $.ajax({
+                url: '@Url.Action("GenerateDirect", "ReportGenerator")',
+                type: 'POST',
+                data: { reportType: reportType, format: format },
+                success: function(response) {
+                    // Force hide modal immediately
+                    $('#loadingModal').modal('hide');
+                    $('body').removeClass('modal-open');
+                    $('.modal-backdrop').remove();
+                    
+                    if (response.success) {
+                        addToRecentReports(response.fileName, reportType);
+                        setTimeout(function() {
+                            window.location.href = '@Url.Action("Download", "ReportGenerator")?fileName=' + response.fileName;
+                        }, 500);
+                    } else {
+                        alert(response.message);
+                    }
+                },
+                error: function() {
+                    $('#loadingModal').modal('hide');
+                    alert('Error generating report.');
+                }
+            });
+        }
+        
+        function addToRecentReports(fileName, reportType) {
+            var reportHtml = '<div class="list-group-item">' +
+                '<div class="d-flex w-100 justify-content-between align-items-center">' +
+                '<div>' +
+                '<h6 class="mb-1">' + reportType.charAt(0).toUpperCase() + reportType.slice(1) + ' Report</h6>' +
+                '<small class="text-muted">' + fileName + '</small>' +
+                '</div>' +
+                '<a href="@Url.Action("Download", "ReportGenerator")?fileName=' + fileName + '" class="btn btn-outline-primary btn-sm">' +
+                '<i class="fas fa-download"></i> Download' +
+                '</a>' +
+                '</div>' +
+                '</div>';
+            
+            var recentReportsDiv = $('#recentReports');
+            if (recentReportsDiv.find('.text-muted').length > 0 && recentReportsDiv.text().trim() === "No recent reports generated.") {
+                recentReportsDiv.html(reportHtml);
+            } else {
+                recentReportsDiv.prepend(reportHtml);
+            }
+        }
+    </script>
+}

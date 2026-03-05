@@ -1,0 +1,339 @@
+@model HR.Web.ViewModels.SecurityLogsViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Security Logs";
+}
+
+<div class="container-fluid py-5" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; color: #f8fafc;">
+    <div class="d-flex justify-content-between align-items-center mb-5">
+        <div>
+            <h1 class="display-5 font-weight-bold mb-1">
+                <i class="fas fa-shield-virus text-info mr-3 animate-pulse"></i>Security Command Center
+            </h1>
+            <p class="text-slate-400 lead mb-0">Real-time threat monitoring and access audit orchestration</p>
+        </div>
+        <div class="d-flex gap-3">
+            <a href="@Url.Action("UserManagement", "Admin")" class="btn btn-cyber-secondary rounded-pill px-4 transition-all">
+                <i class="fas fa-arrow-left mr-2"></i> User Operations
+            </a>
+            <button class="btn btn-cyber-info rounded-pill px-4 ml-2" onclick="location.reload();">
+                <i class="fas fa-sync-alt mr-2"></i> Refresh Data
+            </button>
+        </div>
+    </div>
+
+    <!-- Live Intelligence Grid -->
+    <div class="row mb-5">
+        <div class="col-md-3">
+            <div class="cyber-stat-card p-4 rounded-lg bg-slate-800 border-info-soft shadow-lg">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-uppercase small font-weight-bold text-slate-400 mb-1">Access Attempts</p>
+                        <h2 class="mb-0 font-weight-bold tabular-nums">@Model.TotalLoginAttempts</h2>
+                    </div>
+                    <div class="cyber-icon-wrap bg-info-opaque">
+                        <i class="fas fa-door-open text-info fa-lg"></i>
+                    </div>
+                </div>
+                <div class="progress mt-3 bg-slate-700" style="height: 4px;">
+                    <div class="progress-bar bg-info" style="width: 100%"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="cyber-stat-card p-4 rounded-lg bg-slate-800 border-success-soft shadow-lg">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-uppercase small font-weight-bold text-slate-400 mb-1">Authorized</p>
+                        <h2 class="mb-0 font-weight-bold text-success tabular-nums">@Model.SuccessfulLogins</h2>
+                    </div>
+                    <div class="cyber-icon-wrap bg-success-opaque">
+                        <i class="fas fa-check-shield text-success fa-lg"></i>
+                    </div>
+                </div>
+                @{ var successRate = Model.TotalLoginAttempts > 0 ? (Model.SuccessfulLogins * 100 / Model.TotalLoginAttempts) : 0; }
+                <div class="progress mt-3 bg-slate-700" style="height: 4px;">
+                    <div class="progress-bar bg-success" style="width: @successRate%"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="cyber-stat-card p-4 rounded-lg bg-slate-800 border-danger-soft shadow-lg">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-uppercase small font-weight-bold text-slate-400 mb-1">Anomalies</p>
+                        <h2 class="mb-0 font-weight-bold text-danger tabular-nums">@Model.FailedLoginAttempts</h2>
+                    </div>
+                    <div class="cyber-icon-wrap bg-danger-opaque">
+                        <i class="fas fa-user-slash text-danger fa-lg"></i>
+                    </div>
+                </div>
+                @{ var failRate = Model.TotalLoginAttempts > 0 ? (Model.FailedLoginAttempts * 100 / Model.TotalLoginAttempts) : 0; }
+                <div class="progress mt-3 bg-slate-700" style="height: 4px;">
+                    <div class="progress-bar bg-danger" style="width: @failRate%"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="cyber-stat-card p-4 rounded-lg bg-slate-800 border-warning-soft shadow-lg">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-uppercase small font-weight-bold text-slate-400 mb-1">Audit Events</p>
+                        <h2 class="mb-0 font-weight-bold text-warning tabular-nums">@Model.TotalAuditLogs</h2>
+                    </div>
+                    <div class="cyber-icon-wrap bg-warning-opaque">
+                        <i class="fas fa-list-ul text-warning fa-lg"></i>
+                    </div>
+                </div>
+                <div class="progress mt-3 bg-slate-700" style="height: 4px;">
+                    <div class="progress-bar bg-warning" style="width: 100%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Console -->
+    <div class="bg-slate-800 rounded-lg p-4 mb-5 border-slate-700 shadow-lg">
+        <h5 class="text-info small text-uppercase font-weight-bold mb-4 d-flex align-items-center">
+            <i class="fas fa-terminal mr-2"></i>Filter Query Parameter
+        </h5>
+        @using (Html.BeginForm("SecurityLogs", "Admin", FormMethod.Get, new { id = "filterForm" }))
+        {
+            <div class="row align-items-end">
+                <div class="col-md-2">
+                    <label class="x-small text-slate-500 font-weight-bold mb-1">IDENTITY</label>
+                    @Html.TextBoxFor(m => m.Filter.Username, new { @class = "cyber-input", placeholder = "Username..." })
+                </div>
+                <div class="col-md-2">
+                    <label class="x-small text-slate-500 font-weight-bold mb-1">SOURCE_IP</label>
+                    @Html.TextBoxFor(m => m.Filter.IPAddress, new { @class = "cyber-input", placeholder = "IP Address..." })
+                </div>
+                <div class="col-md-2">
+                    <label class="x-small text-slate-500 font-weight-bold mb-1">START_DATE</label>
+                    @Html.TextBoxFor(m => m.Filter.StartDate, "{0:yyyy-MM-dd}", new { @class = "cyber-input", type = "date" })
+                </div>
+                <div class="col-md-2">
+                    <label class="x-small text-slate-500 font-weight-bold mb-1">END_DATE</label>
+                    @Html.TextBoxFor(m => m.Filter.EndDate, "{0:yyyy-MM-dd}", new { @class = "cyber-input", type = "date" })
+                </div>
+                <div class="col-md-2" id="actionFilterContainer">
+                    <label class="x-small text-slate-500 font-weight-bold mb-1">ACTION_TYPE</label>
+                    @Html.TextBoxFor(m => m.Filter.Action, new { @class = "cyber-input", placeholder = "Action..." })
+                </div>
+                <div class="col-md-2">
+                    <div class="d-flex gap-2 mt-3 mt-md-0">
+                        <button type="submit" class="btn btn-info btn-block py-2">
+                            <i class="fas fa-search mr-2"></i>Execute
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" id="activeTab" name="activeTab" value="@(ViewBag.ActiveTab ?? "login")" />
+        }
+    </div>
+
+    <!-- Data Stream -->
+    <div class="bg-slate-800 rounded-lg shadow-2xl border-slate-700 overflow-hidden">
+        <div class="p-0">
+            <ul class="nav nav-tabs cyber-tabs border-0" id="logsTab" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active py-4 px-5 border-0 rounded-0" id="login-tab" data-toggle="tab" href="#login-logs" role="tab">
+                        <i class="fas fa-fingerprint mr-2"></i> Access Logs
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link py-4 px-5 border-0 rounded-0" id="audit-tab" data-toggle="tab" href="#audit-logs" role="tab">
+                        <i class="fas fa-scroll mr-2"></i> System Audit
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="tab-content" id="logsTabContent">
+            <!-- Access Logs -->
+            <div class="tab-pane fade show active" id="login-logs" role="tabpanel">
+                <div class="table-responsive">
+                    <table class="table cyber-table mb-0">
+                        <thead>
+                            <tr>
+                                <th class="border-0 bg-slate-900 px-4">TIMESTAMP</th>
+                                <th class="border-0 bg-slate-900">IDENTITY</th>
+                                <th class="border-0 bg-slate-900">SOURCE</th>
+                                <th class="border-0 bg-slate-900">STATUS</th>
+                                <th class="border-0 bg-slate-900">TELEMETRY</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.LoginAttempts.Any())
+                            {
+                                <tr>
+                                    <td colspan="5" class="text-center py-5 text-slate-500 font-italic">
+                                        <i class="fas fa-ghost fa-3x mb-3 d-block opacity-2"></i>
+                                        No telemetry recorded for current parameters
+                                    </td>
+                                </tr>
+                            }
+                            @foreach (var log in Model.LoginAttempts)
+                            {
+                                <tr class="transition-all hover:bg-slate-750">
+                                    <td class="px-4 text-slate-300 font-mono small">@log.AttemptTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td class="font-weight-bold">@log.Username</td>
+                                    <td class="font-mono x-small text-info">@log.IPAddress</td>
+                                    <td>
+                                        <span class="badge @(log.WasSuccessful ? "badge-soft-success" : "badge-soft-danger") px-3 py-1">
+                                            <i class="fas @(log.WasSuccessful ? "fa-circle-check" : "fa-triangle-exclamation") mr-1"></i>
+                                            @(log.WasSuccessful ? "AUTHORIZED" : "DENIED")
+                                        </span>
+                                    </td>
+                                    <td class="small text-slate-400">@log.FailureReason</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Audit Logs -->
+            <div class="tab-pane fade" id="audit-logs" role="tabpanel">
+                <div class="table-responsive">
+                    <table class="table cyber-table mb-0">
+                        <thead>
+                            <tr>
+                                <th class="border-0 bg-slate-900 px-4">TIMESTAMP</th>
+                                <th class="border-0 bg-slate-900">ACTOR</th>
+                                <th class="border-0 bg-slate-900">OPERATIVE</th>
+                                <th class="border-0 bg-slate-900">MODULE</th>
+                                <th class="border-0 bg-slate-900">OUTCOME</th>
+                                <th class="border-0 bg-slate-900 px-4">DETAILS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.AuditLogs.Any())
+                            {
+                                <tr>
+                                    <td colspan="6" class="text-center py-5 text-slate-500 font-italic">
+                                        <i class="fas fa-ghost fa-3x mb-3 d-block opacity-2"></i>
+                                        No system audit recorded for current parameters
+                                    </td>
+                                </tr>
+                            }
+                            @foreach (var log in Model.AuditLogs)
+                            {
+                                <tr class="transition-all hover:bg-slate-750">
+                                    <td class="px-4 text-slate-300 font-mono small">@log.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td class="font-weight-bold text-info">@log.Username</td>
+                                    <td><span class="badge badge-outline-info">@log.Action</span></td>
+                                    <td class="small text-slate-400">@log.Controller</td>
+                                    <td class="px-4">
+                                        @if (log.WasSuccessful)
+                                        {
+                                            <span class="text-success small font-weight-bold"><i class="fas fa-check mr-1"></i>COMPLETED</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-danger small font-weight-bold"><i class="fas fa-times mr-1"></i>FAILED</span>
+                                        }
+                                    </td>
+                                    <td class="px-4 small text-slate-300">
+                                        @if (!string.IsNullOrEmpty(log.ErrorMessage))
+                                        {
+                                            <code class="text-info" style="background: rgba(14, 165, 233, 0.1); padding: 2px 4px; border-radius: 4px; word-break: break-all;">@log.ErrorMessage</code>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    :root {
+        --info: #0ea5e9;
+        --success: #10b981;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+        --slate-700: #334155;
+        --slate-800: #1e293b;
+        --slate-900: #0f172a;
+    }
+
+    .bg-slate-750 { background-color: #243147; }
+    .bg-slate-800 { background-color: var(--slate-800); }
+    .bg-slate-900 { background-color: var(--slate-900); }
+    .text-slate-400 { color: #94a3b8; }
+    .text-slate-500 { color: #64748b; }
+    .x-small { font-size: 0.7rem; }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+
+    .cyber-stat-card {
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        transition: all 0.3s;
+    }
+    .cyber-stat-card:hover { transform: translateY(-5px); border-color: rgba(255,255,255,0.1); }
+
+    .border-info-soft { border-left: 4px solid var(--info) !important; }
+    .border-success-soft { border-left: 4px solid var(--success) !important; }
+    .border-danger-soft { border-left: 4px solid var(--danger) !important; }
+    .border-warning-soft { border-left: 4px solid var(--warning) !important; }
+
+    .cyber-icon-wrap {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .bg-info-opaque { background: rgba(14, 165, 233, 0.1); }
+    .bg-success-opaque { background: rgba(16, 185, 129, 0.1); }
+    .bg-danger-opaque { background: rgba(239, 68, 68, 0.1); }
+    .bg-warning-opaque { background: rgba(245, 158, 11, 0.1); }
+
+    .cyber-input {
+        width: 100%;
+        background: var(--slate-900);
+        border: 1px solid var(--slate-700);
+        color: white;
+        padding: 0.6rem 1rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+    }
+    .cyber-input:focus { border-color: var(--info); outline: none; box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2); }
+
+    .cyber-tabs .nav-link { color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem; }
+    .cyber-tabs .nav-link.active { background: var(--slate-750) !important; color: var(--info) !important; }
+
+    .cyber-table { color: #f1f5f9; }
+    .cyber-table th { color: #64748b; font-size: 0.75rem; letter-spacing: 1px; padding: 1.25rem 1rem; }
+    .cyber-table td { padding: 1.25rem 1rem; vertical-align: middle; border-top: 1px solid rgba(255,255,255,0.05); }
+
+    .badge-soft-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+    .badge-soft-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .badge-outline-info { border: 1px solid var(--info); color: var(--info); }
+
+    .btn-cyber-info { background: var(--info); color: white; border: none; font-weight: 600; box-shadow: 0 4px 14px rgba(14, 165, 233, 0.4); }
+    .btn-cyber-secondary { background: var(--slate-700); color: white; border: none; font-weight: 600; }
+    
+    .opacity-2 { opacity: 0.2; }
+    .animate-pulse { animation: pulse 2s infinite; }
+    @@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+</style>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            // Tab handling
+            $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+                $('#activeTab').val($(e.target).attr("href").replace('#', '').replace('-logs', ''));
+            });
+
+            // Persist active tab from URL or hidden field
+            var activeTab = '@(ViewBag.ActiveTab ?? "login")';
+            $('#' + activeTab + '-tab').tab('show');
+        });
+    </script>
+}

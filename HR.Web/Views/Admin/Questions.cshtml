@@ -1,0 +1,70 @@
+@model List<HR.Web.Models.QuestionAdminViewModel>
+@{
+    ViewBag.Title = "Manage Questions";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4">
+    <h2>Manage Questions</h2>
+    <p class="mb-3">
+        <a class="btn btn-primary" href="@Url.Action("EditQuestion", "Admin")">Add New Question</a>
+    </p>
+    
+    @if (TempData["Message"] != null) {
+        <div class="alert alert-success">@TempData["Message"]</div>
+    }
+    
+    <table class="table table-bordered table-striped">
+        <thead>
+            <tr>
+                <th>Question</th>
+                <th>Choices/Options</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var q in Model) {
+                <tr>
+                    <td>
+                        <strong>@q.Text</strong>
+                        <br/><small>Type: @q.Type | Active: <span class="badge badge-@(q.IsActive ? "success" : "secondary")">@q.IsActive</span></small>
+                    </td>
+                    <td>
+                        <ul class="list-unstyled">
+                        @foreach (var o in q.Options) {
+                            <li>
+                                <span class="font-monospace">@o.Text</span> 
+                                <span class="badge badge-info">@o.Points pts</span>
+                            </li>
+                        }
+                        @if (!q.Options.Any()) {
+                            <li class="text-muted"><em>No options</em></li>
+                        }
+                        </ul>
+                    </td>
+                    <td>
+                        <a class="btn btn-sm btn-outline-primary" href="@Url.Action("EditQuestion", "Admin", new { id = q.Id })">Edit</a>
+                        <form method="post" action="@Url.Action("DeleteQuestion", "Admin")" style="display:inline;" onsubmit="return confirm('Delete this question and all its options?');">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@q.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+

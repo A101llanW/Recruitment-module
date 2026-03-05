@@ -1,0 +1,8 @@
+[3/4/2026 1:52:14 PM] ERROR sending to wambuaaallan@gmail.com: Failure sending mail.
+Stack:    at System.Net.Mail.SmtpClient.SendAsync(MailMessage message, Object userToken)
+   at System.Net.Mail.SmtpClient.SendMailAsync(MailMessage message)
+   at HR.Web.Services.EmailService.<SendAsync>d__10.MoveNext() in C:\Users\allan\Documents\Examples\Recruitment\HR.Web\Services\EmailService.cs:line 67
+[3/4/2026 1:52:48 PM] ERROR sending to wambuaaallan@gmail.com: Failure sending mail.
+Stack:    at System.Net.Mail.SmtpClient.SendAsync(MailMessage message, Object userToken)
+   at System.Net.Mail.SmtpClient.SendMailAsync(MailMessage message)
+   at HR.Web.Services.EmailService.<SendAsync>d__10.MoveNext() in C:\Users\allan\Documents\Examples\Recruitment\HR.Web\Services\EmailService.cs:line 67

@@ -1,0 +1,278 @@
+@model HR.Web.ViewModels.UserRoleUpdateViewModel
+@using System.Collections.Generic
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Update User Role";
+
+    var roles = new List<object>();
+    
+    // Role options based on current user's role and target user's current role
+    if (User.IsInRole("SuperAdmin"))
+    {
+        // SuperAdmin can assign any role
+        roles.Add(new { Value = "Client", Text = "Standard Access (Client)" });
+        roles.Add(new { Value = "Admin", Text = "Elevated Control (Admin)" });
+        roles.Add(new { Value = "SuperAdmin", Text = "Master Authority (SuperAdmin)" });
+    }
+    else if (User.IsInRole("Admin"))
+    {
+        // Admin users have restricted role change options
+        if (Model.CurrentRole == "Client")
+        {
+            // Can only upgrade Client to Admin
+            roles.Add(new { Value = "Client", Text = "Standard Access (Client)" });
+            roles.Add(new { Value = "Admin", Text = "Elevated Control (Admin)" });
+        }
+        else if (Model.CurrentRole == "Admin")
+        {
+            // Cannot change other Admin users' roles
+            roles.Add(new { Value = "Admin", Text = "Elevated Control (Admin)" });
+        }
+    }
+}
+
+<style>
+    :root {
+        --system-blue: #6fb8dc;
+        --system-dark: #0d2c4a;
+        --border-color: #b2d7f7;
+        --bg-light: #f6faff;
+    }
+
+    .dashboard-wrapper {
+        padding: 40px 0;
+        background: var(--bg-light);
+        min-height: calc(100vh - 150px);
+    }
+
+    .content-card {
+        background: #fff;
+        border: 1.2px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        max-width: 600px;
+        margin: 0 auto;
+        overflow: hidden;
+    }
+
+    .card-header-system {
+        background: #fafbfc;
+        border-bottom: 1.2px solid var(--border-color);
+        padding: 20px 30px;
+    }
+
+    .card-header-system h4 {
+        margin: 0;
+        font-weight: 700;
+        color: var(--system-dark);
+    }
+
+    .form-section {
+        padding: 30px;
+    }
+
+    .info-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .info-value {
+        background: #f8f9fa;
+        padding: 12px 15px;
+        border-radius: 6px;
+        color: var(--system-dark);
+        font-weight: 600;
+        border: 1px solid #dee2e6;
+        margin-bottom: 20px;
+    }
+</style>
+
+<div class="dashboard-wrapper">
+    <div class="container">
+        <div class="content-card">
+            <div class="card-header-system">
+                <h4><i class="fas fa-user-shield mr-2 text-primary"></i> Authority Management</h4>
+                <p class="text-muted small mb-0 mt-1">Adjust system permissions for <strong>@Model.UserName</strong></p>
+            </div>
+            
+            <div class="form-section">
+                @using (Html.BeginForm())
+                {
+                    @Html.AntiForgeryToken()
+                    @Html.HiddenFor(m => m.UserId)
+                    @Html.HiddenFor(m => m.CurrentRole)
+                    @Html.HiddenFor(m => m.CurrentCompanyId)
+                    @Html.HiddenFor(m => m.CurrentRequirePasswordChange)
+
+                    <div class="alert alert-warning mb-4" style="border-left: 4px solid #f39c12;">
+                        <div class="d-flex">
+                            <i class="fas fa-exclamation-triangle mr-3 mt-1"></i>
+                            <div>
+                                <strong>Security Protocol</strong><br/>
+                                <span class="small">Modifying roles impacts access levels across all modules immediately.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    if (User.IsInRole("Admin") && Model.CurrentRole == "Admin")
+                    {
+                        <text>
+                        <div class="alert alert-danger mb-4" style="border-left: 4px solid #dc3545;">
+                            <div class="d-flex">
+                                <i class="fas fa-shield-alt mr-3 mt-1"></i>
+                                <div>
+                                    <strong>Access Restriction</strong><br/>
+                                    <span class="small">As an Admin user, you cannot modify the role of other Admin users. Only SuperAdmin users can change Admin user roles.</span>
+                                </div>
+                            </div>
+                        </div>
+                        </text>
+                    }
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="FirstName">First Name</label>
+                            @Html.TextBoxFor(m => m.FirstName, new { @class = "form-control", placeholder = "User's first name...", style = "border-color: var(--border-color);" })
+                            @Html.ValidationMessageFor(m => m.FirstName, "", new { @class = "text-danger small" })
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="LastName">Last Name</label>
+                            @Html.TextBoxFor(m => m.LastName, new { @class = "form-control", placeholder = "User's last name...", style = "border-color: var(--border-color);" })
+                            @Html.ValidationMessageFor(m => m.LastName, "", new { @class = "text-danger small" })
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="UserName">Account Username</label>
+                            @Html.TextBoxFor(m => m.UserName, new { @class = "form-control", style = "border-color: var(--border-color); font-weight: 600;" })
+                            @Html.ValidationMessageFor(m => m.UserName, "", new { @class = "text-danger small" })
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="Email">System Email</label>
+                            @Html.TextBoxFor(m => m.Email, new { @class = "form-control", style = "border-color: var(--border-color); font-weight: 600;" })
+                            @Html.ValidationMessageFor(m => m.Email, "", new { @class = "text-danger small" })
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <span class="info-label">Active Role</span>
+                            <div class="info-value">@Model.CurrentRole</div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <label class="info-label" for="Phone">Phone Number</label>
+                            @Html.TextBoxFor(m => m.Phone, new { @class = "form-control", placeholder = "User's contact number...", style = "border-color: var(--border-color);" })
+                            @Html.ValidationMessageFor(m => m.Phone, "", new { @class = "text-danger small" })
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-4">
+                        <label class="info-label">Target Role Specification</label>
+                        @Html.DropDownListFor(m => m.NewRole, 
+                            new SelectList(roles, "Value", "Text", Model.NewRole), 
+                            new { @class = "form-control custom-select font-weight-bold", style = "height: 50px; border-color: var(--border-color);" })
+                        @Html.ValidationMessageFor(m => m.NewRole, "", new { @class = "text-danger small mt-1" })
+                    </div>
+
+                    <div class="form-group mb-4">
+                        <label class="info-label">Justification for Change</label>
+                        @Html.TextAreaFor(m => m.Reason, new { @class = "form-control", rows = 3, placeholder = "Document the requirement for this transition...", style = "border-color: var(--border-color);" })
+                    </div>
+
+                    if (User.IsInRole("SuperAdmin"))
+                    {
+                        <div class="form-group mb-4">
+                            <label class="info-label">Organization Assignment</label>
+                            @Html.DropDownListFor(m => m.CompanyId, new SelectList(Model.Companies, "Id", "Name"), "System (Global/No Company)", new { @class = "form-control custom-select font-weight-bold", style = "height: 50px; border-color: var(--border-color);" })
+                            <span class="text-muted small">Reassign user to a different company or global context.</span>
+                        </div>
+
+                        <div class="form-group mb-4">
+                            <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid var(--border-color);">
+                                <div class="custom-control custom-checkbox">
+                                    @Html.CheckBoxFor(m => m.RequirePasswordChange, new { @class = "custom-control-input", id = "RequirePasswordChange" })
+                                    <label class="custom-control-label font-weight-bold pt-1" for="RequirePasswordChange" style="cursor: pointer; color: var(--system-dark);">
+                                        Security Enforcement: Force password rotation on next login
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        @Html.HiddenFor(m => m.CompanyId)
+                        @Html.HiddenFor(m => m.RequirePasswordChange)
+                    }
+
+                    <hr class="my-4" />
+
+                    <div class="d-flex justify-content-between">
+                        <a href="@(User.IsInRole("SuperAdmin") ? Url.Action("GlobalUserManagement") : Url.Action("UserManagement"))" class="btn-red" style="text-decoration: none;">
+                            <i class="fas fa-times mr-2"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn-blue" id="btn-save-user">
+                            <i class="fas fa-check-circle mr-2"></i> Save
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            var originalUsername = $('#UserName').val();
+            var originalEmail   = $('#Email').val();
+            var originalRole    = $('#CurrentRole').val();
+
+            $('form').submit(function(e) {
+                var $btn = $('#btn-save-user');
+                var newRole     = $('#NewRole').val();
+                var newUsername = $('#UserName').val();
+                var newEmail    = $('#Email').val();
+
+                var identityChanged = (newUsername !== originalUsername) || (newEmail !== originalEmail);
+                var roleChanged     = newRole !== originalRole;
+
+                // Build a specific warning message about what will happen
+                var warnings = [];
+                if (identityChanged) {
+                    warnings.push('username/email has been changed');
+                }
+                if (roleChanged) {
+                    warnings.push('role has been changed to \'' + newRole + '\'');
+                }
+
+                if (warnings.length > 0) {
+                    var msg = 'SECURITY NOTICE: The user\'s ' + warnings.join(' and ') + '.\n\n'
+                            + 'If this user is currently logged in, they will be automatically signed out from ALL active sessions immediately and will need to log in again with their new credentials.\n\n'
+                            + 'Do you want to proceed?';
+
+                    if (!confirm(msg)) {
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+
+                // Additional role-specific confirmations
+                if (roleChanged && newRole === 'SuperAdmin') {
+                    if (!confirm('CRITICAL ACTION: You are about to grant MASTER AUTHORITY (SuperAdmin) to this user. They will have full control over ALL companies and system settings. Continue?')) {
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+
+                $btn.html('<i class="fas fa-spinner fa-spin mr-2"></i> Saving...').prop('disabled', true);
+                return true;
+            });
+        });
+    </script>
+}

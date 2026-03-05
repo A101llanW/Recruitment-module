@@ -1,0 +1,122 @@
+@model HR.Web.Models.ApplicationReviewViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Review Application";
+}
+
+<div class="card shadow-sm border-primary mb-4">
+    <div class="card-header bg-primary text-white">
+        <h3 class="mb-0">Review Your Application</h3>
+    </div>
+    <div class="card-body">
+        <p class="text-muted">Please review your answers before finishing your application.</p>
+
+        <dl class="row">
+            <dt class="col-sm-4">Position</dt>
+            <dd class="col-sm-8">@Model.PositionTitle</dd>
+
+            <dt class="col-sm-4">Applicant</dt>
+            <dd class="col-sm-8">@Model.ApplicantName (@Model.ApplicantEmail)</dd>
+
+            <dt class="col-sm-4">CV uploaded</dt>
+            <dd class="col-sm-8">
+                @if (!string.IsNullOrEmpty(Model.ResumePath))
+                {
+                    @System.IO.Path.GetFileName(Model.ResumePath)
+                }
+                else
+                {
+                    <span class="text-muted">No file</span>
+                }
+            </dd>
+        </dl>
+
+        <!-- Dynamic Question Answers -->
+        @if (Model.QuestionAnswers != null && Model.QuestionAnswers.Any())
+        {
+            <h5 class="mt-4 mb-3">Your Answers</h5>
+            <div class="list-group">
+                @foreach (var qa in Model.QuestionAnswers)
+                {
+                    <div class="list-group-item">
+                        <h6 class="mb-2">@qa.QuestionText</h6>
+                        <p class="mb-0">
+                            <strong>Your Answer:</strong> 
+                            @if (string.IsNullOrEmpty(qa.Answer))
+                            {
+                                <span class="text-muted">No answer provided</span>
+                            }
+                            else
+                            {
+                                @qa.Answer
+                            }
+                        </p>
+                        <small class="text-muted">Question Type: @qa.QuestionType</small>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-warning mt-4">
+                No questions were answered. Please go back and complete the questionnaire.
+            </div>
+        }
+
+        @using (Html.BeginForm("FinishQuestionnaire", "Applications", FormMethod.Post))
+        {
+            @Html.AntiForgeryToken()
+            @Html.HiddenFor(m => m.PositionId)
+            @Html.HiddenFor(m => m.PositionTitle)
+            @Html.HiddenFor(m => m.ApplicantName)
+            @Html.HiddenFor(m => m.ApplicantEmail)
+            @Html.HiddenFor(m => m.ResumePath)
+            
+            if (Model.QuestionAnswers != null)
+            {
+                for (int i = 0; i < Model.QuestionAnswers.Count; i++)
+                {
+                    <input type="hidden" name="question_@Model.QuestionAnswers[i].QuestionId" value="@Model.QuestionAnswers[i].Answer" />
+                }
+            }
+
+            <div class="d-flex justify-content-between mt-4">
+                <a href="javascript:history.back();" class="btn btn-secondary btn-sm">Back to edit</a>
+                <button type="submit" class="btn btn-success">Finish Application</button>
+            </div>
+        }
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,53 @@
+@model HR.Web.Models.Interview
+@{
+    ViewBag.Title = "Delete Interview";
+}
+<h3>Delete Interview</h3>
+<p>Are you sure you want to delete this interview?</p>
+@using (Html.BeginForm("DeleteConfirmed","Interviews", new { id = Model.Id }, FormMethod.Post)) {
+    @Html.AntiForgeryToken()
+    <button type="submit" class="btn btn-danger">Delete</button>
+    @Html.ActionLink("Cancel","Index", null, new { @class="btn btn-link"})
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

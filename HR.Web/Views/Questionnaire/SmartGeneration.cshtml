@@ -1,0 +1,376 @@
+@{
+    ViewBag.Title = "Smart Question Generation";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="fas fa-brain"></i> Smart Question Generation</h2>
+            <p class="text-muted">Advanced AI-powered question generation with industry detection and ML enhancement</p>
+        </div>
+    </div>
+
+    <!-- Generation Form -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-magic"></i> Generate Smart Questions</h5>
+                </div>
+                <div class="card-body">
+                    <form id="smartGenerationForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="jobTitle">Job Title *</label>
+                                    <input type="text" class="form-control" id="jobTitle" 
+                                           placeholder="e.g., Senior Software Engineer" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="experience">Experience Level</label>
+                                    <select class="form-control" id="experience">
+                                        <option value="entry">Entry Level</option>
+                                        <option value="junior">Junior</option>
+                                        <option value="mid" selected>Mid-Level</option>
+                                        <option value="senior">Senior</option>
+                                        <option value="lead">Lead/Principal</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="jobDescription">Job Description *</label>
+                            <textarea class="form-control" id="jobDescription" rows="4" 
+                                      placeholder="Describe the role, responsibilities, and requirements..." required></textarea>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="keyResponsibilities">Key Responsibilities</label>
+                                    <textarea class="form-control" id="keyResponsibilities" rows="3"
+                                              placeholder="Main duties and responsibilities..."></textarea>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="requiredQualifications">Required Qualifications</label>
+                                    <textarea class="form-control" id="requiredQualifications" rows="3"
+                                              placeholder="Skills, education, certifications..."></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Question Types</label>
+                                    <div class="checkbox-group">
+                                        <label class="checkbox-inline">
+                                            <input type="checkbox" value="Text" checked> Text
+                                        </label>
+                                        <label class="checkbox-inline">
+                                            <input type="checkbox" value="Choice" checked> Choice
+                                        </label>
+                                        <label class="checkbox-inline">
+                                            <input type="checkbox" value="Number"> Number
+                                        </label>
+                                        <label class="checkbox-inline">
+                                            <input type="checkbox" value="Rating"> Rating
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="questionCount">Number of Questions</label>
+                                    <input type="number" class="form-control" id="questionCount" 
+                                           value="5" min="1" max="20">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-magic"></i> Generate Smart Questions
+                            </button>
+                            <button type="button" class="btn btn-info ml-2" id="compareBtn">
+                                <i class="fas fa-balance-scale"></i> Compare Basic vs Advanced
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="row" id="resultsSection" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-list"></i> Generated Questions</h5>
+                </div>
+                <div class="card-body">
+                    <div id="generationResults"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comparison Section -->
+    <div class="row" id="comparisonSection" style="display: none;">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h6><i class="fas fa-cog"></i> Basic Generation</h6>
+                </div>
+                <div class="card-body">
+                    <div id="basicResults"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h6><i class="fas fa-brain"></i> Advanced Generation (ML-Enhanced)</h6>
+                </div>
+                <div class="card-body">
+                    <div id="advancedResults"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Showcase -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-star"></i> Smart Generation Features</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-industry fa-3x text-primary mb-2"></i>
+                                <h6>Industry Detection</h6>
+                                <p class="small text-muted">Automatically identifies industry from job description</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-key fa-3x text-success mb-2"></i>
+                                <h6>Smart Keywords</h6>
+                                <p class="small text-muted">Extracts technical skills, soft skills, and experience indicators</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-robot fa-3x text-info mb-2"></i>
+                                <h6>ML Enhancement</h6>
+                                <p class="small text-muted">Machine learning for category prediction and optimization</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-shield-alt fa-3x text-warning mb-2"></i>
+                                <h6>Bias Detection</h6>
+                                <p class="small text-muted">Built-in validation for fair and inclusive questions</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+.checkbox-inline {
+    display: flex;
+    align-items: center;
+    margin-right: 15px;
+}
+.checkbox-inline input {
+    margin-right: 5px;
+}
+.question-item {
+    background: #f8f9fa;
+    border-left: 4px solid #007bff;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+.question-item.enhanced {
+    border-left-color: #28a745;
+}
+.question-category {
+    display: inline-block;
+    background: #6c757d;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    margin-left: 10px;
+}
+.question-category.technical { background: #007bff; }
+.question-category.problem-solving { background: #28a745; }
+.question-category.leadership { background: #ffc107; color: #212529; }
+.question-category.communication { background: #17a2b8; }
+</style>
+
+@section Scripts {
+<script>
+$(document).ready(function() {
+    // Smart generation form
+    $('#smartGenerationForm').on('submit', function(e) {
+        e.preventDefault();
+        generateSmartQuestions();
+    });
+
+    // Compare button
+    $('#compareBtn').on('click', function() {
+        compareGeneration();
+    });
+
+    function generateSmartQuestions() {
+        var formData = {
+            jobTitle: $('#jobTitle').val(),
+            jobDescription: $('#jobDescription').val(),
+            keyResponsibilities: $('#keyResponsibilities').val(),
+            requiredQualifications: $('#requiredQualifications').val(),
+            experience: $('#experience').val(),
+            questionTypes: [],
+            count: parseInt($('#questionCount').val())
+        };
+
+        $('input[type="checkbox"]:checked').each(function() {
+            formData.questionTypes.push($(this).val());
+        });
+
+        if (!formData.jobTitle || !formData.jobDescription) {
+            alert('Please fill in the required fields.');
+            return;
+        }
+
+        $.ajax({
+            url: '@Url.Action("GenerateSmartQuestions", "Questionnaire")',
+            type: 'POST',
+            data: formData,
+            traditional: true,
+            success: function(response) {
+                if (response.success) {
+                    displayResults(response);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error generating questions');
+            }
+        });
+    }
+
+    function compareGeneration() {
+        var jobTitle = $('#jobTitle').val() || 'Software Engineer';
+        var jobDescription = $('#jobDescription').val() || 'Develop and maintain software applications using modern technologies.';
+
+        $.ajax({
+            url: '@Url.Action("CompareGeneration", "Questionnaire")',
+            type: 'POST',
+            data: {
+                jobTitle: jobTitle,
+                jobDescription: jobDescription,
+                count: 5
+            },
+            success: function(response) {
+                if (response.success) {
+                    displayComparison(response);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Error comparing generation methods');
+            }
+        });
+    }
+
+    function displayResults(response) {
+        var html = '<div class="alert alert-success">';
+        html += '<strong>Smart Generation Complete!</strong> ';
+        html += 'Generated ' + response.questions.length + ' questions for ' + response.metadata.jobTitle;
+        html += '<br><small>Industry: ' + response.metadata.industry + ' | ';
+        html += 'Generated: ' + new Date(response.metadata.generatedAt).toLocaleString() + '</small>';
+        html += '</div>';
+
+        response.questions.forEach(function(q, index) {
+            html += '<div class="question-item enhanced">';
+            html += '<strong>Q' + (index + 1) + ':</strong> ' + q.text;
+            html += '<span class="question-category ' + q.category + '">' + q.category + '</span>';
+            html += '<br><small>Type: ' + q.type + ' | Required: ' + (q.isRequired ? 'Yes' : 'No') + '</small>';
+            
+            if (q.options && q.options.length > 0) {
+                html += '<div class="mt-2">';
+                q.options.forEach(function(opt) {
+                    html += '<span class="badge badge-secondary mr-1">' + opt.text + ' (' + opt.points + ' pts)</span>';
+                });
+                html += '</div>';
+            }
+            
+            html += '</div>';
+        });
+
+        $('#generationResults').html(html);
+        $('#resultsSection').show();
+        $('#comparisonSection').hide();
+        
+        // Scroll to results
+        $('html, body').animate({
+            scrollTop: $('#resultsSection').offset().top - 100
+        }, 500);
+    }
+
+    function displayComparison(response) {
+        // Basic results
+        var basicHtml = '<h6>Basic Generation (' + response.comparison.basicCount + ' questions)</h6>';
+        response.basic.forEach(function(q, index) {
+            basicHtml += '<div class="question-item">';
+            basicHtml += '<strong>Q' + (index + 1) + ':</strong> ' + q.text;
+            basicHtml += '<span class="question-category ' + q.category + '">' + q.category + '</span>';
+            basicHtml += '</div>';
+        });
+
+        // Advanced results
+        var advancedHtml = '<h6>Advanced Generation (' + response.comparison.advancedCount + ' questions)</h6>';
+        advancedHtml += '<div class="alert alert-info">' + response.comparison.improvement + '</div>';
+        response.advanced.forEach(function(q, index) {
+            advancedHtml += '<div class="question-item enhanced">';
+            advancedHtml += '<strong>Q' + (index + 1) + ':</strong> ' + q.text;
+            advancedHtml += '<span class="question-category ' + q.category + '">' + q.category + '</span>';
+            advancedHtml += '</div>';
+        });
+
+        $('#basicResults').html(basicHtml);
+        $('#advancedResults').html(advancedHtml);
+        $('#comparisonSection').show();
+        $('#resultsSection').hide();
+        
+        // Scroll to comparison
+        $('html, body').animate({
+            scrollTop: $('#comparisonSection').offset().top - 100
+        }, 500);
+    }
+});
+</script>
+}

@@ -1,0 +1,113 @@
+@model HR.Web.Models.Department
+@{
+    ViewBag.Title = "Department Details";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    body {
+        font-size: 0.97rem;
+        background: #f6faff;
+        min-height: 100vh;
+    }
+    .card-blue {
+        background: #f6faff;
+        border-radius: 0;
+        box-shadow: none;
+        border: none;
+        padding: 1.2rem 0.5rem 0.5rem 0.5rem;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+    }
+    .card-header-blue {
+        background: none !important;
+        color: #0d2c4a !important;
+        border-top-left-radius: 0 !important;
+        border-top-right-radius: 0 !important;
+        border-bottom: none;
+        padding: 0.7rem 0.5rem 0.3rem 0.5rem;
+        font-size: 1.05rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-align: left;
+    }
+    .card-body-blue {
+        background: none !important;
+        padding: 0.5rem 0.5rem 0.2rem 0.5rem;
+        display: block;
+    }
+    .d-flex.gap-2.mt-4, .d-flex.justify-content-center.gap-2.mt-4, .d-flex.justify-content-between {
+        gap: 0.7rem !important;
+        margin-top: 1.2rem !important;
+        justify-content: flex-start !important;
+    }
+    .card-title { color: #0d2c4a; font-weight:600; }
+</style>
+
+<div class="container-fluid" style="margin-top: 1.2rem;">
+    <div class="card card-blue shadow">
+        <div class="card-header card-header-blue">
+            <small class="text-muted">Department</small>
+            <h3 class="mb-0">@Model.Name</h3>
+        </div>
+        <div class="card-body card-body-blue">
+            <div class="row">
+                <div class="col-12">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3">Name</dt>
+                        <dd class="col-sm-9">@Model.Name</dd>
+                        <dt class="col-sm-3">Description</dt>
+                        <dd class="col-sm-9">@Model.Description</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer bg-white border-0 d-flex justify-content-end gap-2">
+            @Html.ActionLink("Edit", "Edit", new { id = Model.Id }, new { @class = "btn btn-blue btn-sm me-2" })
+            @Html.ActionLink("Back", "Index", null, new { @class = "btn btn-red btn-sm" })
+        </div>
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

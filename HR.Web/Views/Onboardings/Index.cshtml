@@ -1,0 +1,115 @@
+@model IEnumerable<HR.Web.Models.Onboarding>
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Onboardings";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Onboardings</h2>
+    <!-- New Onboarding button removed as per request -->
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-6 mb-2">
+        <input id="searchInput" class="form-control" placeholder="Search by applicant, position or application..." />
+    </div>
+    <div class="col-md-3 mb-2">
+        <select id="statusFilter" class="form-control">
+            <option value="">All statuses</option>
+            <option>Pending</option>
+            <option>Confirmed</option>
+            <option>Active</option>
+            <option>Completed</option>
+        </select>
+    </div>
+    <div class="col-md-3 text-right mb-2">
+        <span class="text-muted">Total: <strong>@(Model != null ? Model.Count() : 0)</strong></span>
+    </div>
+</div>
+
+<div class="table-responsive d-none d-md-block">
+    <table class="table table-hover">
+        <thead class="thead-light">
+            <tr>
+                <th>Applicant</th>
+                <th>Position</th>
+                <th>Start Date</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="onboardingTable">
+        @foreach (var item in Model)
+        {
+            <tr data-applicant='@(((item.Application != null && item.Application.Applicant != null) ? item.Application.Applicant.FullName : ""))' data-position='@(((item.Application != null && item.Application.Position != null) ? item.Application.Position.Title : ""))' data-status='@((item.Status != null) ? item.Status : "")'>
+                <td>@(((item.Application != null && item.Application.Applicant != null) ? item.Application.Applicant.FullName : "-"))</td>
+                <td>@(((item.Application != null && item.Application.Position != null) ? item.Application.Position.Title : "-"))</td>
+                <td>@(item.StartDate.ToString("d"))</td>
+                <td>
+                    <span class="badge badge-pill @(item.Status == "Active" ? "badge-success" : item.Status == "Pending" ? "badge-warning" : item.Status == "Completed" ? "badge-secondary" : "badge-info")">@(item.Status ?? "")</span>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<div class="d-block d-md-none" id="onboardingCards">
+    @foreach (var item in Model)
+    {
+        <div class="card mb-2" data-applicant='@(((item.Application != null && item.Application.Applicant != null) ? item.Application.Applicant.FullName : ""))' data-position='@(((item.Application != null && item.Application.Position != null) ? item.Application.Position.Title : ""))' data-status='@((item.Status != null) ? item.Status : "")'>
+            <div class="card-body">
+                <h5 class="card-title mb-1">@(((item.Application != null && item.Application.Applicant != null) ? item.Application.Applicant.FullName : "-"))</h5>
+                <p class="card-text mb-1"><i class="fas fa-briefcase"></i> @(((item.Application != null && item.Application.Position != null) ? item.Application.Position.Title : "-"))</p>
+                <p class="card-text text-muted mb-2">Start: @(item.StartDate.ToString("d"))</p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="badge badge-pill @(item.Status == "Active" ? "badge-success" : item.Status == "Pending" ? "badge-warning" : item.Status == "Completed" ? "badge-secondary" : "badge-info")">@(item.Status ?? "")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+    (function () {
+        var search = document.getElementById('searchInput');
+        var status = document.getElementById('statusFilter');
+        var table = document.getElementById('onboardingTable');
+        var cards = document.getElementById('onboardingCards');
+
+        function normalize(s) { return (s || '').toLowerCase(); }
+
+        function filterRow(elApplicant, elPosition, elStatus) {
+            var q = normalize(search.value);
+            var s = normalize(status.value);
+            var matchQuery = !q || normalize(elApplicant).indexOf(q) !== -1 || normalize(elPosition).indexOf(q) !== -1;
+            var matchStatus = !s || normalize(elStatus) === s;
+            return matchQuery && matchStatus;
+        }
+
+        function filter() {
+            if (table) {
+                Array.from(table.rows).forEach(function (row) {
+                    var applicant = row.getAttribute('data-applicant') || '';
+                    var position = row.getAttribute('data-position') || '';
+                    var st = row.getAttribute('data-status') || '';
+                    row.style.display = filterRow(applicant, position, st) ? '' : 'none';
+                });
+            }
+            if (cards) {
+                Array.from(cards.children).forEach(function (card) {
+                    var applicant = card.getAttribute('data-applicant') || '';
+                    var position = card.getAttribute('data-position') || '';
+                    var st = card.getAttribute('data-status') || '';
+                    card.style.display = filterRow(applicant, position, st) ? '' : 'none';
+                });
+            }
+        }
+
+        search.addEventListener('input', filter);
+        status.addEventListener('change', filter);
+    })();
+</script>
+
+

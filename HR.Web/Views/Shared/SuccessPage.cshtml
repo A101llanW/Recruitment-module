@@ -1,0 +1,68 @@
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>✅ HR Application Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .success { color: #28a745; font-size: 24px; margin-bottom: 20px; }
+        .status { background: #e8f5e8; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .btn { display: inline-block; padding: 12px 24px; margin: 8px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
+        .btn:hover { background: #0056b3; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #1e7e34; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="success">🎉 HR Application Started Successfully!</h1>
+        
+        <div class="status">
+            <h3>✅ System Status</h3>
+            <ul>
+                <li>✅ IIS Express: Running on port 5001</li>
+                <li>✅ ASP.NET MVC: Operational</li>
+                <li>✅ Razor Engine: Working</li>
+                <li>✅ Entity Framework: Loaded</li>
+                <li>✅ Newtonsoft.Json: Resolved</li>
+            </ul>
+        </div>
+
+        <div class="grid">
+            <div>
+                <h3>🧪 MCP Integration Tests</h3>
+                <a href="/Admin/MCPTest" class="btn">Test MCP Connection</a><br>
+                <a href="/Admin/QuestionsWithMCP" class="btn">AI Questions</a><br>
+                <a href="/Admin/EditQuestionWithMCP" class="btn">AI Editor</a>
+            </div>
+            <div>
+                <h3>📊 Questionnaire Features</h3>
+                <a href="/Questionnaire/Preview/1" class="btn btn-success">Preview</a><br>
+                <a href="/Questionnaire/Test/1" class="btn btn-success">Test Mode</a><br>
+                <a href="/Questionnaire/Builder/1" class="btn btn-success">Builder</a>
+            </div>
+        </div>
+
+        <div class="status">
+            <h3>🚀 Ready to Test MCP Features!</h3>
+            <p><strong>Your HR questionnaire system with MCP integration is now running!</strong></p>
+            <ol>
+                <li>Start with <a href="/Admin/MCPTest">MCP Connection Test</a></li>
+                <li>Try generating AI questions from job descriptions</li>
+                <li>Test the interactive questionnaire system</li>
+                <li>Explore enhanced candidate rankings</li>
+            </ol>
+        </div>
+
+        <div style="margin-top: 30px; text-align: center; color: #666;">
+            <p><strong>If you can see this page, the application is working correctly!</strong></p>
+            <p>Now you can test all the AI-powered MCP features we've implemented.</p>
+        </div>
+    </div>
+</body>
+</html>

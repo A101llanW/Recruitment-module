@@ -1,0 +1,53 @@
+@model HR.Web.Models.Applicant
+@{
+    ViewBag.Title = "Delete Applicant";
+}
+<h3>Delete Applicant</h3>
+<p>Are you sure you want to delete @Model.FullName?</p>
+@using (Html.BeginForm("DeleteConfirmed","Applicants", new { id = Model.Id }, FormMethod.Post)) {
+    @Html.AntiForgeryToken()
+    <button type="submit" class="btn btn-danger">Delete</button>
+    @Html.ActionLink("Cancel","Index", null, new { @class="btn btn-link"})
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

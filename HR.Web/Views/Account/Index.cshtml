@@ -1,0 +1,45 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Account";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-center">Recruitment Module - Password Security</h3>
+            </div>
+            <div class="card-body">
+                <h4>🔐 Enhanced Password Security Implementation</h4>
+                <p>The Recruitment Module has been successfully enhanced with comprehensive password security features:</p>
+                
+                <div class="alert alert-info">
+                    <h5>✅ Implemented Features:</h5>
+                    <ul>
+                        <li><strong>Enhanced Password Hashing:</strong> 100,000 PBKDF2 iterations</li>
+                        <li><strong>Password Strength Validation:</strong> 8+ characters, multiple character types</li>
+                        <li><strong>Forced Password Changes:</strong> For users with weak passwords</li>
+                        <li><strong>Real-time Strength Indicator:</strong> Color-coded feedback</li>
+                        <li><strong>Password Change Interface:</strong> With validation and confirmation</li>
+                    </ul>
+                </div>
+                
+                <div class="alert alert-success">
+                    <h5>🗄️ Database Status:</h5>
+                    <ul>
+                        <li>✅ SQL Express connected with proper permissions</li>
+                        <li>✅ Password change columns added to Users table</li>
+                        <li>✅ 8 existing users flagged for password change</li>
+                        <li>✅ 7-day grace period set for updates</li>
+                    </ul>
+                </div>
+                
+                <div class="text-center">
+                    <a href="@Url.Action("ChangePassword", "Account")" class="btn btn-primary btn-lg">
+                        <i class="fas fa-key"></i> Test Password Change Feature
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

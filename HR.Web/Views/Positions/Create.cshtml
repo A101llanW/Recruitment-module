@@ -1,0 +1,387 @@
+@model HR.Web.Models.Position
+@{
+    ViewBag.Title = "Create Position";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<style>
+    body {
+        font-size: 0.97rem;
+        background: #f6faff;
+        min-height: 100vh;
+    }
+    .card-blue {
+        background: #f6faff;
+        border-radius: 0;
+        box-shadow: none;
+        border: none;
+        padding: 1.2rem 0.5rem 0.5rem 0.5rem;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+    }
+    .card-header-blue {
+        background: none !important;
+        color: #0d2c4a !important;
+        border-top-left-radius: 0 !important;
+        border-top-right-radius: 0 !important;
+        border-bottom: none;
+        padding: 0.7rem 0.5rem 0.3rem 0.5rem;
+        font-size: 1.05rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-align: left;
+    }
+    .card-body-blue {
+        background: none !important;
+        padding: 0.5rem 0.5rem 0.2rem 0.5rem;
+        display: block;
+    }
+    .form-group, .form-row {
+        margin-bottom: 0.8rem !important;
+        width: 100%;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .form-control {
+        font-size: 0.97rem;
+        padding: 0.5rem 0.7rem;
+        border-radius: 0.4rem;
+        border: 1.2px solid #b2d7f7;
+        background: #fafdff;
+        max-width: 100%;
+        margin-left: 0;
+        text-align: left;
+    }
+    .form-control:focus {
+        border-color: #6fb8dc;
+        box-shadow: 0 0 0 0.08rem #b2d7f7;
+    }
+    label.font-weight-bold {
+        font-size: 0.97rem;
+        font-weight: 600;
+        margin-bottom: 0.2rem;
+        color: #0d2c4a;
+        width: 100%;
+        text-align: left;
+    }
+    .form-text {
+        font-size: 0.92rem;
+        margin-top: 0.15rem;
+        margin-bottom: 0.3rem;
+        width: 100%;
+        text-align: left;
+    }
+    .btn-blue {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        border: none;
+        transition: background 0.2s;
+        font-size: 0.97rem;
+        padding: 0.5rem 1.2rem;
+        border-radius: 0.4rem;
+        font-weight: 600;
+        margin-right: 0.7rem;
+    }
+    .btn-blue:hover {
+        background: #3498db;
+        color: #fff;
+    }
+    .btn-link {
+        color: #3498db;
+        text-decoration: none;
+        font-size: 0.97rem;
+        font-weight: 500;
+        padding: 0.5rem 1.2rem;
+        border-radius: 0.4rem;
+        margin-left: 0.7rem;
+    }
+    .btn-link:hover {
+        color: #0d2c4a;
+        text-decoration: underline;
+        background: #eaf4fb;
+    }
+    .d-flex.gap-2.mt-4, .d-flex.justify-content-center.gap-2.mt-4, .d-flex.justify-content-between {
+        gap: 0.7rem !important;
+        margin-top: 1.2rem !important;
+        justify-content: flex-start !important;
+    }
+</style>
+
+<div class="container-fluid" style="margin-top: 1.2rem;">
+    <div class="card card-blue shadow">
+        <div class="card-header card-header-blue">
+            <h3 class="mb-0">Create New Position</h3>
+        </div>
+        <div class="card-body card-body-blue">
+@{
+    var questions = ViewBag.QuestionList as IEnumerable<HR.Web.Models.Question>;
+    Html.EnableClientValidation(false);
+    Html.EnableUnobtrusiveJavaScript(false);
+}
+            @using (Html.BeginForm(null, null, FormMethod.Post, new { id = "positionCreateForm" })) {
+                @Html.AntiForgeryToken()
+                @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+                <div class="form-group mb-3">
+                    @Html.LabelFor(m => m.Title, "Position Title", htmlAttributes: new { @class = "font-weight-bold w-100" })
+                    @Html.TextBoxFor(m => m.Title, new { @class = "form-control mx-auto", placeholder = "e.g., Senior Software Engineer" })
+                    @Html.ValidationMessageFor(m => m.Title, "", new { @class = "text-danger" })
+                </div>
+                <div class="form-group mb-3">
+                    @Html.LabelFor(m => m.Description, "Job Description", htmlAttributes: new { @class = "font-weight-bold w-100" })
+                    @Html.TextAreaFor(m => m.Description, new { @class = "form-control mx-auto", rows = 4, placeholder = "Provide a high-level overview of the position...", style = "max-width: 100%;" })
+                    @Html.ValidationMessageFor(m => m.Description, "", new { @class = "text-danger" })
+                </div>
+                <div class="form-group mb-3">
+                    @Html.LabelFor(m => m.Responsibilities, "Key Responsibilities", htmlAttributes: new { @class = "font-weight-bold w-100" })
+                    @Html.TextAreaFor(m => m.Responsibilities, new { @class = "form-control mx-auto", rows = 6, placeholder = "List the main responsibilities and duties for this position. You can use bullet points or numbered lists...", style = "max-width: 100%;" })
+                    @Html.ValidationMessageFor(m => m.Responsibilities, "", new { @class = "text-danger" })
+                </div>
+                <div class="form-group mb-3">
+                    @Html.LabelFor(m => m.Qualifications, "Required Qualifications", htmlAttributes: new { @class = "font-weight-bold w-100" })
+                    @Html.TextAreaFor(m => m.Qualifications, new { @class = "form-control mx-auto", rows = 6, placeholder = "List the required qualifications, skills, education, and experience needed for this position. You can use bullet points or numbered lists...", style = "max-width: 100%;" })
+                    @Html.ValidationMessageFor(m => m.Qualifications, "", new { @class = "text-danger" })
+                </div>
+                <div class="form-group mb-3">
+                    <label class="font-weight-bold">Salary Range</label>
+                    <div style="width: 100%; max-width: 350px;">
+                        <div class="mb-2">
+                            <label class="font-weight-bold" style="font-size: 0.9rem;">Currency:</label>
+                            <select id="currencySelect" name="Currency" class="form-control" style="max-width: 200px;">
+                                <option value="KES" selected>KES (KSh)</option>
+                                <option value="USD">USD ($)</option>
+                                <option value="EUR">EUR (&euro;)</option>
+                                <option value="GBP">GBP (&pound;)</option>
+                                <option value="CAD">CAD (C$)</option>
+                                <option value="AUD">AUD (A$)</option>
+                                <option value="JPY">JPY (&yen;)</option>
+                                <option value="CHF">CHF (CHF)</option>
+                                <option value="CNY">CNY (&yen;)</option>
+                                <option value="INR">INR (&#8377;)</option>
+                                <option value="BRL">BRL (R$)</option>
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label style="font-size: 0.9rem;">Minimum Salary:</label>
+                            <input type="number" id="salaryMin" name="SalaryMin" min="0" step="1000" value="30000" class="form-control" placeholder="Enter minimum salary">
+                        </div>
+                        <div class="mb-2">
+                            <label style="font-size: 0.9rem;">Maximum Salary:</label>
+                            <input type="number" id="salaryMax" name="SalaryMax" min="0" step="1000" value="50000" class="form-control" placeholder="Enter maximum salary">
+                        </div>
+                        <div style="margin-top: 0.5rem; font-size: 0.95rem; padding: 0.5rem; background: #eaf4fb; border-radius: 0.25rem;">
+                            <strong>Selected Range: </strong>
+                            <span id="salaryRangeDisplay">KSh 30,000 - KSh 50,000</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group mb-3">
+                    @Html.LabelFor(m => m.DepartmentId, "Department", htmlAttributes: new { @class = "font-weight-bold w-100" })
+                    @Html.DropDownList("DepartmentId", null, "-- Select Department --", new { @class = "form-control mx-auto", style = "max-width: 350px;" })
+                </div>
+                <div class="form-check mb-3 text-center">
+                    @Html.CheckBoxFor(m => m.IsOpen, new { @class = "form-check-input" })
+                    @Html.LabelFor(m => m.IsOpen, new { @class = "form-check-label" })
+                </div>
+
+                @* Dynamic question selection inside the form *@
+                <hr />
+                <div class="form-group mb-3">
+                    <label class="font-weight-bold">Questionnaire questions</label>
+                    <small class="form-text text-muted mb-2">
+                        Select which reusable questions should appear for applicants of this position. efficiently select questions by company or individually.
+                    </small>
+                    @if (questions != null && questions.Any())
+                    {
+                        var groupedQuestions = questions.GroupBy(q => q.Company != null ? q.Company.Name : "Global Questions").OrderBy(g => g.Key);
+                        
+                        <div class="question-list">
+                            @foreach (var group in groupedQuestions)
+                            {
+                                var groupId = "group_" + Math.Abs(group.Key.GetHashCode());
+                                <div class="card mb-3 border">
+                                    <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                                        <h6 class="mb-0 font-weight-bold text-dark">
+                                            <i class="fas fa-building text-muted mr-2"></i>@group.Key
+                                        </h6>
+                                        <div class="custom-control custom-checkbox">
+                                            <input type="checkbox" class="custom-control-input group-select-all" id="@groupId" data-target-group="@groupId">
+                                            <label class="custom-control-label font-weight-bold text-primary" for="@groupId" style="cursor: pointer;">Select All</label>
+                                        </div>
+                                    </div>
+                                    <div class="card-body p-3">
+                                        @foreach (var q in group)
+                                        {
+                                            <div class="question-item mb-3 p-3 border rounded @(groupId)-item">
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input question-checkbox @groupId-checkbox" type="checkbox" name="selectedQuestions" value="@q.Id" id="q_@q.Id" />
+                                                    <label class="form-check-label" for="q_@q.Id">
+                                                        <strong>Question:</strong> @q.Text
+                                                        <span class="badge bg-secondary ms-2">@q.Type</span>
+                                                    </label>
+                                                </div>
+                                                
+                                                @if (q.QuestionOptions != null && q.QuestionOptions.Any())
+                                                {
+                                                    <div class="ms-4">
+                                                        <strong>Options:</strong>
+                                                        <ul class="mb-0 pl-3">
+                                                            @foreach (var option in q.QuestionOptions)
+                                                            {
+                                                                <li>@option.Text (@option.Points points)</li>
+                                                            }
+                                                        </ul>
+                                                    </div>
+                                                }
+                                                else if (q.Type == "Choice")
+                                                {
+                                                    <div class="ms-4 text-warning">
+                                                        <em><i class="fas fa-exclamation-triangle"></i> No options available - This choice question needs options</em>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        
+                        <script>
+                            document.addEventListener('DOMContentLoaded', function() {
+                                // Handle "Select All" for groups
+                                var groupSelects = document.querySelectorAll('.group-select-all');
+                                groupSelects.forEach(function(groupSelect) {
+                                    groupSelect.addEventListener('change', function() {
+                                        var targetGroupClass = this.getAttribute('data-target-group') + '-checkbox';
+                                        var checkboxes = document.querySelectorAll('.' + targetGroupClass);
+                                        var isChecked = this.checked;
+                                        checkboxes.forEach(function(box) {
+                                            box.checked = isChecked;
+                                        });
+                                    });
+                                });
+
+                                // Optional: Update "Select All" state if all individual items are checked/unchecked manually
+                                // This requires more event listeners, keeping it simple for now as requested.
+                            });
+                        </script>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info" style="max-width: 350px; margin: 0 auto;">
+                            No questions available. Please create questions in the Admin section first.
+                        </div>
+                    }
+                </div>
+
+                <div class="d-flex justify-content-center gap-2 mt-4">
+                    <button type="submit" class="btn btn-blue px-4">Save</button>
+                    @Html.ActionLink("Back", "Index", null, new { @class = "btn btn-red btn-sm" })
+                </div>
+            }
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    var currencySymbols = {
+        'KES': 'KSh',
+        'USD': '$',
+        'EUR': '\u20AC',
+        'GBP': '\u00A3',
+        'CAD': 'C$',
+        'AUD': 'A$',
+        'JPY': '\u00A5',
+        'CHF': 'CHF ',
+        'CNY': '\u00A5',
+        'INR': '\u20B9',
+        'BRL': 'R$'
+    };
+
+    function formatSalary(val, currency) {
+        if (!val || val === '') return '';
+        var symbol = currencySymbols[currency] || 'KSh';
+        var num = parseFloat(val);
+        if (isNaN(num)) return '';
+        
+        // Format number with locale-specific formatting
+        var formatted = num.toLocaleString('en-US', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+        
+        // For CHF, symbol goes after with space
+        if (currency === 'CHF') {
+            return formatted + ' ' + symbol.trim();
+        }
+        
+        // For KES, symbol before with space
+        if (currency === 'KES') {
+            return symbol + ' ' + formatted;
+        }
+        
+        // For JPY and CNY, no space between symbol and number
+        if (currency === 'JPY' || currency === 'CNY') {
+            return symbol + formatted;
+        }
+        
+        // For others, add space if symbol is longer than 1 character
+        if (symbol.length > 1 && currency !== 'CHF') {
+            return symbol + ' ' + formatted;
+        }
+        
+        return symbol + formatted;
+    }
+
+    function updateSalaryRangeDisplay() {
+        var min = document.getElementById('salaryMin').value;
+        var max = document.getElementById('salaryMax').value;
+        var currencySelect = document.getElementById('currencySelect');
+        var currency = currencySelect ? currencySelect.value : 'KES';
+        
+        if (!min || !max) {
+            document.getElementById('salaryRangeDisplay').textContent = 'Please enter salary range';
+            return;
+        }
+        
+        if (parseInt(min) > parseInt(max)) {
+            // Swap if min > max
+            var temp = min;
+            min = max;
+            max = temp;
+            document.getElementById('salaryMin').value = min;
+            document.getElementById('salaryMax').value = max;
+        }
+        
+        document.getElementById('salaryRangeDisplay').textContent = 
+            formatSalary(min, currency) + ' - ' + formatSalary(max, currency);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var minInput = document.getElementById('salaryMin');
+        var maxInput = document.getElementById('salaryMax');
+        var currencySelect = document.getElementById('currencySelect');
+        
+        if (minInput && maxInput) {
+            minInput.addEventListener('input', updateSalaryRangeDisplay);
+            maxInput.addEventListener('input', updateSalaryRangeDisplay);
+            if (currencySelect) {
+                currencySelect.addEventListener('change', updateSalaryRangeDisplay);
+            }
+            updateSalaryRangeDisplay();
+        }
+    });
+</script>
+}
+
+
+
+
+
+
+
+

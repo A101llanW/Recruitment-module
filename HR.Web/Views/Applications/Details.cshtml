@@ -1,0 +1,60 @@
+@model HR.Web.Models.Application
+@{
+    ViewBag.Title = "Application Details";
+}
+<h3>Application</h3>
+<dl class="row">
+    <dt class="col-sm-3">Applicant</dt><dd class="col-sm-9">@Model.Applicant?.FullName</dd>
+    <dt class="col-sm-3">Position</dt><dd class="col-sm-9">@Model.Position?.Title</dd>
+    <dt class="col-sm-3">Status</dt><dd class="col-sm-9">@Model.Status</dd>
+    <dt class="col-sm-3">Applied</dt><dd class="col-sm-9">@Model.AppliedOn</dd>
+    <dt class="col-sm-3">Resume</dt><dd class="col-sm-9">@Model.ResumePath</dd>
+</dl>
+@using (Html.BeginForm("UpdateStatus","Applications", FormMethod.Post)) {
+    @Html.AntiForgeryToken()
+    @Html.Hidden("id", Model.Id)
+    <div class="form-row align-items-center">
+        <div class="col-auto">
+            <input name="status" class="form-control" placeholder="New Status" />
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-sm btn-primary" type="submit">Update Status</button>
+        </div>
+    </div>
+}
+<div class="mt-3">
+    @Html.ActionLink("Back","Index", null, new { @class = "btn btn-secondary btn-sm" })
+    @using (Html.BeginForm("DeleteConfirmed", "Applications", new { id = Model.Id }, FormMethod.Post, new { @class = "d-inline-block", onsubmit = "return confirm('Delete this application?');" })) {
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-danger btn-sm ml-2">Delete</button>
+    }
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

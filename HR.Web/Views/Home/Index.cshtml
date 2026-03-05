@@ -1,0 +1,162 @@
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HR Portal - All Links</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #007bff; }
+        .section { margin-bottom: 30px; }
+        .section h2 { color: #007bff; margin-bottom: 15px; border-left: 4px solid #007bff; padding-left: 10px; }
+        .links-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+        .link-card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; transition: all 0.3s ease; }
+        .link-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-color: #007bff; }
+        .link-title { font-weight: bold; color: #495057; margin-bottom: 8px; font-size: 16px; }
+        .link-url { color: #6c757d; font-family: monospace; background: #e9ecef; padding: 4px 8px; border-radius: 4px; margin-bottom: 10px; word-break: break-all; }
+        .link-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn { display: inline-block; padding: 8px 16px; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #545b62; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-success:hover { background: #1e7e34; }
+        .status { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+        .status-active { background: #d4edda; color: #155724; }
+        .status-inactive { background: #f8d7da; color: #721c24; }
+        .global-section { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .global-section .link-card { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+        .global-section .link-title { color: white; }
+        .global-section .link-url { background: rgba(255,255,255,0.2); color: #e9ecef; }
+        .error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 6px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏢 HR Portal Links</h1>
+            <p>Complete list of all company portals and global access links</p>
+            <p><strong>Server Time:</strong> @DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</p>
+        </div>
+
+        <div class="section global-section">
+            <h2>🌐 Global Portal Links</h2>
+            <div class="links-grid">
+                <div class="link-card">
+                    <div class="link-title">Main Portal</div>
+                    <div class="link-url">http://localhost:5000/</div>
+                    <div class="link-actions">
+                        <a href="/" class="btn btn-primary">Open Portal</a>
+                        <a href="/Account/Login" class="btn btn-secondary">Login</a>
+                    </div>
+                </div>
+                <div class="link-card">
+                    <div class="link-title">Positions (Global)</div>
+                    <div class="link-url">http://localhost:5000/Positions</div>
+                    <div class="link-actions">
+                        <a href="/Positions" class="btn btn-primary">Open Positions</a>
+                    </div>
+                </div>
+                <div class="link-card">
+                    <div class="link-title">Debug Page</div>
+                    <div class="link-url">http://localhost:5000/Home/Debug</div>
+                    <div class="link-actions">
+                        <a href="/Home/Debug" class="btn btn-secondary">Debug Info</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🏭 Company Portals</h2>
+            @{
+                try
+                {
+                    using (var uow = new HR.Web.Data.UnitOfWork())
+                    {
+                        var companies = uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
+                        
+                        if (companies.Any())
+                        {
+                            <div class="links-grid">
+                                @foreach (var company in companies)
+                                {
+                                    <div class="link-card">
+                                        <div class="link-title">
+                                            @company.Name
+                                            <span class="status @(company.IsActive ? "status-active" : "status-inactive")">
+                                                @(company.IsActive ? "Active" : "Inactive")
+                                            </span>
+                                        </div>
+                                        <div class="link-url">/@company.Slug</div>
+                                        <div class="link-actions">
+                                            <a href="/@company.Slug" class="btn btn-primary">Open Portal</a>
+                                            <a href="/@company.Slug?fresh=1" class="btn btn-success">Fresh Portal</a>
+                                            <a href="/@company.Slug/Account/Login" class="btn btn-secondary">Login</a>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="error">
+                                <strong>No companies found in database.</strong><br>
+                                Please ensure the database has company records.
+                            </div>
+                        }
+                        
+                        <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 6px;">
+                            <strong>Database Summary:</strong><br>
+                            Total Companies: @companies.Count<br>
+                            Active Companies: @companies.Count(c => c.IsActive)<br>
+                            Inactive Companies: @companies.Count(c => !c.IsActive)
+                        </div>
+                    }
+                }
+                catch (Exception ex)
+                {
+                    <div class="error">
+                        <strong>Database Error:</strong> @ex.Message<br>
+                        <small>Stack Trace: @ex.StackTrace</small>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="section">
+            <h2>🔧 Quick Access</h2>
+            <div class="links-grid">
+                <div class="link-card">
+                    <div class="link-title">SuperAdmin Login</div>
+                    <div class="link-url">Global Access Only</div>
+                    <div class="link-actions">
+                        <a href="/Account/Login" class="btn btn-primary">SuperAdmin Login</a>
+                    </div>
+                </div>
+                <div class="link-card">
+                    <div class="link-title">Test Tenant Routes</div>
+                    <div class="link-url">Various Companies</div>
+                    <div class="link-actions">
+                        <a href="/Home/Debug" class="btn btn-secondary">Test Routing</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 30px; text-align: center; color: #6c757d; font-size: 14px;">
+            <p>💡 <strong>Tips:</strong></p>
+            <ul style="text-align: left; display: inline-block;">
+                <li>Company portals are tenant-specific URLs with company data isolation</li>
+                <li>Fresh portal mode (?fresh=1) restricts administrative functions</li>
+                <li>SuperAdmin users can only access global URLs (no tenant parameter)</li>
+                <li>Regular users must access through their company's branded URL</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

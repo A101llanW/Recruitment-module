@@ -1,0 +1,41 @@
+@model System.Web.Mvc.HandleErrorInfo
+
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Error";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8 text-center">
+        <div class="error-container p-5 bg-white rounded shadow-sm">
+            <h1 class="text-danger display-4 mb-4">⚠️</h1>
+            <h2 class="text-dark mb-3">Something went wrong</h2>
+            <p class="text-muted lead mb-5">
+                An unexpected error occurred while processing your request. 
+                Our technical team has been notified and we're looking into it.
+            </p>
+            
+            @if (HttpContext.Current.IsCustomErrorEnabled == false && Model != null)
+            {
+                <div class="text-left mt-4 p-3 bg-light rounded" style="font-family: monospace; font-size: 0.85rem;">
+                    <p><strong>Exception:</strong> @Model.Exception.Message</p>
+                    <p><strong>Controller:</strong> @Model.ControllerName</p>
+                    <p><strong>Action:</strong> @Model.ActionName</p>
+                    <hr />
+                    <pre class="overflow-auto" style="max-height: 200px;">@Model.Exception.StackTrace</pre>
+                </div>
+            }
+
+            <div class="mt-4">
+                <a href="@Url.Action("Index", "Home")" class="btn btn-primary px-4 py-2">Return Home</a>
+                <button onclick="window.location.reload()" class="btn btn-outline-secondary px-4 py-2 ml-2">Try Again</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .error-container {
+        border-top: 5px solid #dc3545;
+    }
+</style>

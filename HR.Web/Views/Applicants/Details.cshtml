@@ -1,0 +1,318 @@
+@model HR.Web.Models.Applicant
+@{
+    ViewBag.Title = "Applicant Details";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<style>
+    body {
+        font-size: 0.97rem;
+        background: #f6faff;
+        min-height: 100vh;
+    }
+    .card-blue {
+        background: #f6faff;
+        border-radius: 0;
+        box-shadow: none;
+        border: none;
+        padding: 1.2rem 0.5rem 0.5rem 0.5rem;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+    }
+    .card-header-blue {
+        background: none !important;
+        color: #0d2c4a !important;
+        border-top-left-radius: 0 !important;
+        border-top-right-radius: 0 !important;
+        border-bottom: none;
+        padding: 0.7rem 0.5rem 0.3rem 0.5rem;
+        font-size: 1.05rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-align: left;
+    }
+    .card-body-blue {
+        background: none !important;
+        padding: 0.5rem 0.5rem 0.2rem 0.5rem;
+        display: block;
+    }
+    .form-group, .form-row {
+        margin-bottom: 0.8rem !important;
+        width: 100%;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .form-control {
+        font-size: 0.97rem;
+        padding: 0.5rem 0.7rem;
+        border-radius: 0.4rem;
+        border: 1.2px solid #b2d7f7;
+        background: #fafdff;
+        max-width: 100%;
+        margin-left: 0;
+        text-align: left;
+    }
+    .form-control:focus {
+        border-color: #6fb8dc;
+        box-shadow: 0 0 0 0.08rem #b2d7f7;
+    }
+    label.font-weight-bold {
+        font-size: 0.97rem;
+        font-weight: 600;
+        margin-bottom: 0.2rem;
+        color: #0d2c4a;
+        width: 100%;
+        text-align: left;
+    }
+    .form-text {
+        font-size: 0.92rem;
+        margin-top: 0.15rem;
+        margin-bottom: 0.3rem;
+        width: 100%;
+        text-align: left;
+    }
+    .btn-blue {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        border: none;
+        transition: background 0.2s;
+        font-size: 0.97rem;
+        padding: 0.5rem 1.2rem;
+        border-radius: 0.4rem;
+        font-weight: 600;
+        margin-right: 0.7rem;
+    }
+    .btn-blue:hover {
+        background: #3498db;
+        color: #fff;
+    }
+    .btn-red {
+        background: #e05656;
+        color: #0d2c4a;
+        border: none;
+        transition: background 0.2s;
+        font-size: 0.97rem;
+        padding: 0.5rem 1.2rem;
+        border-radius: 0.4rem;
+        font-weight: 600;
+        margin-left: 0.7rem;
+    }
+    .btn-red:hover {
+        background: #c0392b;
+        color: #fff;
+    }
+    .btn-link {
+        color: #3498db;
+        text-decoration: none;
+        font-size: 0.97rem;
+        font-weight: 500;
+        padding: 0.5rem 1.2rem;
+        border-radius: 0.4rem;
+        margin-left: 0.7rem;
+    }
+    .btn-link:hover {
+        color: #0d2c4a;
+        text-decoration: underline;
+        background: #eaf4fb;
+    }
+    .d-flex.gap-2.mt-4, .d-flex.justify-content-center.gap-2.mt-4, .d-flex.justify-content-between {
+        gap: 0.7rem !important;
+        margin-top: 1.2rem !important;
+        justify-content: flex-start !important;
+    }
+
+    .list-group-item {
+        border: none;
+        border-bottom: 1px solid #e6f3fb;
+        background: #fafdff;
+        transition: background 0.12s;
+    }
+    .card-title { color: #0d2c4a; font-weight:600; }
+    .badge { background: #eaf4fb; color: #0d2c4a; }
+</style>
+
+<div class="container-fluid" style="margin-top: 1.2rem;">
+    <div class="card card-blue shadow">
+        <div class="card-header card-header-blue">
+            <small class="text-muted">Applicant profile</small>
+            <h3 class="mb-0" style="text-transform: capitalize;">@Model.FullName</h3>
+        </div>
+        <div class="card-body card-body-blue">
+            @if (TempData["DeleteError"] != null)
+            {
+                <div class="alert alert-warning" role="alert">
+                    @TempData["DeleteError"]
+                </div>
+            }
+            <div class="row g-4 align-items-stretch">
+                <div class="col-lg-5 col-md-6 mb-3 d-flex">
+                    <div class="card h-100 w-100 border-0 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title">Contact Details</h5>
+                            <hr />
+                            <p class="mb-2">
+                                <strong>Email:</strong><br />
+                                <span class="text-muted">@Model.Email</span>
+                            </p>
+                            <p class="mb-0">
+                                <strong>Phone:</strong><br />
+                                <span class="text-muted">@Model.Phone</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-7 col-md-6 mb-3 d-flex">
+                    <div class="w-100">
+                        @{ 
+                            var allApplications = ViewBag.AllApplications as IEnumerable<HR.Web.Models.Application>;
+                            var selectedApp = ViewBag.SelectedApplication as HR.Web.Models.Application;
+                            var answers = ViewBag.QuestionnaireAnswers as IEnumerable<HR.Web.Models.ApplicationAnswer>;
+                        }
+                        
+                        @if (allApplications != null && allApplications.Any())
+                        {
+                            <div class="card border-0 shadow-sm mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">Applications</h5>
+                                    <hr />
+                                    
+                                    @if (allApplications.Count() > 1)
+                                    {
+                                        <div class="form-group">
+                                            <label for="applicationSelect" class="font-weight-bold">Select Application to View:</label>
+                                            @Html.DropDownList("selectedApplicationId", 
+                                                allApplications.Select(app => new SelectListItem {
+                                                    Value = app.Id.ToString(),
+                                                    Text = string.Format("{0} - Applied on {1} ({2})", 
+                                                        app.Position != null ? app.Position.Title : "Position " + app.PositionId,
+                                                        app.AppliedOn.ToString("MMM dd, yyyy"),
+                                                        app.Status),
+                                                    Selected = selectedApp != null && app.Id == selectedApp.Id
+                                                }),
+                                                "Choose an application...",
+                                                new { @class = "form-control", @id = "applicationSelect", @onchange = "window.location.href='/Applicants/Details/" + Model.Id + "?selectedApplicationId=' + this.value;" })
+                                        </div>
+                                    }
+                                    
+                                    @if (selectedApp != null)
+                                    {
+                                        <div class="mt-3">
+                                            <h6>Selected Application Details:</h6>
+                                            <dl class="row mb-0">
+                                                <dt class="col-sm-4">Position</dt>
+                                                <dd class="col-sm-8">
+                                                    @(selectedApp.Position != null ? selectedApp.Position.Title : "#" + selectedApp.PositionId)
+                                                </dd>
+
+                                                <dt class="col-sm-4">Applied on</dt>
+                                                <dd class="col-sm-8">@selectedApp.AppliedOn.ToString("g")</dd>
+
+                                                <dt class="col-sm-4 d-flex align-items-center">Status</dt>
+                                                <dd class="col-sm-8 d-flex align-items-center">
+                                                    <span class="badge badge-pill ms-2">@selectedApp.Status</span>
+                                                </dd>
+
+                                                <dt class="col-sm-4">Resume/CV</dt>
+                                                <dd class="col-sm-8">
+                                                    @if (!string.IsNullOrEmpty(selectedApp.ResumePath))
+                                                    {
+                                                        <a class="btn btn-sm btn-outline-primary" href="@Url.Action("DownloadCV", "Applicants", new { id = selectedApp.Id })" target="_blank">
+                                                            Download CV
+                                                        </a>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">No resume uploaded</span>
+                                                    }
+                                                </dd>
+                                            </dl>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body">
+                                    <h5 class="card-title">Questionnaire Answers</h5>
+                                    <hr />
+                                    @{ 
+                                        var hasAnswers = answers != null && answers.Any();
+                                    }
+                                    @if (hasAnswers)
+                                    {
+                                        <ul class="list-group list-group-flush">
+                                            @foreach (var ans in answers)
+                                            {
+                                                <li class="list-group-item">
+                                                    @{
+                                                        string questionText = "";
+                                                        if (ans.Question != null)
+                                                        {
+                                                            questionText = ans.Question != null ? ans.Question.Text : "Question text not available";
+                                                        }
+                                                        else if (ans.QuestionId > 0)
+                                                        {
+                                                            // Fallback: try to get question text directly
+                                                            var questionRepo = new HR.Web.Data.UnitOfWork().Questions;
+                                                            var question = questionRepo.Get(ans.QuestionId);
+                                                            questionText = question != null ? question.Text : string.Format("Question ID {0} not found", ans.QuestionId);
+                                                        }
+                                                        else
+                                                        {
+                                                            questionText = "Question not available";
+                                                        }
+                                                    }
+                                                    <strong>@questionText</strong><br />
+                                                    <span class="text-muted">@ans.AnswerText</span>
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">No questionnaire answers found for this application.</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info mb-0">
+                                No applications found for this applicant yet.
+                            </div>
+                        }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer bg-white border-0 d-flex justify-content-end gap-2">
+            @Html.ActionLink("Back", "Index", null, new { @class = "btn btn-secondary btn-sm" })
+            @using (Html.BeginForm("Delete", "Applicants", new { id = Model.Id }, FormMethod.Post, new { @class = "d-inline-block", onsubmit = "return confirm('Delete this applicant?');" }))
+            {
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-danger btn-sm ml-2">Delete</button>
+            }
+        </div>
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

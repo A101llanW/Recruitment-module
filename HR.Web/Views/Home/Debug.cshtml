@@ -1,0 +1,134 @@
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tenant Routing Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .test-link { display: inline-block; margin: 5px; padding: 10px; background: #007bff; color: white; text-decoration: none; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Tenant Routing Debug Page</h1>
+    
+    <div class="info">
+        <strong>Current Request Info:</strong><br>
+        URL: @Request.Url.AbsoluteUri<br>
+        Path: @Request.Path<br>
+        Tenant Parameter: @Request.QueryString["tenant"]<br>
+        Raw URL: @Request.RawUrl
+    </div>
+
+    <h2>Route Data Analysis</h2>
+    @{
+        var routeData = RouteData.Values;
+        <table>
+            <tr><th>Parameter</th><th>Value</th></tr>
+            @foreach (var key in routeData.Keys)
+            {
+                <tr>
+                    <td>@key</td>
+                    <td>@routeData[key]</td>
+                </tr>
+            }
+        </table>
+    }
+
+    <h2>Database Companies Test</h2>
+    @{
+        try
+        {
+            using (var uow = new HR.Web.Data.UnitOfWork())
+            {
+                var companies = uow.Companies.GetAll().ToList();
+                <div class="success">
+                    <strong>Database Connection: SUCCESS</strong><br>
+                    Found @companies.Count companies in database
+                </div>
+                
+                if (companies.Any())
+                {
+                    <table>
+                        <tr><th>Company Name</th><th>Slug</th><th>Is Active</th><th>Test Link</th></tr>
+                        @foreach (var company in companies)
+                        {
+                            <tr>
+                                <td>@company.Name</td>
+                                <td>@company.Slug</td>
+                                <td>@company.IsActive</td>
+                                <td>
+                                    <a href="/@company.Slug" class="test-link">Test /@company.Slug</a>
+                                    <a href="/@company.Slug?fresh=1" class="test-link">Test Fresh</a>
+                                </td>
+                            </tr>
+                        }
+                    </table>
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            <div class="error">
+                <strong>Database Connection: FAILED</strong><br>
+                Error: @ex.Message<br>
+                Stack Trace: @ex.StackTrace
+            </div>
+        }
+    }
+
+    <h2>Tenant Constraint Test</h2>
+    @{
+        try
+        {
+            var constraint = new HR.Web.Helpers.TenantRouteConstraint();
+            var testTokens = new[] { "U78027609", "Z32815413", "nonexistent", "" };
+            
+            foreach (var token in testTokens)
+            {
+                var routeValues = new System.Web.Routing.RouteValueDictionary { { "tenant", token } };
+                var matches = constraint.Match(HttpContext, null, "tenant", routeValues, System.Web.Routing.RouteDirection.IncomingRequest);
+                
+                <div class="@(matches ? "success" : "error")">
+                    Token "@token": @(matches ? "MATCHES" : "NO MATCH")
+                </div>
+            }
+        }
+        catch (Exception ex)
+        {
+            <div class="error">
+                <strong>Constraint Test: FAILED</strong><br>
+                Error: @ex.Message
+            </div>
+        }
+    }
+
+    <h2>Quick Test Links</h2>
+    <div>
+        <a href="/U78027609" class="test-link">Test U78027609</a>
+        <a href="/U78027609?fresh=1" class="test-link">Test U78027609 (Fresh)</a>
+        <a href="/Z32815413" class="test-link">Test Z32815413</a>
+        <a href="/Z32815413?fresh=1" class="test-link">Test Z32815413 (Fresh)</a>
+        <a href="/Positions" class="test-link">Test Positions (Global)</a>
+        <a href="/" class="test-link">Test Home</a>
+    </div>
+
+    <h2>Debug Information</h2>
+    <div class="info">
+        <strong>Application Status:</strong><br>
+        Server Time: @DateTime.Now.ToString()<br>
+        User Agent: @Request.UserAgent<br>
+        Is Authenticated: @User.Identity.IsAuthenticated<br>
+        User Name: @User.Identity.Name
+    </div>
+</body>
+</html>

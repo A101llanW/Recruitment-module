@@ -1,0 +1,200 @@
+@model HR.Web.ViewModels.SuperAdminUserManagementViewModel
+@{
+    ViewBag.Title = "Global User Management";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    :root {
+        --system-blue: #6fb8dc;
+        --system-dark: #0d2c4a;
+        --border-color: #b2d7f7;
+        --bg-light: #f6faff;
+    }
+
+    .dashboard-wrapper {
+        padding: 20px 0;
+        background: var(--bg-light);
+        min-height: calc(100vh - 150px);
+    }
+
+    .stat-card {
+        background: #fff;
+        border: 1.2px solid var(--border-color);
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+    }
+
+    .stat-card h1 {
+        margin: 0;
+        font-weight: 700;
+        color: var(--system-dark);
+        font-size: 2.5rem;
+    }
+
+    .stat-card p {
+        margin: 5px 0 0;
+        color: #6c757d;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .stat-primary { border-top: 4px solid var(--system-blue); }
+    .stat-success { border-top: 4px solid #28a745; }
+    .stat-warning { border-top: 4px solid #ffcc00; }
+
+    .content-card {
+        background: #fff;
+        border: 1.2px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-top: 20px;
+    }
+
+    .card-header-system {
+        background: #fafbfc;
+        border-bottom: 1.2px solid var(--border-color);
+        padding: 15px 25px;
+    }
+
+    .card-header-system h4 {
+        margin: 0;
+        font-weight: 600;
+        color: var(--system-dark);
+        display: flex;
+        align-items: center;
+    }
+
+    .card-header-system h4 i {
+        margin-right: 10px;
+        color: var(--system-blue);
+    }
+
+    .nav-tabs-system {
+        border-bottom: 1px solid var(--border-color);
+        background: #f8f9fa;
+        padding: 0 15px;
+    }
+
+    .nav-tabs-system .nav-link {
+        border: none;
+        color: #6c757d;
+        font-weight: 600;
+        padding: 15px 20px;
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s;
+    }
+
+    .nav-tabs-system .nav-link:hover {
+        color: var(--system-blue);
+        background: rgba(111, 184, 220, 0.05);
+    }
+
+    .nav-tabs-system .nav-link.active {
+        color: var(--system-dark);
+        background: transparent;
+        border-bottom-color: var(--system-blue);
+    }
+
+    .company-header {
+        background: #f8f9fa;
+        padding: 12px 20px;
+        font-weight: 700;
+        color: var(--system-dark);
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+</style>
+
+<div class="dashboard-wrapper">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-12 mb-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 style="color: var(--system-dark); font-weight: 700; margin: 0;">Global User <span style="font-weight: 300;">Management</span></h2>
+                        <p class="text-muted m-0">System-wide user orchestration and security monitoring</p>
+                    </div>
+                    <a href="@Url.Action("CreateUser")" class="btn btn-primary shadow-sm" style="background: var(--system-blue); border: none; padding: 10px 25px; font-weight: 600; border-radius: 6px;">
+                        <i class="fas fa-user-plus mr-2"></i> New User
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        @if (TempData["Message"] != null)
+        {
+            <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+                <i class="fas fa-check-circle mr-2"></i> @TempData["Message"]
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+        }
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stat-card stat-primary">
+                    <h1>@Model.GlobalUsers.Count</h1>
+                    <p>System Users</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card stat-warning">
+                    <h1>@Model.Admins.Count</h1>
+                    <p>Global Admins</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card stat-success">
+                    <h1>@Model.UsersByCompany.Count</h1>
+                    <p>Active Companies</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-card overflow-hidden">
+            <div class="nav nav-tabs nav-tabs-system" id="userTabs" role="tablist">
+                <a class="nav-link active" id="global-tab" data-toggle="tab" href="#global" role="tab">
+                    <i class="fas fa-server mr-2"></i>System Users
+                </a>
+                <a class="nav-link" id="admins-tab" data-toggle="tab" href="#admins" role="tab">
+                    <i class="fas fa-user-shield mr-2"></i>Global Admins
+                </a>
+                <a class="nav-link" id="companies-tab" data-toggle="tab" href="#companies" role="tab">
+                    <i class="fas fa-building mr-2"></i>Tenant Users
+                </a>
+            </div>
+
+            <div class="tab-content" id="userTabsContent">
+                <!-- System Users -->
+                <div class="tab-pane fade show active" id="global" role="tabpanel">
+                    @Html.Partial("_GlobalUserList", Model.GlobalUsers)
+                </div>
+
+                <!-- Global Admins -->
+                <div class="tab-pane fade" id="admins" role="tabpanel">
+                    @Html.Partial("_GlobalUserList", Model.Admins)
+                </div>
+
+                <!-- Tenant Users -->
+                <div class="tab-pane fade" id="companies" role="tabpanel">
+                    @foreach (var company in Model.UsersByCompany)
+                    {
+                        <div class="company-header">
+                            <span><i class="fas fa-building mr-2 text-muted"></i> @company.Key</span>
+                            <span class="badge badge-light border">@company.Value.Count Users</span>
+                        </div>
+                        @Html.Partial("_GlobalUserList", company.Value)
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

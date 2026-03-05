@@ -1,0 +1,219 @@
+@model HR.Web.Models.Position
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Position Details";
+    
+    // Helper function to format salary with currency
+    Func<decimal?, string> formatSalary = (amount) => {
+        if (!amount.HasValue) return "";
+        try {
+            var currencyProp = typeof(HR.Web.Models.Position).GetProperty("Currency");
+            string currency = "KES";
+            if (currencyProp != null) {
+                var currencyValue = currencyProp.GetValue(Model);
+                currency = currencyValue != null ? currencyValue.ToString() : "KES";
+            }
+            if (string.IsNullOrEmpty(currency)) currency = "KES";
+            
+            // Use actual Unicode characters
+            var symbols = new Dictionary<string, string> {
+                {"KES", "KSh"}, 
+                {"USD", "$"}, 
+                {"EUR", "€"}, 
+                {"GBP", "£"}, 
+                {"CAD", "C$"}, 
+                {"AUD", "A$"},
+                {"JPY", "¥"}, 
+                {"CHF", "CHF"}, 
+                {"CNY", "¥"}, 
+                {"INR", "₹"}, 
+                {"BRL", "R$"}
+            };
+            
+            var symbol = symbols.ContainsKey(currency) ? symbols[currency] : "KSh";
+            var formatted = amount.Value.ToString("N0");
+            
+            // CHF: symbol after number with space
+            if (currency == "CHF") {
+                return formatted + " " + symbol;
+            }
+            
+            // KES: symbol before with space
+            if (currency == "KES") {
+                return symbol + " " + formatted;
+            }
+            
+            // JPY and CNY: symbol before, no space
+            if (currency == "JPY" || currency == "CNY") {
+                return symbol + formatted;
+            }
+            
+            // Multi-character symbols: add space
+            if (symbol.Length > 1) {
+                return symbol + " " + formatted;
+            }
+            
+            // Single character symbols: no space
+            return symbol + formatted;
+        } catch {
+            return amount.Value.ToString("C");
+        }
+    };
+}
+<style>
+    body {
+        font-size: 0.97rem;
+        background: #f6faff;
+        min-height: 100vh;
+    }
+    .card-blue {
+        background: #fafdff;
+        border-radius: 0.4rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        border: 1.2px solid #b2d7f7;
+        padding: 1.5rem;
+        margin-top: 1.2rem;
+    }
+    .card-title, h3 {
+        color: #0d2c4a;
+        font-weight: 600;
+    }
+    .section-title {
+        color: #0d2c4a;
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+        border-bottom: 2px solid #6fb8dc;
+        padding-bottom: 0.5rem;
+    }
+    .responsibilities-list {
+        white-space: pre-line;
+        line-height: 1.8;
+        color: #333;
+    }
+</style>
+
+<div class="container-fluid">
+    <div class="card-blue">
+        <h3 class="mb-4">@Model.Title</h3>
+        
+        <dl class="row mb-4">
+            <dt class="col-sm-3"><strong>Department:</strong></dt>
+            <dd class="col-sm-9">@(Model.Department?.Name ?? "Not specified")</dd>
+            
+            <dt class="col-sm-3"><strong>Salary Range:</strong></dt>
+            <dd class="col-sm-9">
+                @if (Model.SalaryMin.HasValue && Model.SalaryMax.HasValue)
+                {
+                    <text>@formatSalary(Model.SalaryMin) - @formatSalary(Model.SalaryMax)</text>
+                }
+                else if (Model.SalaryMin.HasValue)
+                {
+                    <text>@formatSalary(Model.SalaryMin) and above</text>
+                }
+                else
+                {
+                    <text>Salary Varies</text>
+                }
+            </dd>
+            
+            <dt class="col-sm-3"><strong>Posted:</strong></dt>
+            <dd class="col-sm-9">@Model.PostedOn.ToShortDateString()</dd>
+            
+            <dt class="col-sm-3"><strong>Status:</strong></dt>
+            <dd class="col-sm-9">
+                @if (Model.IsOpen)
+                {
+                    <span class="badge badge-success">Open</span>
+                }
+                else
+                {
+                    <span class="badge badge-secondary">Closed</span>
+                }
+            </dd>
+        </dl>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Description))
+        {
+            <div class="section-title">Job Description</div>
+            <div class="mb-4" style="white-space: pre-line; line-height: 1.8; color: #333;">
+                @Model.Description
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.Responsibilities))
+        {
+            <div class="section-title">Key Responsibilities</div>
+            <div class="responsibilities-list mb-4">
+                @Model.Responsibilities
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.Qualifications))
+        {
+            <div class="section-title">Required Qualifications</div>
+            <div class="responsibilities-list mb-4">
+                @Model.Qualifications
+            </div>
+        }
+    </div>
+
+    <div class="mt-4 mb-5">
+        @if (User.Identity.IsAuthenticated && User.IsInRole("Admin"))
+        {
+            <a href="@Url.Action("Edit", "Positions", new { id = Model.Id })" class="btn btn-blue">
+                <i class="fas fa-edit mr-1"></i> Edit Position
+            </a>
+            <a href="@Url.Action("Index")" class="btn btn-secondary ml-2">
+                <i class="fas fa-arrow-left mr-1"></i> Back to List
+            </a>
+        }
+        else
+        {
+            if (Request.IsAuthenticated)
+            {
+                <a href="@Url.Action("Questionnaire", "Applications", new { positionId = Model.Id })" class="btn btn-blue">
+                    <i class="fas fa-paper-plane mr-1"></i> Apply Now
+                </a>
+            }
+            else
+            {
+                <a href="@Url.Action("Register", "Account", new { returnUrl = Url.Action("Questionnaire", "Applications", new { positionId = Model.Id }) })" class="btn btn-blue">
+                    <i class="fas fa-user-plus mr-1"></i> Sign In to Apply
+                </a>
+            }
+            <a href="@Url.Action("Index")" class="btn btn-secondary ml-2">
+                <i class="fas fa-arrow-left mr-1"></i> Back to List
+            </a>
+        }
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

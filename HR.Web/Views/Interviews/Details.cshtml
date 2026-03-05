@@ -1,0 +1,58 @@
+@model HR.Web.Models.Interview
+@{
+    ViewBag.Title = "Interview Details";
+}
+<h3>Interview</h3>
+<dl class="row">
+    <dt class="col-sm-3">Application</dt><dd class="col-sm-9">@Model.ApplicationId</dd>
+    <dt class="col-sm-3">Applicant</dt><dd class="col-sm-9">@Model.Application?.Applicant?.FullName</dd>
+    <dt class="col-sm-3">Position</dt><dd class="col-sm-9">@Model.Application?.Position?.Title</dd>
+    <dt class="col-sm-3">Interviewer</dt><dd class="col-sm-9">@Model.Interviewer?.UserName</dd>
+    <dt class="col-sm-3">Scheduled</dt><dd class="col-sm-9">@Model.ScheduledAt</dd>
+    <dt class="col-sm-3">Mode</dt><dd class="col-sm-9">@Model.Mode</dd>
+    <dt class="col-sm-3">Notes</dt><dd class="col-sm-9">@Model.Notes</dd>
+</dl>
+@Html.ActionLink("Edit","Edit", new { id=Model.Id }, new { @class="btn btn-secondary"})
+    @Html.ActionLink("Back","Index", null, new { @class = "btn btn-red btn-sm" })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
