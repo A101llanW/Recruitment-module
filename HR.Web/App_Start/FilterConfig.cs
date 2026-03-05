@@ -22,6 +22,9 @@ namespace HR.Web
 
             // Prevent browser caching for back-button security
             filters.Add(new HR.Web.Filters.NoCacheAttribute());
+
+            // Global Audit Logging - Tracks user movement and data changes across all modules
+            filters.Add(new HR.Web.Filters.AuditLogAttribute());
             
             // Global authentication is removed to allow anonymous browsing.
             // controllers/actions will specify their own [Authorize] requirements.

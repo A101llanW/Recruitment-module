@@ -8,7 +8,6 @@ namespace HR.Web.Services
 {
     public class AuditService
     {
-        private readonly UnitOfWork _uow = new UnitOfWork();
         private readonly TenantService _tenantService = new TenantService();
 
         public void LogAction(string username, string action, string controller, 
@@ -17,30 +16,32 @@ namespace HR.Web.Services
         {
             try
             {
-                var context = HttpContext.Current;
-                var auditLog = new AuditLog
+                using (var uow = new UnitOfWork())
                 {
-                    CompanyId = _tenantService.GetCurrentUserCompanyId(), // Add CompanyId for tenant filtering
-                    Username = username ?? "Anonymous",
-                    Action = action,
-                    Controller = controller,
-                    EntityId = entityId,
-                    OldValues = oldValues != null ? JsonConvert.SerializeObject(oldValues) : null,
-                    NewValues = newValues != null ? JsonConvert.SerializeObject(newValues) : null,
-                    IPAddress = (context != null && context.Request != null ? context.Request.UserHostAddress : null) ?? "Unknown",
-                    Timestamp = DateTime.Now,
-                    UserAgent = (context != null && context.Request != null ? context.Request.UserAgent : null) ?? "Unknown",
-                    WasSuccessful = wasSuccessful,
-                    ErrorMessage = errorMessage
-                };
+                    var context = HttpContext.Current;
+                    var auditLog = new AuditLog
+                    {
+                        CompanyId = _tenantService.GetCurrentUserCompanyId(), 
+                        Username = username ?? "Anonymous",
+                        Action = action,
+                        Controller = controller,
+                        EntityId = entityId,
+                        OldValues = oldValues != null ? JsonConvert.SerializeObject(oldValues) : null,
+                        NewValues = newValues != null ? JsonConvert.SerializeObject(newValues) : null,
+                        IPAddress = (context != null && context.Request != null ? context.Request.UserHostAddress : null) ?? "Unknown",
+                        Timestamp = DateTime.Now,
+                        UserAgent = (context != null && context.Request != null ? context.Request.UserAgent : null) ?? "Unknown",
+                        WasSuccessful = wasSuccessful,
+                        ErrorMessage = errorMessage
+                    };
 
-                _uow.AuditLogs.Add(auditLog);
-                _uow.Complete();
+                    uow.AuditLogs.Add(auditLog);
+                    uow.Complete();
+                }
             }
             catch (Exception)
             {
-                // Log audit failures to system event log or file
-                // Don't throw exceptions to avoid breaking the main application flow
+                // Silent fail for audit logging to prevent application crash
             }
         }
 

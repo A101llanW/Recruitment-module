@@ -231,6 +231,7 @@
     <Compile Include="Filters\RoleBasedAuthorizationAttribute.cs" />
     <Compile Include="Filters\FreshSessionAttribute.cs" />
     <Compile Include="Filters\FreshPortalSecurityAttribute.cs" />
+    <Compile Include="Filters\AuditLogAttribute.cs" />
     <Compile Include="Controllers\AdminController.cs" />
     <Compile Include="Controllers\AdminController.MCP.cs" />
     <Compile Include="Controllers\AdminController.Scoring.cs" />
