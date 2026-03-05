@@ -33,6 +33,9 @@ namespace HR.Web.Filters
             // We don't want to log the "SecurityLogs" page itself to avoid infinite growth when viewing logs
             if (controller == "Admin" && action == "SecurityLogs") return;
 
+            // Exclude background polling requests for impersonation and elevation
+            if (controller == "Dashboard" && (action == "GetImpersonationStatus" || action == "GetPendingRequests" || action == "GetMyImpersonationStatus")) return;
+
             // Optional: Filter out heavy GET requests that are just navigations if needed, 
             // but for a full audit, we log them as "VIEW"
             if (actionType == "GET")
