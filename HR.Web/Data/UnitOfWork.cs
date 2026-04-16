@@ -26,6 +26,7 @@ namespace HR.Web.Data
         public Repository<PasswordReset> PasswordResets { get { return new Repository<PasswordReset>(_context); } }
         public Repository<LicenseTransaction> LicenseTransactions { get { return new Repository<LicenseTransaction>(_context); } }
         public Repository<ImpersonationRequest> ImpersonationRequests { get { return new Repository<ImpersonationRequest>(_context); } }
+        public Repository<TemporaryCredential> TemporaryCredentials { get { return new Repository<TemporaryCredential>(_context); } }
 
         // Expose the underlying context for advanced queries (e.g., Question options)
         public HrContext Context { get { return _context; } }

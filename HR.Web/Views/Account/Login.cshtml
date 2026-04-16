@@ -1,7 +1,10 @@
 @{
-    Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Login";
 }
+
+<!-- Include Bootstrap CSS for proper layout -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
 <div class="row justify-content-center mfa-setup-wrapper">
     <div class="col-md-5">
@@ -59,11 +62,11 @@
                         </div>
                         <h5 class="mb-1">Continue to @ViewBag.PreferredCompanyName</h5>
                         <p class="text-muted small mb-3">You last visited this company portal.</p>
-                        <a href="@Url.Action("Login", "Account", new { tenant = ViewBag.PreferredCompanySlug, returnUrl = ViewBag.ReturnUrl })" class="btn btn-primary-mfa btn-sm mb-2" style="height: 42px; width: auto; padding: 0 25px;">
-                            <i class="fas fa-arrow-right mr-2"></i> Go to Portal
-                        </a>
-                        <div>
-                            <button type="button" class="btn-link-mfa small text-primary" onclick="this.closest('.company-welcome-card').style.display='none'">
+                        <div class="d-flex flex-column align-items-center mt-3">
+                            <a href="@Url.Action("Login", "Account", new { tenant = ViewBag.PreferredCompanySlug, returnUrl = ViewBag.ReturnUrl })" class="btn btn-outline-primary btn-sm px-4 py-2 mb-3" style="border-radius: 8px; font-weight: 600; min-width: 200px; border-width: 1px;">
+                                Go to Portal <i class="fas fa-arrow-right ml-2"></i>
+                            </a>
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-4 py-2" style="border-radius: 8px; font-weight: 500; min-width: 200px;" onclick="this.closest('.company-welcome-card').style.display='none'">
                                 Use a different account
                             </button>
                         </div>
@@ -126,20 +129,7 @@
                         </div>
                     </div>
 
-                    <div class="login-field-group mt-4">
-                        <label for="captcha">Security Verification</label>
-                        <div class="captcha-container mb-2">
-                            <img src="data:image/png;base64,@ViewBag.CaptchaImage" alt="Security Code" id="captchaImage" class="captcha-img" />
-                            <button type="button" class="btn-refresh-captcha" onclick="location.reload()" title="Refresh code">
-                                <i class="fas fa-sync-alt"></i>
-                            </button>
-                        </div>
-                        <div class="login-input-wrap">
-                            <span class="login-input-icon"><i class="fas fa-shield-alt"></i></span>
-                            <input class="login-input" id="captcha" name="captcha" type="text"
-                                   placeholder="Enter the code shown above" required autocomplete="off" />
-                        </div>
-                    </div>
+                    @Html.Partial("_CaptchaPartial")
 
                     <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
 
@@ -167,6 +157,17 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // Captcha image selector
+        var captchaButtons = document.querySelectorAll('.captcha-image-btn');
+        var captchaHidden = document.getElementById('captcha');
+        captchaButtons.forEach(function(btn) {
+            btn.addEventListener('click', function () {
+                captchaButtons.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                captchaHidden.value = btn.dataset.index;
+            });
+        });
+
         // Password visibility toggle
         var toggleBtn = document.getElementById('togglePwd');
         var pwdInput  = document.getElementById('password');
@@ -198,6 +199,58 @@
 </script>
 
 <style>
+    /* Login page centering fix - More robust approach */
+    html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f8f9fa;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    
+    /* Override any existing styles */
+    .container {
+        max-width: 100% !important;
+        padding: 0 !important;
+    }
+    
+    .row {
+        margin: 0 !important;
+        width: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+    
+    .mfa-setup-wrapper {
+        width: 100% !important;
+        max-width: 500px !important;
+        padding: 20px !important;
+        margin: 0 auto !important;
+        display: flex !important;
+        justify-content: center !important;
+    }
+    
+    .col-md-5 {
+        width: 100% !important;
+        max-width: 500px !important;
+        margin: 0 auto !important;
+        float: none !important;
+        flex: none !important;
+    }
+    
+    /* Ensure the login card is centered */
+    .mfa-card {
+        width: 100% !important;
+        margin: 0 auto !important;
+        position: relative !important;
+    }
+    
     :root {
         --mfa-primary: #4f46e5;
         --mfa-primary-hover: #4338ca;
@@ -402,6 +455,41 @@
         transform: translateX(4px);
     }
 
+    /* Captcha image selector styles */
+    .captcha-images-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+        gap: 12px;
+        justify-items: center;
+    }
+
+    .captcha-image-btn {
+        background: #fff;
+        border: 2px solid var(--mfa-border);
+        border-radius: 12px;
+        padding: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .captcha-image-btn:hover {
+        border-color: var(--mfa-primary);
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+    }
+
+    .captcha-image-btn.selected {
+        border-color: var(--mfa-primary);
+        background: rgba(79, 70, 229, 0.08);
+        box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.2);
+    }
+
+    .captcha-thumb {
+        width: 48px;
+        height: 48px;
+        display: block;
+    }
+
     /* Captcha Styling */
     .captcha-container {
         display: flex;
@@ -438,5 +526,51 @@
         color: var(--mfa-primary);
         border-color: var(--mfa-primary);
         background: var(--mfa-bg);
+    }
+/* Make company welcome section less congested */
+    .company-welcome-card {
+        padding: 30px !important;
+        margin-bottom: 35px !important;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .company-welcome-card h5 {
+        font-size: 1.1rem !important;
+        font-weight: 600 !important;
+        margin-bottom: 12px !important;
+    }
+    
+    .company-welcome-card p {
+        margin-bottom: 25px !important;
+        line-height: 1.6 !important;
+    }
+    
+    .company-welcome-card .btn {
+        margin-bottom: 20px !important;
+        padding: 12px 30px !important;
+    }
+    
+    .company-logo-mini {
+        font-size: 2.5rem !important;
+        color: #667eea !important;
+        margin-bottom: 20px !important;
+    }
+    
+    /* Add more spacing to login form */
+    .mfa-card {
+        padding: 35px !important;
+        margin-top: 20px !important;
+        margin-bottom: 20px !important;
+    }
+    
+    .form-group {
+        margin-bottom: 25px !important;
+    }
+    
+    .btn-primary-mfa {
+        margin-top: 15px !important;
+        padding: 12px 20px !important;
     }
 </style>

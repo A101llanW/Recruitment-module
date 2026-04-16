@@ -17,7 +17,7 @@ namespace HR.Web
             scriptBundle.Include("~/Scripts/jquery-3.6.0.min.js", "~/Scripts/bootstrap.bundle.min.js");
             bundles.Add(scriptBundle);
 
-            var validationBundle = new ScriptBundle("~/Scripts/validation");
+            var validationBundle = new ScriptBundle("~/bundles/jqueryval");
             validationBundle.Include("~/Scripts/jquery.validate.min.js", "~/Scripts/jquery.validate.unobtrusive.min.js");
             bundles.Add(validationBundle);
 

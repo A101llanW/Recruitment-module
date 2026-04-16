@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Web.Mvc;
 using HR.Web.Data;
+using HR.Web.Models;
 
 namespace HR.Web.Controllers
 {

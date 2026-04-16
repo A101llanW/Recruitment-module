@@ -28,7 +28,6 @@ namespace HR.Web.Filters
                         "/Companies/",
                         "/Licenses/",
                         "/Reports/",
-                        "/ML/",
                         "/ReportGenerator/"
                     };
                     

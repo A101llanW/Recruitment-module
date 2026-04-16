@@ -231,6 +231,10 @@ namespace HR.Web.Services
 </body>
 </html>", code);
 
+            // In development, log the code to the debug output so developers can see it without a real SMTP server
+            System.Diagnostics.Trace.WriteLine(string.Format("--- [EMAIL VERIFICATION OTP] Sent to {0}: {1} ---", to, code));
+            System.Diagnostics.Debug.WriteLine(string.Format("--- [EMAIL VERIFICATION OTP] Sent to {0}: {1} ---", to, code));
+            
             // Log the code to a file for easy access during development/troubleshooting
             try 
             {

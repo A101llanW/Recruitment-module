@@ -170,9 +170,25 @@ namespace HR.Web.Controllers
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
 
-            _uow.Departments.Remove(item);
-            _uow.Complete();
-            return RedirectToAction("Index");
+            try
+            {
+                _uow.Departments.Remove(item);
+                _uow.Complete();
+                return RedirectToAction("Index");
+            }
+            catch (System.Data.Entity.Infrastructure.DbUpdateException ex)
+            {
+                // Check if it's a foreign key constraint violation
+                if (ex.InnerException != null && ex.InnerException.Message.Contains("REFERENCE constraint"))
+                {
+                    TempData["Error"] = "Cannot delete this department because it contains positions with existing job applications. Please delete the applications or reassign the positions first.";
+                    return RedirectToAction("Delete", new { id = id });
+                }
+                
+                // Handle other database update exceptions
+                TempData["Error"] = "An error occurred while deleting the department. Please try again or contact your administrator.";
+                return RedirectToAction("Delete", new { id = id });
+            }
         }
     }
 }

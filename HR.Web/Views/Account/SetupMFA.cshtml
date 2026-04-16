@@ -1,280 +1,120 @@
 @{
+    Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Security Setup";
+    ViewBag.HideNavbar = true;
 }
 
-<div class="row justify-content-center mfa-setup-wrapper">
-    <div class="col-md-6">
-        <div class="mfa-card">
-            <div class="mfa-header">
-                <h3>Secure Your Account</h3>
-                <p>Verify your email address to enable two-factor authentication.</p>
+<div class="row justify-content-center mfa-setup-wrapper animate-fadeIn">
+    <div class="col-md-5">
+        <div class="mfa-card shadow-lg border-0">
+            <div class="mfa-header text-white bg-primary p-4 rounded-top">
+                <div class="login-icon-wrap bg-white text-primary mb-3 mx-auto d-flex align-items-center justify-content-center shadow-sm" style="width: 70px; height: 70px; border-radius: 50%;">
+                    <i class="fas fa-lock fa-2x"></i>
+                </div>
+                <h3 class="font-weight-bold">Secure Your Account</h3>
+                <p class="mb-0 opacity-75">Verify your email address to enable two-factor authentication.</p>
             </div>
 
-            <div class="mfa-body">
-                <div class="email-setup-box mb-4">
-                    <div class="setup-icon-wrap">
-                        <i class="fas fa-envelope-open-text"></i>
-                    </div>
-                    <h5 class="mt-3 mb-1" style="font-weight: 700; color: var(--mfa-text-main);">Email Verification</h5>
-                    <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 16px;">We'll send a 6-digit code to your registered email:</p>
-                    <div class="masked-email">@ViewBag.Email</div>
-                    <button type="button" class="btn-action btn-send-code mt-4" data-method="Email">
+            <div class="mfa-body p-4 bg-white rounded-bottom">
+                <div class="alert alert-info border-0 shadow-sm mb-4 text-center" style="border-radius: 12px;">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    We'll send a 6-digit code to your registered email:<br/>
+                    <strong>@ViewBag.Email</strong>
+                </div>
+
+                <div class="text-center mb-4">
+                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill font-weight-bold px-4 py-2 mt-1 shadow-sm btn-send-code" data-method="Email" style="border-width: 2px;">
                         <i class="fas fa-paper-plane mr-2"></i>
                         <span class="btn-text">Send Verification Code</span>
-                        <span class="btn-loader d-none"><i class="fas fa-circle-notch fa-spin"></i></span>
+                        <span class="btn-loader d-none"><i class="fas fa-circle-notch fa-spin ml-1"></i></span>
+                    </button>
+                    <div id="firstSendStatus" class="small mt-2 font-weight-bold d-none"></div>
+                </div>
+
+                @using (Html.BeginForm("SetupMFA", "Account", FormMethod.Post, new { id = "mfaForm" }))
+                {
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="method" value="Email" />
+
+                    <div class="login-field-group mb-4">
+                        <label for="code" class="font-weight-bold text-muted small text-uppercase">Verification Code</label>
+                        <div class="login-input-wrap position-relative">
+                            <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;">
+                                <i class="fas fa-key"></i>
+                            </span>
+                            <input class="form-control form-control-lg text-center font-weight-bold" 
+                                   id="code" name="code" type="text" maxlength="6" 
+                                   placeholder="000000" required autocomplete="off" 
+                                   style="padding-left: 45px; height: 60px; border-radius: 12px; letter-spacing: 0.5rem; font-size: 1.5rem; border: 2px solid #e9ecef;" />
+                        </div>
+                        @Html.ValidationSummary(true, "", new { @class = "text-danger small font-weight-bold mt-2 d-block" })
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg btn-block shadow-lg font-weight-bold" 
+                                style="height: 55px; border-radius: 12px;" id="btnSubmit">
+                            <i class="fas fa-check-circle mr-2"></i> Enable Two-Factor
+                        </button>
+                    </div>
+                }
+
+                <div class="mt-4 text-center">
+                    <p class="text-muted small mb-2 font-weight-bold">Didn't receive the code?</p>
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill font-weight-bold px-4 py-2 mt-1 shadow-sm" style="border-width: 2px;" onclick="$('.btn-send-code').click()">
+                        <i class="fas fa-redo-alt mr-1"></i> Resend now
                     </button>
                 </div>
 
-                <div class="verification-form-area pt-4 border-top">
-                    @using (Html.BeginForm("SetupMFA", "Account", FormMethod.Post, new { id = "mfaForm" }))
-                    {
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="method" value="Email" />
-
-                        <div class="verification-input-group">
-                            <label for="code">Enter the 6-digit code</label>
-                            <div class="digit-input-wrapper">
-                                <input class="form-control" id="code" name="code" type="text"
-                                       placeholder="123456" maxlength="6" required autocomplete="off" />
-                            </div>
-                            @Html.ValidationSummary(true, "", new { @class = "text-danger-custom mt-2" })
-                            <p class="resend-hint mt-3">Didn't receive a code? <a href="javascript:void(0)" onclick="$('.btn-send-code').click()">Resend now</a></p>
-                        </div>
-
-                        <div class="mt-4">
-                            <button type="submit" class="btn-primary-mfa">Enable Two-Factor Authentication</button>
-                        </div>
-                    }
+                <div class="mt-5 pt-3 border-top text-center">
+                    <a href="@Url.Action("Logout", "Account")" class="text-muted small" style="text-decoration: none;">
+                        <i class="fas fa-arrow-left mr-1"></i> Return to Login
+                    </a>
                 </div>
-            </div>
-
-            <div class="mfa-footer">
-                <a href="@Url.Action("Login")"><i class="fas fa-long-arrow-left mr-2"></i>Return to Login</a>
             </div>
         </div>
     </div>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script>
-    $(function () {
-        $('.btn-send-code').on('click', function () {
-            var btn = $(this);
-            btn.prop('disabled', true);
-            btn.find('.btn-text').text('Sending Code...');
-            btn.find('.btn-loader').removeClass('d-none');
+@section Scripts {
+    <script>
+        $(function () {
+            $('.btn-send-code').on('click', function () {
+                var btn = $(this);
+                btn.prop('disabled', true);
+                btn.find('.btn-text').text('Sending Code...');
+                btn.find('.btn-loader').removeClass('d-none');
+                $('#firstSendStatus').removeClass('d-none text-success text-danger').text('').hide();
 
-            $.post('@Url.Action("SendSetupCode", "Account")', { method: 'Email' }, function (res) {
-                btn.find('.btn-loader').addClass('d-none');
-                if (res.success) {
-                    btn.addClass('btn-success-state').find('.btn-text').text('Code Sent!');
-                    $('#code').focus();
-                    setTimeout(function () {
-                        btn.prop('disabled', false).removeClass('btn-success-state').find('.btn-text').text('Resend Code');
-                    }, 10000);
-                } else {
+                $.post('@Url.Action("SendSetupCode", "Account")', { method: 'Email' }, function (res) {
+                    btn.find('.btn-loader').addClass('d-none');
+                    if (res.success) {
+                        btn.removeClass('btn-outline-primary').addClass('btn-success').find('.btn-text').text('Code Sent!');
+                        $('#firstSendStatus').addClass('text-success').text('✓ A Verification Code was sent!').fadeIn();
+                        $('#code').focus();
+                        setTimeout(function () {
+                            btn.prop('disabled', false).removeClass('btn-success').addClass('btn-outline-primary').find('.btn-text').text('Resend Code');
+                            $('#firstSendStatus').fadeOut();
+                        }, 10000);
+                    } else {
+                        btn.prop('disabled', false).find('.btn-text').text('Send Verification Code');
+                        $('#firstSendStatus').addClass('text-danger').text('✕ ' + (res.message || 'Error sending code.')).fadeIn();
+                    }
+                }).fail(function() {
+                    btn.find('.btn-loader').addClass('d-none');
                     btn.prop('disabled', false).find('.btn-text').text('Send Verification Code');
-                    alert(res.message || 'Error sending code.');
-                }
+                    $('#firstSendStatus').addClass('text-danger').text('Failed to connect to server.').fadeIn();
+                });
             });
+
+            $('#mfaForm').submit(function() {
+                var btn = $('#btnSubmit');
+                var originalHtml = btn.html();
+                btn.html('<i class="fas fa-spinner fa-spin mr-2"></i> Verifying...').prop('disabled', true);
+            });
+
+            $('#code').focus();
         });
+    </script>
+}
 
-        $('#code').focus();
-    });
-</script>
-
-<style>
-    :root {
-        --mfa-primary: #4f46e5;
-        --mfa-primary-hover: #4338ca;
-        --mfa-bg: #f8fafc;
-        --mfa-text-main: #1e293b;
-        --mfa-text-muted: #64748b;
-        --mfa-border: #e2e8f0;
-        --mfa-success: #10b981;
-    }
-
-    .mfa-setup-wrapper {
-        padding: 20px 0;
-        background: var(--mfa-bg);
-        min-height: 80vh;
-    }
-
-    .mfa-card {
-        background: #ffffff;
-        border-radius: 10px;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-        overflow: hidden;
-        border: 1px solid var(--mfa-border);
-    }
-
-    .mfa-header {
-        padding: 20px 20px 10px;
-        text-align: center;
-        background: linear-gradient(to bottom, #fdfbfb 0%, #ebedee 100%);
-        border-bottom: 1px solid var(--mfa-border);
-    }
-
-    .mfa-header h3 {
-        font-weight: 700;
-        color: var(--mfa-text-main);
-        margin-bottom: 5px;
-        font-size: 1.5rem;
-    }
-
-    .mfa-header p {
-        color: var(--mfa-text-muted);
-        font-size: 0.9rem;
-        margin: 0;
-    }
-
-    .mfa-body {
-        padding: 24px;
-    }
-
-    .email-setup-box {
-        background: #f1f5f9;
-        padding: 28px 24px;
-        border-radius: 12px;
-        text-align: center;
-    }
-
-    .setup-icon-wrap {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 64px;
-        height: 64px;
-        background: linear-gradient(135deg, var(--mfa-primary), #818cf8);
-        border-radius: 50%;
-        box-shadow: 0 8px 20px rgba(79,70,229,0.25);
-    }
-
-    .setup-icon-wrap i {
-        font-size: 26px;
-        color: white;
-    }
-
-    .masked-email {
-        font-family: 'Courier New', monospace;
-        font-weight: 700;
-        font-size: 1.1rem;
-        color: var(--mfa-primary);
-        background: white;
-        display: inline-block;
-        padding: 8px 20px;
-        border-radius: 8px;
-        border: 1px dashed var(--mfa-border);
-        margin-top: 8px;
-    }
-
-    .btn-action {
-        background: var(--mfa-text-main);
-        color: white;
-        border: none;
-        padding: 10px 24px;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 0.9rem;
-        transition: all 0.2s;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        cursor: pointer;
-    }
-
-    .btn-action:hover { background: #000; transform: translateY(-1px); }
-    .btn-success-state { background: var(--mfa-success) !important; }
-
-    .verification-input-group { text-align: center; }
-
-    .verification-input-group label {
-        display: block;
-        font-weight: 700;
-        color: var(--mfa-text-main);
-        margin-bottom: 16px;
-        font-size: 1.05rem;
-    }
-
-    .digit-input-wrapper {
-        display: flex;
-        justify-content: center;
-    }
-
-    #code {
-        width: 200px;
-        height: 50px;
-        font-size: 24px;
-        text-align: center;
-        letter-spacing: 8px;
-        font-weight: 700;
-        border-radius: 8px;
-        border: 2px solid var(--mfa-border);
-        color: var(--mfa-text-main);
-        transition: all 0.2s;
-        padding: 0;
-    }
-
-    #code:focus {
-        border-color: var(--mfa-primary);
-        box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
-        outline: none;
-    }
-
-    .btn-primary-mfa {
-        width: 100%;
-        height: 56px;
-        background: var(--mfa-primary);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        font-size: 1.05rem;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.2s;
-        box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2);
-    }
-
-    .btn-primary-mfa:hover {
-        background: var(--mfa-primary-hover);
-        transform: translateY(-2px);
-        box-shadow: 0 20px 25px -5px rgba(79, 70, 229, 0.25);
-    }
-
-    .resend-hint {
-        font-size: 0.9rem;
-        color: var(--mfa-text-muted);
-        margin-top: 12px;
-    }
-
-    .resend-hint a {
-        color: var(--mfa-primary);
-        font-weight: 600;
-        text-decoration: none;
-    }
-
-    .mfa-footer {
-        padding: 15px;
-        text-align: center;
-        border-top: 1px solid var(--mfa-border);
-    }
-
-    .mfa-footer a {
-        color: var(--mfa-text-muted);
-        text-decoration: none;
-        font-size: 0.9rem;
-        font-weight: 500;
-    }
-
-    .text-danger-custom {
-        color: #ef4444;
-        font-size: 0.85rem;
-        font-weight: 600;
-    }
-
-    @@media (max-width: 768px) {
-        .mfa-body { padding: 20px; }
-        #code { width: 100%; }
-    }
-</style>
+@Html.Partial("_AuthStyles")

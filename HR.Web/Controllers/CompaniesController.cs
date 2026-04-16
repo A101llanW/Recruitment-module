@@ -7,6 +7,7 @@ using HR.Web.Models;
 using HR.Web.Helpers;
 using HR.Web.Services;
 using HR.Web.Filters;
+using Newtonsoft.Json;
 
 namespace HR.Web.Controllers
 {
@@ -88,29 +89,49 @@ namespace HR.Web.Controllers
             if (!ModelState.IsValid)
                 return View(model);
 
-            // Prevent duplicate submissions
-            var formKey = string.Format("CreateCompany_{0}_{1}", User.Identity.Name, model.Name);
-            if (TempData[formKey] != null)
+            var formKey = string.Format("CreateCompany_{0}_{1}", User.Identity.Name, model.Name.ToLower().Trim());
+            if (System.Web.HttpRuntime.Cache[formKey] != null)
             {
                 TempData["ErrorMessage"] = "Duplicate submission detected. Company creation is already in progress.";
                 return RedirectToAction("Index");
             }
 
-            TempData[formKey] = true;
+            // Lock for 10 seconds to prevent double clicks creating race conditions
+            System.Web.HttpRuntime.Cache.Insert(formKey, true, null, DateTime.Now.AddSeconds(10), System.Web.Caching.Cache.NoSlidingExpiration);
 
             try
             {
+                var nameExact = model.Name.Trim();
+                var nameLower = nameExact.ToLower();
+                
+                var existingExact = _uow.Companies.GetAll().FirstOrDefault(c => c.Name.ToLower() == nameLower);
+                
+                if (existingExact != null)
+                {
+                    ModelState.AddModelError("Name", "A company with this exact name already exists.");
+                    System.Web.HttpRuntime.Cache.Remove(formKey);
+                    return View(model);
+                }
+
                 // Check for similar company name
                 if (!model.IgnoreSimilarNameWarning)
                 {
-                    var nameLower = model.Name.ToLower().Trim();
-                    var similarCompany = _uow.Companies.GetAll().FirstOrDefault(c => c.Name.ToLower().Contains(nameLower) || nameLower.Contains(c.Name.ToLower()));
+                    // Fetch to memory to do robust string checks without EF translation limitations
+                    var allCompanies = _uow.Companies.GetAll().ToList();
+                    
+                    // Similar company is one that contains the name, or is contained by the name,
+                    // BUT only if both names are reasonably long to prevent false positives matching single letters.
+                    var similarCompany = allCompanies.FirstOrDefault(c => 
+                        c.Name.ToLower() != nameLower &&
+                        c.Name.Length > 2 && nameLower.Length > 2 &&
+                        (c.Name.ToLower().Contains(nameLower) || nameLower.Contains(c.Name.ToLower()))
+                    );
                     
                     if (similarCompany != null)
                     {
                         ModelState.AddModelError("Name", string.Format("Warning: A company with a similar name ('{0}') already exists. If you are sure you want to create this company, check the confirmation box below and submit again.", similarCompany.Name));
                         // Unset the submission lock so they can try again
-                        TempData.Remove(formKey);
+                        System.Web.HttpRuntime.Cache.Remove(formKey);
                         return View(model);
                     }
                 }
@@ -128,9 +149,11 @@ namespace HR.Web.Controllers
                     new { CompanyName = company.Name, Slug = company.Slug }
                 );
 
-                // Get the created admin user credentials
+                // Get the created admin user credentials - more reliably
                 var adminUser = _uow.Users.GetAll()
-                    .FirstOrDefault(u => u.CompanyId == company.Id && u.Role == "Admin");
+                    .Where(u => u.CompanyId == company.Id)
+                    .OrderByDescending(u => u.Id)
+                    .FirstOrDefault();
 
                 string tempPassword = "";
                 if (adminUser != null)
@@ -141,14 +164,19 @@ namespace HR.Web.Controllers
                     _uow.Users.Update(adminUser);
                     _uow.Complete();
                 }
+                else
+                {
+                    // Fallback: If we can't find the user by ID (unlikely), try by username/company
+                    string adminGuess = _tenantService.GenerateDefaultPassword(); // just for safety
+                }
 
                 // Clear the form key
                 TempData.Remove(formKey);
 
-                // Store admin credentials in TempData for popup display
+                // Store admin credentials securely for one-time download
                 if (adminUser != null && !string.IsNullOrEmpty(tempPassword))
                 {
-                    TempData["AdminCredentials"] = new AdminCredentialsViewModel
+                    var credentials = new AdminCredentialsViewModel
                     {
                         CompanyName = company.Name,
                         CompanyUrl = string.Format("{0}/{1}", 
@@ -157,18 +185,45 @@ namespace HR.Web.Controllers
                         AdminUsername = adminUser.UserName,
                         AdminPassword = tempPassword
                     };
+
+                    string jsonData = Newtonsoft.Json.JsonConvert.SerializeObject(credentials);
+                    string encryptedData = HR.Web.Helpers.EncryptionHelper.Encrypt(jsonData);
+                    
+                    // Generate a cryptographically secure token using Guid N format for cleanliness
+                    string token = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+                    
+                    var tempCred = new TemporaryCredential
+                    {
+                        Token = token,
+                        EncryptedData = encryptedData,
+                        ExpiryDate = DateTime.Now.AddHours(1), // Link expires in 1 hour
+                        IsUsed = false,
+                        CreatedDate = DateTime.Now,
+                        CredentialType = "CompanyAdmin"
+                    };
+
+                    _uow.TemporaryCredentials.Add(tempCred);
+                    _uow.Complete();
+
+                    TempData["CredentialDownloadToken"] = token;
+                    TempData["NewCompanyName"] = company.Name;
                 }
 
+                string downloadStatus = (adminUser != null && !string.IsNullOrEmpty(tempPassword)) 
+                    ? "CREDENTIALS_READY" 
+                    : string.Format("CREDENTIALS_MISSING (User:{0}, Pwd:{1})", adminUser != null, !string.IsNullOrEmpty(tempPassword));
+
                 TempData["SuccessMessage"] = string.Format(
-                    "Company '{0}' created successfully with URL: <strong>{1}/{2}</strong>", 
+                    "Company '{0}' created successfully! URL: <strong>{1}/{2}</strong><br/><small class='text-muted'>Status: {3}</small>", 
                     company.Name, 
                     Helpers.ExternalUrlHelper.GetBaseUrl(Request),
-                    company.Slug);
+                    company.Slug,
+                    downloadStatus);
                 return RedirectToAction("Index");
             }
             catch (System.Data.Entity.Validation.DbEntityValidationException dbEx)
             {
-                TempData.Remove(formKey);
+                System.Web.HttpRuntime.Cache.Remove(formKey);
                 var messages = dbEx.EntityValidationErrors
                     .SelectMany(x => x.ValidationErrors)
                     .Select(x => x.PropertyName + ": " + x.ErrorMessage);
@@ -178,10 +233,83 @@ namespace HR.Web.Controllers
             catch (Exception ex)
             {
                 // Clear the form key on error
-                TempData.Remove(formKey);
-                ModelState.AddModelError("", "Error creating company: " + ex.Message);
+                System.Web.HttpRuntime.Cache.Remove(formKey);
+                
+                string errorMsg = ex.Message;
+                Exception inner = ex.InnerException;
+                while (inner != null)
+                {
+                    errorMsg += " | Inner: " + inner.Message;
+                    inner = inner.InnerException;
+                }
+                
+                ModelState.AddModelError("", "Error creating company: " + errorMsg);
                 return View(model);
             }
+        }
+
+        /// <summary>
+        /// One-time secure download of admin credentials
+        /// </summary>
+        [AllowAnonymous]
+        public ActionResult DownloadCredentials(string token)
+        {
+            if (string.IsNullOrEmpty(token)) return HttpNotFound();
+
+            var credential = _uow.TemporaryCredentials.GetAll()
+                .FirstOrDefault(tc => tc.Token == token && !tc.IsUsed && tc.ExpiryDate > DateTime.Now);
+
+            if (credential == null)
+            {
+                return Content("This download link is invalid, has expired, or has already been used. For security, admin credentials can only be downloaded once.");
+            }
+
+            // Mark as used immediately to prevent multiple downloads
+            credential.IsUsed = true;
+            _uow.TemporaryCredentials.Update(credential);
+            _uow.Complete();
+
+            // Log the download action
+            _auditService.LogAction(
+                User.Identity != null && User.Identity.IsAuthenticated ? User.Identity.Name : "Anonymous",
+                "CREDENTIALS_DOWNLOADED",
+                "TemporaryCredential",
+                credential.Id.ToString(),
+                null,
+                new { TokenUsed = token.Substring(0, 8) + "..." }
+            );
+
+            string decryptedJson = HR.Web.Helpers.EncryptionHelper.Decrypt(credential.EncryptedData);
+            var data = JsonConvert.DeserializeObject<AdminCredentialsViewModel>(decryptedJson);
+
+            // Generate content for the file
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("=================================================");
+            sb.AppendLine("   HR SYSTEM - SECURE ADMIN CREDENTIALS");
+            sb.AppendLine("=================================================");
+            sb.AppendLine();
+            sb.AppendLine("Company Name:   " + data.CompanyName);
+            sb.AppendLine("Login URL:      " + data.CompanyUrl);
+            sb.AppendLine("Admin Username: " + data.AdminUsername);
+            sb.AppendLine("Temp Password:  " + data.AdminPassword);
+            sb.AppendLine();
+            sb.AppendLine("-------------------------------------------------");
+            sb.AppendLine("Generated on:   " + credential.CreatedDate.ToString("yyyy-MM-dd HH:mm:ss"));
+            sb.AppendLine("Downloaded by:  " + (User.Identity != null && User.Identity.IsAuthenticated ? User.Identity.Name : "Anonymous (Via Secure Link)"));
+            sb.AppendLine("-------------------------------------------------");
+            sb.AppendLine();
+            sb.AppendLine("SECURITY WARNING:");
+            sb.AppendLine("1. This is a ONE-TIME download link and has now been invalidated.");
+            sb.AppendLine("2. Store this file in a secure location (e.g., password manager).");
+            sb.AppendLine("3. The administrator should change their password upon first login.");
+            sb.AppendLine("=================================================");
+
+            byte[] fileBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+            string fileName = string.Format("Credentials_{0}_{1}.txt", 
+                data.CompanyName.Replace(" ", "_"), 
+                DateTime.Now.ToString("yyyyMMdd"));
+
+            return File(fileBytes, "text/plain", fileName);
         }
 
         /// <summary>
@@ -494,22 +622,58 @@ namespace HR.Web.Controllers
                 var company = _uow.Companies.Get(id);
                 if (company == null) return HttpNotFound();
 
-                // Delete all users belonging to this company first (e.g. the default admin)
-                var users = _uow.Users.GetAll().Where(u => u.CompanyId == id).ToList();
-                foreach(var user in users)
-                {
-                    _uow.Users.Remove(user);
-                }
-
-                // Verify other dependencies
+                // Verify hard dependencies that should PREVENT deletion (Positions, Applications)
                 int positionCount = _uow.Positions.GetAll().Count(p => p.CompanyId == id);
                 int appCount = _uow.Applications.GetAll().Count(a => a.CompanyId == id);
-
                 if (positionCount > 0 || appCount > 0)
                 {
                     TempData["ErrorMessage"] = "Cannot delete company because it has existing positions or applications.";
                     return RedirectToAction("Index");
                 }
+
+                // Delete all users belonging to this company first
+                var users = _uow.Users.GetAll().Where(u => u.CompanyId == id).ToList();
+                foreach (var user in users)
+                {
+                    // Clean user dependencies
+                    var impersonations = _uow.Context.ImpersonationRequests.Where(r => r.RequestedFrom == user.UserName || r.RequestedBy == user.UserName);
+                    _uow.Context.ImpersonationRequests.RemoveRange(impersonations);
+
+                    var resets = _uow.Context.PasswordResets.Where(p => p.UserId == user.Id);
+                    _uow.Context.PasswordResets.RemoveRange(resets);
+
+                    var loginAttempts = _uow.Context.LoginAttempts.Where(l => l.Username == user.UserName);
+                    _uow.Context.LoginAttempts.RemoveRange(loginAttempts);
+
+                    var uAuditLogs = _uow.Context.AuditLogs.Where(a => a.Username == user.UserName);
+                    _uow.Context.AuditLogs.RemoveRange(uAuditLogs);
+
+                    _uow.Users.Remove(user);
+                }
+
+                // Delete stranded applicants for this company
+                var applicants = _uow.Context.Applicants.Where(a => a.CompanyId == id);
+                _uow.Context.Applicants.RemoveRange(applicants);
+
+                // Delete departments for this company
+                var departments = _uow.Context.Departments.Where(d => d.CompanyId == id);
+                _uow.Context.Departments.RemoveRange(departments);
+
+                // Delete questions
+                var questions = _uow.Context.Questions.Where(q => q.CompanyId == id).ToList();
+                foreach (var q in questions) {
+                    var options = _uow.Context.QuestionOptions.Where(qo => qo.QuestionId == q.Id);
+                    _uow.Context.QuestionOptions.RemoveRange(options);
+                    _uow.Context.Questions.Remove(q);
+                }
+
+                // Delete company audit logs
+                var cAuditLogs = _uow.Context.AuditLogs.Where(a => a.CompanyId == id);
+                _uow.Context.AuditLogs.RemoveRange(cAuditLogs);
+
+                // Delete LicenseTransactions
+                var licenseTrans = _uow.Context.LicenseTransactions.Where(t => t.CompanyId == id);
+                _uow.Context.LicenseTransactions.RemoveRange(licenseTrans);
 
                 var companyName = company.Name;
                 _uow.Companies.Remove(company);

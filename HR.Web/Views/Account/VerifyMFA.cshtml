@@ -1,249 +1,109 @@
 @{
+    Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Authentication Required";
+    ViewBag.HideNavbar = true;
 }
 
-<div class="row justify-content-center mfa-setup-wrapper">
-    <div class="col-md-6">
-        <div class="mfa-card">
-            <div class="mfa-header">
-                <h3>Verify Your Identity</h3>
-                <p>Complete the two-step verification to access your account.</p>
+<div class="row justify-content-center mfa-setup-wrapper animate-fadeIn">
+    <div class="col-md-5">
+        <div class="mfa-card shadow-lg border-0">
+            <div class="mfa-header text-white bg-primary p-4 rounded-top">
+                <div class="login-icon-wrap bg-white text-primary mb-3 mx-auto d-flex align-items-center justify-content-center shadow-sm" style="width: 70px; height: 70px; border-radius: 50%;">
+                    <i class="fas fa-shield-alt fa-2x"></i>
+                </div>
+                <h3 class="font-weight-bold">Verify Your Identity</h3>
+                <p class="mb-0 opacity-75">Complete the two-step verification to access your account.</p>
             </div>
 
-            <div class="mfa-body">
-                <div class="text-center mb-5">
-                    <div class="active-method-info">
-                        <div class="method-icon-large text-info"><i class="fas fa-envelope-open-text"></i></div>
-                        <h5 class="mt-3">Email Verification</h5>
-                        <p class="text-muted">A verification code has been sent to:</p>
-                        <div class="masked-email">@ViewBag.EmailHint</div>
+            <div class="mfa-body p-4 bg-white rounded-bottom">
+                <div class="alert alert-info border-0 shadow-sm mb-4" style="border-radius: 12px;">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    We've sent a 6-digit verification code to <strong>@ViewBag.EmailHint</strong>. 
+                    Please enter it below to complete your login.
+                </div>
+
+                @using (Html.BeginForm("VerifyMFA", "Account", FormMethod.Post, new { id = "mfaVerifyForm" }))
+                {
+                    @Html.AntiForgeryToken()
+                    
+                    <div class="login-field-group mb-4">
+                        <label for="code" class="font-weight-bold text-muted small text-uppercase">Verification Code</label>
+                        <div class="login-input-wrap position-relative">
+                            <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;">
+                                <i class="fas fa-key"></i>
+                            </span>
+                            <input class="form-control form-control-lg text-center font-weight-bold" 
+                                   id="code" name="code" type="text" maxlength="6" 
+                                   placeholder="000000" required autocomplete="off" autofocus
+                                   style="padding-left: 45px; height: 60px; border-radius: 12px; letter-spacing: 0.5rem; font-size: 1.5rem; border: 2px solid #e9ecef;" />
+                        </div>
+                        @Html.ValidationSummary(true, "", new { @class = "text-danger small font-weight-bold mt-2 d-block" })
                     </div>
+                    
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg btn-block shadow-lg font-weight-bold" 
+                                style="height: 55px; border-radius: 12px;" id="btnSubmit">
+                            <i class="fas fa-check-circle mr-2"></i> Verify & Sign In
+                        </button>
+                    </div>
+                }
+
+                <div class="mt-4 text-center">
+                    <p class="text-muted small mb-2 font-weight-bold">Didn't receive the code?</p>
+                    <button type="button" id="btnResend" class="btn btn-outline-primary btn-sm rounded-pill font-weight-bold px-4 py-2 mt-1 shadow-sm" style="border-width: 2px;">
+                        <i class="fas fa-sync-alt mr-1"></i> Resend Verification Code
+                    </button>
+                    <div id="resendMessage" class="small mt-2 font-weight-bold"></div>
                 </div>
 
-                <div class="verification-form-area pt-4 border-top">
-                    @using (Html.BeginForm("VerifyMFA", "Account", FormMethod.Post, new { id = "mfaVerifyForm" }))
-                    {
-                        @Html.AntiForgeryToken()
-                        
-                        <div class="verification-input-group">
-                            <label for="code">Enter the 6-digit code</label>
-                            <div class="digit-input-wrapper">
-                                <input class="form-control" id="code" name="code" type="text" placeholder="123456" maxlength="6" autofocus required autocomplete="off" />
-                            </div>
-                            @Html.ValidationSummary(true, "", new { @class = "text-danger-custom" })
-                            
-                            <div class="mt-4">
-                                <button type="button" id="btnResend" class="btn-link-mfa">
-                                    <i class="fas fa-redo-alt mr-1"></i> Didn't receive a code? <span class="resend-text">Resend now</span>
-                                    <span class="btn-loader d-none ml-2"><i class="fas fa-circle-notch fa-spin"></i></span>
-                                </button>
-                                <div id="resendStatus" class="small mt-2 font-weight-bold d-none"></div>
-                            </div>
-                        </div>
-                        
-                        <div class="mt-5">
-                            <button type="submit" class="btn-primary-mfa">Verify & Sign In</button>
-                        </div>
-                    }
+                <div class="mt-5 pt-3 border-top text-center">
+                    <a href="@Url.Action("Logout", "Account")" class="text-muted small" style="text-decoration: none;">
+                        <i class="fas fa-arrow-left mr-1"></i> Return to Login
+                    </a>
                 </div>
-            </div>
-
-            <div class="mfa-footer">
-                <a href="@Url.Action("Login")"><i class="fas fa-long-arrow-left mr-2"></i>Return to Login</a>
             </div>
         </div>
     </div>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script>
-    $(function() {
-        $('#btnResend').on('click', function() {
-            var btn = $(this);
-            var status = $('#resendStatus');
-            var loader = btn.find('.btn-loader');
-            
-            btn.prop('disabled', true).addClass('opacity-50');
-            status.removeClass('d-none text-success text-danger').text('').hide();
-            loader.removeClass('d-none');
+@section Scripts {
+    <script>
+        $(function() {
+            $('#code').focus();
 
-            $.post('@Url.Action("ResendCode")', function(res) {
-                loader.addClass('d-none');
-                if (res.success) {
-                    status.addClass('text-success').text('✓ A new code has been sent!').fadeIn();
-                    setTimeout(function() { 
-                        status.fadeOut(); 
-                        btn.prop('disabled', false).removeClass('opacity-50'); 
-                    }, 10000);
-                } else {
-                    status.addClass('text-danger').text('✕ ' + (res.message || 'Failed to resend code.')).fadeIn();
-                    btn.prop('disabled', false).removeClass('opacity-50');
-                }
+            $('#mfaVerifyForm').submit(function() {
+                var btn = $('#btnSubmit');
+                var originalHtml = btn.html();
+                btn.html('<i class="fas fa-spinner fa-spin mr-2"></i> Verifying...').prop('disabled', true);
+            });
+
+            $('#btnResend').on('click', function() {
+                var btn = $(this)[0];
+                var originalHtml = btn.innerHTML;
+                
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Sending...';
+
+                $.post('@Url.Action("ResendCode")', function(re) {
+                    if (re.success) {
+                        $('#resendMessage').removeClass('text-danger').addClass('text-success').text('✓ A new code has been sent!');
+                    } else {
+                        $('#resendMessage').removeClass('text-success').addClass('text-danger').text('✕ ' + (re.message || 'Failed to resend code.'));
+                    }
+                    
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = originalHtml;
+                        setTimeout(() => $('#resendMessage').fadeOut(), 3000);
+                    }, 1000);
+                }).fail(function() {
+                    $('#resendMessage').removeClass('text-success').addClass('text-danger').text('Failed to connect to server.');
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                });
             });
         });
-    });
-</script>
+    </script>
+}
 
-<style>
-    :root {
-        --mfa-primary: #4f46e5;
-        --mfa-primary-hover: #4338ca;
-        --mfa-bg: #f8fafc;
-        --mfa-text-main: #1e293b;
-        --mfa-text-muted: #64748b;
-        --mfa-border: #e2e8f0;
-        --mfa-success: #10b981;
-    }
-
-    .mfa-setup-wrapper {
-        padding: 20px 0;
-        background: var(--mfa-bg);
-        min-height: 80vh;
-    }
-
-    .mfa-card {
-        background: #ffffff;
-        border-radius: 10px;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-        overflow: hidden;
-        border: 1px solid var(--mfa-border);
-    }
-
-    .mfa-header {
-        padding: 20px 20px 10px;
-        text-align: center;
-        background: linear-gradient(to bottom, #fdfbfb 0%, #ebedee 100%);
-        border-bottom: 1px solid var(--mfa-border);
-    }
-
-    .mfa-header h3 {
-        font-weight: 700;
-        color: var(--mfa-text-main);
-        margin-bottom: 5px;
-        font-size: 1.5rem;
-    }
-
-    .mfa-header p {
-        color: var(--mfa-text-muted);
-        font-size: 0.9rem;
-    }
-
-    .mfa-body {
-        padding: 20px;
-    }
-
-    .active-method-info {
-        padding: 10px;
-    }
-
-    .method-icon-large {
-        font-size: 48px;
-        margin-bottom: 10px;
-    }
-
-    .masked-email {
-        font-family: 'Courier New', monospace;
-        font-weight: 700;
-        font-size: 1.1rem;
-        color: var(--mfa-primary);
-        background: #f1f5f9;
-        display: inline-block;
-        padding: 6px 16px;
-        border-radius: 8px;
-        margin-top: 10px;
-        border: 1px dashed var(--mfa-border);
-    }
-
-    .verification-input-group {
-        text-align: center;
-    }
-
-    .verification-input-group label {
-        display: block;
-        font-weight: 700;
-        color: var(--mfa-text-main);
-        margin-bottom: 20px;
-        font-size: 1.1rem;
-    }
-
-    .digit-input-wrapper {
-        display: flex;
-        justify-content: center;
-    }
-
-    #code {
-        width: 200px;
-        height: 50px;
-        font-size: 24px;
-        text-align: center;
-        letter-spacing: 8px;
-        font-weight: 700;
-        border-radius: 8px;
-        border: 2px solid var(--mfa-border);
-        color: var(--mfa-text-main);
-        transition: all 0.2s;
-        padding: 0;
-    }
-
-    #code:focus {
-        border-color: var(--mfa-primary);
-        box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
-        outline: none;
-    }
-
-    .btn-primary-mfa {
-        width: 100%;
-        height: 56px;
-        background: var(--mfa-primary);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        font-size: 1.1rem;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.2s;
-        box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2);
-    }
-
-    .btn-primary-mfa:hover {
-        background: var(--mfa-primary-hover);
-        transform: translateY(-2px);
-        box-shadow: 0 20px 25px -5px rgba(79, 70, 229, 0.25);
-    }
-
-    .btn-link-mfa {
-        background: none;
-        border: none;
-        color: var(--mfa-text-muted);
-        font-size: 0.9rem;
-        cursor: pointer;
-        transition: color 0.2s;
-    }
-
-    .btn-link-mfa:hover {
-        color: var(--mfa-primary);
-    }
-
-    .mfa-footer {
-        padding: 15px;
-        text-align: center;
-        border-top: 1px solid var(--mfa-border);
-    }
-
-    .mfa-footer a {
-        color: var(--mfa-text-muted);
-        text-decoration: none;
-        font-size: 0.9rem;
-        font-weight: 500;
-    }
-
-    .text-danger-custom {
-        color: #ef4444;
-        font-size: 0.85rem;
-        font-weight: 600;
-    }
-
-    .opacity-50 {
-        opacity: 0.5;
-    }
-</style>
+@Html.Partial("_AuthStyles")

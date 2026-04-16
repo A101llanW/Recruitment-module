@@ -17,6 +17,13 @@ namespace HR.Web.Controllers
 {
     public class AccountController : Controller
     {
+        // Captcha image helper class
+        public class CaptchaImage
+        {
+            public int Index { get; set; }
+            public string Base64 { get; set; }
+            public string Label { get; set; }
+        }
         private readonly UnitOfWork _uow = new UnitOfWork();
         private SecurityService _securityService;
         private AuditService _auditService;
@@ -25,7 +32,7 @@ namespace HR.Web.Controllers
         private SecurityService SecuritySvc => _securityService ?? (_securityService = new SecurityService());
         private AuditService AuditSvc => _auditService ?? (_auditService = new AuditService());
         private IEmailService EmailSvc => _emailService ?? (_emailService = new EmailService());
-        private CaptchaService _captchaService = new CaptchaService();
+        private RealisticCaptchaService _captchaService = new RealisticCaptchaService();
 
         [AllowAnonymous]
         public ActionResult Login(string returnUrl)
@@ -46,9 +53,6 @@ namespace HR.Web.Controllers
                     }
                 }
             }
-
-            // Generate Captcha for all login attempts
-            PrepareCaptcha();
 
             ViewBag.ReturnUrl = returnUrl;
             return View();
@@ -77,23 +81,45 @@ namespace HR.Web.Controllers
             }
 
             // 2. Validate Captcha
-            string sessionCaptcha = Session["CaptchaCode"] as string;
-            Session.Remove("CaptchaCode");
-
-            if (string.IsNullOrEmpty(captcha) || !string.Equals(captcha, sessionCaptcha, StringComparison.OrdinalIgnoreCase))
+            string sessionCaptchaText = Session["CaptchaText"] as string;
+            DateTime? sessionExpiry = Session["CaptchaExpiry"] as DateTime?;
+            string sessionCaptchaId = Session["CaptchaId"] as string;
+            
+            if (string.IsNullOrEmpty(sessionCaptchaText) || !sessionExpiry.HasValue || string.IsNullOrEmpty(sessionCaptchaId))
             {
-                ModelState.AddModelError("", "Invalid security code. Please try again.");
-                PrepareCaptcha();
+                ModelState.AddModelError("", "CAPTCHA session expired. Please try again.");
                 ViewBag.ReturnUrl = returnUrl;
                 return View();
             }
+            
+            if (DateTime.UtcNow > sessionExpiry.Value)
+            {
+                // Clear expired captcha
+                Session.Remove("CaptchaText");
+                Session.Remove("CaptchaExpiry");
+                Session.Remove("CaptchaId");
+                ModelState.AddModelError("", "CAPTCHA expired. Please try again.");
+                ViewBag.ReturnUrl = returnUrl;
+                return View();
+            }
+            
+            if (string.IsNullOrEmpty(captcha) || !string.Equals(captcha, sessionCaptchaText, StringComparison.Ordinal))
+            {
+                ModelState.AddModelError("", "Invalid security code. Please try again.");
+                ViewBag.ReturnUrl = returnUrl;
+                return View();
+            }
+
+            // Captcha validated; clear it so it can't be reused.
+            Session.Remove("CaptchaText");
+            Session.Remove("CaptchaExpiry");
+            Session.Remove("CaptchaId");
 
             // 3. Basic Validation
             var isGlobalSuperAdmin = !string.IsNullOrEmpty(username) && string.Equals(username, "SuperAdmin", StringComparison.OrdinalIgnoreCase) && string.IsNullOrEmpty(urlTenantToken);
             if (string.IsNullOrWhiteSpace(username))
             {
                 ModelState.AddModelError("", "Username is required.");
-                PrepareCaptcha();
                 SecuritySvc.RecordLoginAttempt(username, clientIP, false, targetCompanyId, "Username required");
                 AuditSvc.LogLogin(username, false, "Username required");
                 return View();
@@ -102,7 +128,6 @@ namespace HR.Web.Controllers
             if (string.IsNullOrWhiteSpace(password))
             {
                 ModelState.AddModelError("", "Password is required.");
-                PrepareCaptcha();
                 SecuritySvc.RecordLoginAttempt(username, clientIP, false, targetCompanyId, "Password required");
                 AuditSvc.LogLogin(username, false, "Password required");
                 return View();
@@ -124,7 +149,6 @@ namespace HR.Web.Controllers
                 AuditSvc.LogAction("ANONYMOUS", "IP_RATE_LIMITED", "Account", "",
                     string.Format("IP {0} blocked after {1} failed attempts in {2} minutes", clientIP, ipFailureCount, ipWindowMinutes));
                 ModelState.AddModelError("", "Too many failed login attempts from your location. Please wait 15 minutes before trying again.");
-                PrepareCaptcha();
                 return View();
             }
             // ────────────────────────────────────────────────────────────────────────
@@ -164,7 +188,6 @@ namespace HR.Web.Controllers
                     : TimeSpan.Zero;
                 
                 ModelState.AddModelError("", string.Format("Account is locked. Please try again in {0} minutes.", remainingTime.Minutes));
-                PrepareCaptcha();
                 SecuritySvc.RecordLoginAttempt(username, clientIP, false, effectiveCompanyId, "Account locked");
                 AuditSvc.LogLogin(username, false, string.Format("Account locked. Try again in {0} minutes", remainingTime.Minutes));
                 return View();
@@ -174,7 +197,6 @@ namespace HR.Web.Controllers
             if (!isEmail && candidates.Count > 1 && !targetCompanyId.HasValue)
             {
                 ModelState.AddModelError("", "This username is used by multiple companies. Please use your email address to help us find the right account.");
-                PrepareCaptcha();
                 return View();
             }
 
@@ -182,7 +204,6 @@ namespace HR.Web.Controllers
             {
                 ViewBag.MultiCandidates = candidates;
                 ModelState.AddModelError("", "We found multiple accounts for this email. Please select the correct portal below.");
-                PrepareCaptcha();
                 ViewBag.ReturnUrl = returnUrl;
                 return View();
             }
@@ -193,7 +214,6 @@ namespace HR.Web.Controllers
             {
                 // Generic message — do not reveal whether the identifier exists
                 ModelState.AddModelError("", "Invalid username or password.");
-                PrepareCaptcha();
                 SecuritySvc.RecordLoginAttempt(username, clientIP, false, targetCompanyId, "Identifier not found");
                 AuditSvc.LogLogin(username, false, "Invalid identifier: " + username);
                 return View();
@@ -222,7 +242,6 @@ namespace HR.Web.Controllers
                 }
 
                 ModelState.AddModelError("", warningMessage);
-                PrepareCaptcha();
                 AuditSvc.LogLogin(username, false, "Invalid password");
                 return View();
             }
@@ -299,16 +318,19 @@ namespace HR.Web.Controllers
                 _uow.Users.Update(user);
                 _uow.Complete();
 
-                // Fire-and-forget email sending
+                // Fire-and-forget email sending - avoid HttpContext dependencies in background thread
                 var userEmail = user.Email;
                 var securityToken = otpCode;
-                System.Threading.Tasks.Task.Run(() => {
+                
+                System.Threading.Tasks.Task.Run(async () => {
                     try {
-                        var emailSvc = new EmailService();
-                        emailSvc.SendEmailVerificationOtpAsync(userEmail, securityToken).Wait();
+                        // Create services without HttpContext dependencies
+                        var emailSvc = new EmailService(new SettingsService());
+                        await emailSvc.SendEmailVerificationOtpAsync(userEmail, securityToken);
                     } catch (Exception ex) {
-                        AuditSvc.LogAction(username, "EMAIL_VERIFICATION_SEND_FAIL", "Account", user.Id.ToString(), 
-                            "Failed to send email verification OTP: " + ex.Message);
+                        // Log error without HttpContext-dependent services
+                        System.Diagnostics.Debug.WriteLine("--- [EMAIL VERIFICATION ERROR] Failed to send: " + ex.Message);
+                        System.Diagnostics.Trace.WriteLine("--- [EMAIL VERIFICATION ERROR] Failed to send: " + ex.Message);
                     }
                 });
 
@@ -346,7 +368,6 @@ namespace HR.Web.Controllers
                 if (string.IsNullOrEmpty(correctTenantSlug))
                 {
                     ModelState.AddModelError("", "Your account is not associated with an active company.");
-                    PrepareCaptcha();
                     return View();
                 }
 
@@ -378,7 +399,6 @@ namespace HR.Web.Controllers
                 AuditSvc.LogAction(username, "LOGIN_CRASH", "Account", "", 
                     wasSuccessful: false, errorMessage: "CRASH: " + ex.Message + " | Stack: " + ex.StackTrace);
                 ModelState.AddModelError("", "A system error occurred. Our team has been notified.");
-                PrepareCaptcha();
                 return View();
             }
         }
@@ -677,13 +697,44 @@ namespace HR.Web.Controllers
             return RedirectToAction("Profile");
         }
 
+        private User GetCurrentUserFromIdentity(string username)
+        {
+            var lowerUsername = username.ToLower();
+            int? companyId = null;
+            
+            // Try to extract from FormsIdentity
+            var formsIdentity = User.Identity as System.Web.Security.FormsIdentity;
+            if (formsIdentity == null && User is System.Web.Security.RolePrincipal rolePrincipal)
+            {
+                formsIdentity = rolePrincipal.Identity as System.Web.Security.FormsIdentity;
+            }
+            
+            if (formsIdentity != null)
+            {
+                var props = formsIdentity.Ticket.UserData.Split('|');
+                if (props.Length >= 2 && int.TryParse(props[1], out int cId)) companyId = cId;
+            }
+            
+            var user = companyId.HasValue 
+                ? _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername && u.CompanyId == companyId.Value)
+                : _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername && u.CompanyId == null);
+                
+            // Powerful Fallback: If scoped query failed (e.g. identity type mismatch), try global lookup.
+            // This is safe because we already matched the authenticated username.
+            if (user == null)
+            {
+                user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+            }
+            
+            return user;
+        }
+
         [HttpGet]
         [Authorize]
         public ActionResult VerifyEmail()
         {
             var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+            var user = GetCurrentUserFromIdentity(username);
 
             if (user == null) return HttpNotFound();
             
@@ -700,10 +751,9 @@ namespace HR.Web.Controllers
         [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<ActionResult> UpdateAndSendVerification(string newEmail)
-        {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           {
             var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+            var user = GetCurrentUserFromIdentity(username);
 
             if (user == null) return HttpNotFound();
             
@@ -713,7 +763,9 @@ namespace HR.Web.Controllers
                 return RedirectToAction("VerifyEmail");
             }
 
-            // Update user email
+            AuditSvc.LogAction(username, "EMAIL_VERIFICATION_EMAIL_SUBMITTED", "Account", user.Id.ToString(),
+                "User submitted email for verification", new { newEmail = newEmail, tenant = (string)RouteData.Values["tenant"] });
+
             user.Email = newEmail.Trim();
             
             // Generate OTP
@@ -741,14 +793,15 @@ namespace HR.Web.Controllers
             }
         }
 
+
+
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<ActionResult> SendVerificationEmail()
         {
             var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+            var user = GetCurrentUserFromIdentity(username);
 
             if (user == null) return HttpNotFound();
             if (user.IsEmailVerified) return Json(new { success = false, message = "Email is already verified." });
@@ -785,8 +838,7 @@ namespace HR.Web.Controllers
         public ActionResult VerifyEmailSubmit(string code)
         {
             var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+            var user = GetCurrentUserFromIdentity(username);
 
             if (user == null) return HttpNotFound();
 
@@ -806,6 +858,15 @@ namespace HR.Web.Controllers
             user.IsEmailVerified = true;
             user.EmailVerificationCode = null;
             user.EmailVerificationExpiry = null;
+
+            // Automatically enable Email MFA since they just verified their email
+            // This satisfies the 2FA requirement going forward
+            if (!user.IsTwoFactorEnabled)
+            {
+                user.IsTwoFactorEnabled = true;
+                user.MfaMethod = "Email";
+            }
+
             _uow.Users.Update(user);
             _uow.Complete();
 
@@ -821,10 +882,43 @@ namespace HR.Web.Controllers
                 _uow.Complete();
             }
 
-            // Redirect to dashboard
+            // 5. Handle Redirection Logic for MFA
+            var userRole = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
+            var isSuperAdmin = !user.CompanyId.HasValue && (
+                string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(userRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase)
+            );
+
+            if (isSuperAdmin || string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                // Both SuperAdmins and Company Admins are required to use MFA.
+                // However, since they JUST verified their email address successfully, 
+                // we consider this their MFA token for this session.
+                // We clear any pending blocks and redirect them directly to the dashboard.
+                Session.Remove("PendingMfaUsername");
+                Session.Remove("ForcedMfaSetup");
+                Session["MfaVerified"] = true; // Future-proofing
+
+                AuditSvc.LogAction(username, "LOGIN_MFA_BYPASSED", "Account", user.Id.ToString(), true, "MFA challenge seamlessly bypassed for first login after email verification");
+
+                var tToken = RouteData.Values["tenant"] as string;
+                if (isSuperAdmin)
+                {
+                    return RedirectToAction("Index", "Companies", new { tenant = (string)null });
+                }
+                return RedirectToAction("Index", "Positions", new { tenant = tToken });
+            }
+
+            // Redirect to appropriate dashboard based on role
             var tenantToken = RouteData.Values["tenant"] as string;
-            return RedirectToAction("Index", "Dashboard", new { tenant = tenantToken });
+            if (isSuperAdmin)
+            {
+                return RedirectToAction("Index", "Companies", new { tenant = (string)null });
+            }
+            return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
         }
+
+
 
         [HttpPost]
         [Authorize]
@@ -834,8 +928,7 @@ namespace HR.Web.Controllers
             if (string.IsNullOrEmpty(code)) return Json(new { success = false, message = "Please enter the verification code." });
 
             var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+            var user = GetCurrentUserFromIdentity(username);
 
             if (user == null) return HttpNotFound();
 
@@ -1120,7 +1213,7 @@ namespace HR.Web.Controllers
         [AllowAnonymous]
         public ActionResult ForgotPassword()
         {
-            return View();
+            return View(new ForgotPasswordViewModel());
         }
 
         [HttpPost]
@@ -1440,15 +1533,8 @@ namespace HR.Web.Controllers
             var user = _uow.Context.Users.FirstOrDefault(u => u.UserName == username);
             if (user == null) return Json(new { success = false, message = "User not found" });
 
-            SendMfaCode(user);
+            SendMfaCode(user, method);
             return Json(new { success = true });
-        }
-
-        private void PrepareCaptcha()
-        {
-            var captcha = _captchaService.GenerateCaptcha();
-            Session["CaptchaCode"] = captcha.CaptchaCode;
-            ViewBag.CaptchaImage = captcha.CaptchaBase64;
         }
 
         // ── MFA Verification ─────────────────────────────────────────────────────
@@ -1558,7 +1644,17 @@ namespace HR.Web.Controllers
 
             if (method == "Email")
             {
-                Task.Run(() => EmailSvc.SendMfaCodeEmailAsync(user.Email, code));
+                var userEmail = user.Email;
+                var securityToken = code;
+                Task.Run(async () => {
+                    try {
+                        var emailSvc = new EmailService(new SettingsService());
+                        await emailSvc.SendMfaCodeEmailAsync(userEmail, securityToken);
+                    } catch (Exception ex) {
+                        System.Diagnostics.Debug.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
+                        System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
+                    }
+                });
             }
         }
 

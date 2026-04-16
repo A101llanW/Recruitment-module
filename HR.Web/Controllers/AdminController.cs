@@ -202,7 +202,6 @@ namespace HR.Web.Controllers
         {
             // Use eager loading to get questions with their options in one query
             var questionsQuery = _uow.Questions.GetAll(q => q.QuestionOptions).AsQueryable();
-            
             // Apply tenant filter
             questionsQuery = _tenantService.ApplyTenantFilter(questionsQuery);
             
@@ -906,24 +905,17 @@ namespace HR.Web.Controllers
             // Role change restrictions for Admin users
             if (!_tenantService.IsActualSuperAdmin())
             {
-                // Admin users can only change Client users to Admin role
-                if (user.Role != "Client" && model.NewRole != "Client")
+                // Admin users cannot change SuperAdmin accounts
+                if (user.Role == "SuperAdmin")
                 {
-                    TempData["ErrorMessage"] = "As an Admin, you can only change Client users to Admin role. You cannot modify roles of other Admin users or change roles to SuperAdmin.";
+                    TempData["ErrorMessage"] = "Admin users cannot modify SuperAdmin accounts.";
                     return RedirectToAction("UserManagement");
                 }
-                
+
                 // Admin users cannot assign SuperAdmin role
                 if (model.NewRole == "SuperAdmin")
                 {
                     TempData["ErrorMessage"] = "Admin users cannot assign SuperAdmin role to any user.";
-                    return RedirectToAction("UserManagement");
-                }
-                
-                // Admin users can only change Client to Admin (not Admin to Client)
-                if (user.Role == "Admin" && model.NewRole == "Client")
-                {
-                    TempData["ErrorMessage"] = "As an Admin, you cannot downgrade other Admin users to Client role.";
                     return RedirectToAction("UserManagement");
                 }
             }

@@ -31,6 +31,7 @@ namespace HR.Web.Data
         public DbSet<LicenseTransaction> LicenseTransactions { get; set; }
         public DbSet<ImpersonationRequest> ImpersonationRequests { get; set; }
         public DbSet<SystemSetting> SystemSettings { get; set; }
+        public DbSet<TemporaryCredential> TemporaryCredentials { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {

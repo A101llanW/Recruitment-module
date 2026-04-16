@@ -132,7 +132,7 @@ namespace HR.Web.Controllers
             return Json(new { secondsLeft = Math.Max(0, secondsLeft) }, JsonRequestBehavior.AllowGet);
         }
 
-        [AllowAnonymous]
+        [Authorize(Roles = "SuperAdmin")]
         public ActionResult Rescue()
         {
             // CLEAR ALL ACTIVE OR APPROVED SESSIONS NATIONWIDE
@@ -152,6 +152,7 @@ namespace HR.Web.Controllers
             Session.Clear(); 
             Session.Abandon();
 
+            _auditService.LogAction(User.Identity.Name, "SYSTEM_RESCUE", "Account", null, true, "SuperAdmin triggered emergency session wipe");
             return Content("SYSTEM RESCUED: Cleared " + activeRequests.Count + " sessions. Please log in again.");
         }
 

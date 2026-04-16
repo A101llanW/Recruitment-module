@@ -8,24 +8,7 @@ namespace HR.Web.Controllers
     {
         public ActionResult Index()
         {
-            try
-            {
-                if (User.Identity.IsAuthenticated)
-                {
-                    if (User.IsInRole("SuperAdmin") && Session["ImpersonatedCompanyId"] == null)
-                    {
-                        return RedirectToAction("Index", "Companies");
-                    }
-                    return RedirectToAction("Index", "Dashboard");
-                }
-                
-                // For anonymous users, show the welcome page
-                return View();
-            }
-            catch (Exception)
-            {
-                return RedirectToAction("Error", "Home");
-            }
+            return HttpNotFound();
         }
 
         public ActionResult Debug()

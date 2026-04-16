@@ -214,14 +214,13 @@
     <Compile Include="Services\CandidateEvaluationService.cs" />
     <Compile Include="Services\DynamicQuestionService.cs" />
     <Compile Include="Services\MCPService.cs" />
-    <Compile Include="Services\MLQuestionnaireService.cs" />
     <Compile Include="Services\QuestionnaireService.cs" />
     <Compile Include="Services\ScoringService.cs" />
     <Compile Include="Services\SecurityService.cs" />
     <Compile Include="Services\AuditService.cs" />
     <Compile Include="Services\ReportService.cs" />
     <Compile Include="Services\SettingsService.cs" />
-    <Compile Include="Services\CaptchaService.cs" />
+    <Compile Include="Services\RealisticCaptchaService.cs" />
     <Compile Include="Helpers\PasswordHelper.cs" />
     <Compile Include="Helpers\TenantRouteConstraint.cs" />
     <Compile Include="Helpers\TenantFilterAttribute.cs" />
@@ -248,10 +247,11 @@
     <Compile Include="Controllers\DepartmentsController.cs" />
     <Compile Include="Controllers\AccountController.cs" />
     <Compile Include="Controllers\ReportGeneratorController.cs" />
-    <Compile Include="Controllers\MLController.cs" />
     <Compile Include="Controllers\AdminController.UserManagement.cs" />
     <Compile Include="Controllers\ReportsController.cs" />
     <Compile Include="Controllers\DebugController.cs" />
+    <Compile Include="Controllers\CaptchaController.cs" />
+    <Compile Include="Models\TemporaryCredential.cs" />
     <Compile Include="Controllers\ErrorController.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -310,14 +310,13 @@
     <Content Include="Views\Home\Debug.cshtml" />
     <Content Include="Views\Applications\Questionnaire.cshtml" />
     <Content Include="Views\Applications\QuestionnaireReview.cshtml" />
-    <Content Include="Views\ML\SmartGeneration.cshtml" />
     <Content Include="Views\Questionnaire\Preview.cshtml" />
-    <Content Include="Views\Questionnaire\SmartGeneration.cshtml" />
     <Content Include="Views\Reports\Create.cshtml" />
     <Content Include="Views\Shared\FreshPortalRestriction.cshtml" />
     <Content Include="Views\Shared\GuestAccess.cshtml" />
     <Content Include="Views\Shared\SuccessPage.cshtml" />
     <Content Include="Views\Shared\_StatusPage.cshtml" />
+    <Content Include="Views\Shared\_CaptchaPartial.cshtml" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="App_Data\Resumes\" />

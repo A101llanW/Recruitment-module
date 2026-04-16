@@ -8,6 +8,7 @@ using System.Web.Security;
 using System.Security.Principal;
 using System.Data.Entity;
 using System.Linq;
+using System.Web.Optimization;
 using HR.Web.Data;
 
 namespace HR.Web
@@ -19,12 +20,13 @@ namespace HR.Web
             AreaRegistration.RegisterAllAreas();
             FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
             RouteConfig.RegisterRoutes(RouteTable.Routes);
+            BundleConfig.RegisterBundles(BundleTable.Bundles);
 
             // Ensure Razor view engine is registered
             ViewEngines.Engines.Clear();
             ViewEngines.Engines.Add(new RazorViewEngine());
 
-            // Disable automatic database dropping to prevent data loss
+            // Disable automatic database changes to prevent schema conflicts
             Database.SetInitializer<HrContext>(null);
 
             // Purge stale security records on startup (background — non-blocking)

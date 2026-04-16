@@ -10,6 +10,7 @@ namespace HR.Web.Services
     public interface ICandidateEvaluationService
     {
         CandidateScore EvaluateApplication(int applicationId, ApplicationReviewViewModel review, List<ApplicationAnswer> answers);
+        decimal EvaluateIndividualAnswer(string positionTitle, string answerText);
     }
 
     public class CandidateScore
@@ -77,6 +78,30 @@ namespace HR.Web.Services
             System.Diagnostics.Debug.WriteLine("===============================");
 
             return score;
+        }
+
+        public decimal EvaluateIndividualAnswer(string positionTitle, string answerText)
+        {
+            if (string.IsNullOrWhiteSpace(answerText)) return 0;
+
+            int rating;
+            if (int.TryParse(answerText, out rating))
+            {
+                // Normalize a 1-5 rating to a 0-10 score (or simply return rating * 2) 
+                return Math.Round(Math.Min(rating * 2m, 10m), 1);
+            }
+
+            decimal score = 0;
+            
+            // Length points
+            if (answerText.Length > 20) score += 2;
+            if (answerText.Length > 100) score += 3;
+            
+            score += CalculateVocabularyScore(answerText);
+            score += GetRoleBonus(positionTitle, answerText);
+            score += DetectSignals(answerText);
+
+            return Math.Round(Math.Max(0, Math.Min(score, 10m)), 1);
         }
 
         private decimal EvaluateCompleteness(ApplicationReviewViewModel review, List<ApplicationAnswer> answers)

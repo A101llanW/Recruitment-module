@@ -44,13 +44,7 @@
             </div>
 
             <div class="p-5">
-                @if (TempData["SuccessMessage"] != null)
-                {
-                    <div class="alert alert-success alert-dismissible fade show mb-4 shadow-sm" role="alert" style="border-left: 5px solid #28a745; border-radius: 12px;">
-                        <i class="fas fa-check-circle mr-2"></i> @TempData["SuccessMessage"]
-                        <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
-                    </div>
-                }
+
 
                 @using (Html.BeginForm("Profile", "Account", FormMethod.Post, new { id = "profileForm" }))
                 {
@@ -87,7 +81,7 @@
                         </div>
                         <div class="col-md-6 mb-4">
                             <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Phone Number</label>
-                            @Html.TextBoxFor(m => m.Phone, new { @class = "form-control profile-input", placeholder = "+1-234-567-8900" })
+                            @Html.TextBoxFor(m => m.Phone, new { @class = "form-control profile-input", placeholder = "+254 712 345 678" })
                             @Html.ValidationMessageFor(m => m.Phone, "", new { @class = "text-danger small" })
                         </div>
                     </div>
@@ -157,10 +151,12 @@
                     Submit Code
                 </button>
                 
-                <p class="mt-4 small text-muted">
-                    Didn't receive the code? <br/>
-                    <a href="javascript:void(0)" onclick="sendVerificationOtp()" class="text-primary font-weight-bold">Resend OTP</a>
-                </p>
+                <div class="mt-4">
+                    <p class="small text-muted mb-2 font-weight-bold">Didn't receive the code?</p>
+                    <button type="button" onclick="sendVerificationOtp()" class="btn btn-outline-primary btn-sm rounded-pill font-weight-bold px-4 py-2 shadow-sm" style="border-width: 2px;">
+                        <i class="fas fa-redo-alt mr-1"></i> Resend OTP
+                    </button>
+                </div>
             </div>
         </div>
     </div>

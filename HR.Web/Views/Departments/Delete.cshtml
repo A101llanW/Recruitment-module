@@ -46,6 +46,15 @@
 </style>
 
 <div class="container-fluid" style="margin-top: 1.2rem;">
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    
     <div class="card card-blue shadow">
         <div class="card-header card-header-blue">
             <h3 class="mb-0">Delete Department</h3>

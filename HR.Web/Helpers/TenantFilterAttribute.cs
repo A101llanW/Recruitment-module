@@ -42,7 +42,28 @@ namespace HR.Web.Helpers
                     {
                         // Use direct context query to avoid loading all users into memory (Repository.cs:28)
                         string lowerUsername = username.ToLower();
-                        var dbUser = uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+                        int? companyId = null;
+                        
+                        var formsIdentity = user.Identity as System.Web.Security.FormsIdentity;
+                        if (formsIdentity == null && user is System.Web.Security.RolePrincipal rolePrincipal)
+                        {
+                            formsIdentity = rolePrincipal.Identity as System.Web.Security.FormsIdentity;
+                        }
+                        
+                        if (formsIdentity != null)
+                        {
+                            var props = formsIdentity.Ticket.UserData.Split('|');
+                            if (props.Length >= 2 && int.TryParse(props[1], out int parsedId)) companyId = parsedId;
+                        }
+
+                        var dbUser = companyId.HasValue 
+                            ? uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername && u.CompanyId == companyId.Value)
+                            : uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername && u.CompanyId == null);
+                            
+                        if (dbUser == null)
+                        {
+                            dbUser = uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+                        }
                         
                         if (dbUser != null)
                         {
@@ -55,7 +76,7 @@ namespace HR.Web.Helpers
                                 // Allow verification actions and logout to bypass the redirect
                                 var isVerificationAction = currentController == "Account" && 
                                     (currentAction == "VerifyEmail" || currentAction == "VerifyEmailSubmit" || 
-                                     currentAction == "SendVerificationEmail" || currentAction == "Logout");
+                                     currentAction == "SendVerificationEmail" || currentAction == "UpdateAndSendVerification" || currentAction == "Logout");
 
                                 if (!isVerificationAction)
                                 {

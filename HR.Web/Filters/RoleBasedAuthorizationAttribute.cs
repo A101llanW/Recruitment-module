@@ -21,6 +21,13 @@ namespace HR.Web.Filters
 
         public override void OnActionExecuting(ActionExecutingContext filterContext)
         {
+            if (filterContext.ActionDescriptor.IsDefined(typeof(AllowAnonymousAttribute), true) || 
+                filterContext.ActionDescriptor.ControllerDescriptor.IsDefined(typeof(AllowAnonymousAttribute), true))
+            {
+                base.OnActionExecuting(filterContext);
+                return;
+            }
+
             var tenantService = new TenantService();
             var currentUserRole = tenantService.GetCurrentUserRole() ?? "";
             var tenantToken = filterContext.RouteData.Values["tenant"] as string;

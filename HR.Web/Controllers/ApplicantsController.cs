@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Collections.Generic;
 using System.Web.Mvc;
 using HR.Web.Data;
 using HR.Web.Models;
@@ -103,16 +104,27 @@ namespace HR.Web.Controllers
                     .ToList();
                 
                 // Load questions explicitly to avoid proxy issues
+                var candidateService = new CandidateEvaluationService();
+                var answerScores = new Dictionary<int, decimal>();
+
                 foreach (var answer in answers)
                 {
                     if (answer.QuestionId > 0)
                     {
                         answer.Question = _uow.Questions.Get(answer.QuestionId);
                     }
+                    var positionTitle = selectedApp.Position != null ? selectedApp.Position.Title : "";
+                    if (string.IsNullOrEmpty(positionTitle) && selectedApp.PositionId > 0) 
+                    {
+                         var pos = _uow.Positions.Get(selectedApp.PositionId);
+                         positionTitle = pos != null ? pos.Title : "";
+                    }
+                    answerScores[answer.Id] = candidateService.EvaluateIndividualAnswer(positionTitle, answer.AnswerText);
                 }
                 
                 ViewBag.SelectedApplication = selectedApp;
                 ViewBag.QuestionnaireAnswers = answers;
+                ViewBag.AnswerScores = answerScores;
                 
                 System.Diagnostics.Debug.WriteLine("Found " + answers.Count + " answers for application " + selectedApp.Id);
             }

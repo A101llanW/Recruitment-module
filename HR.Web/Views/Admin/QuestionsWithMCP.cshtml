@@ -70,7 +70,7 @@
                     </thead>
                     <tbody>
                         @foreach (var q in Model) {
-                            <tr class="question-row" data-search="@q.Text.ToLower() @q.Type.ToLower()">
+                            <tr class="question-row" data-search="@(q.Text != null ? q.Text.ToLower() : "") @(q.Type != null ? q.Type.ToLower() : "")">
                                 <td class="pl-4 align-middle">
                                     <div class="custom-control custom-checkbox">
                                         <input type="checkbox" class="custom-control-input question-check" id="check-@q.Id" value="@q.Id">
@@ -78,9 +78,9 @@
                                     </div>
                                 </td>
                                 <td class="align-middle">
-                                    <div class="fw-bold text-dark font-weight-bold" style="font-size: 1.05rem;">@q.Text</div>
+                                    <div class="fw-bold text-dark font-weight-bold" style="font-size: 1.05rem;">@(q.Text ?? "No text")</div>
                                     <div class="mt-1">
-                                        <span class="badge badge-light border text-uppercase">@q.Type</span>
+                                        <span class="badge badge-light border text-uppercase">@(q.Type ?? "Unknown")</span>
                                         @if (q.IsActive) {
                                             <span class="badge badge-success-soft text-success">Active</span>
                                         } else {

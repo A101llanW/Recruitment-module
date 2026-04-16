@@ -2,6 +2,7 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Verify Your Email";
+    ViewBag.HideNavbar = true;
     string tenantToken = ViewContext.RouteData.Values["tenant"] as string;
 }
 
@@ -17,18 +18,7 @@
             </div>
 
             <div class="mfa-body p-4 bg-white rounded-bottom">
-                @if (TempData["ErrorMessage"] != null)
-                {
-                    <div class="alert alert-danger border-0 shadow-sm mb-4" style="border-radius: 12px;">
-                        <i class="fas fa-exclamation-triangle mr-2"></i> @TempData["ErrorMessage"]
-                    </div>
-                }
-                @if (TempData["SuccessMessage"] != null)
-                {
-                    <div class="alert alert-success border-0 shadow-sm mb-4" style="border-radius: 12px;">
-                        <i class="fas fa-check-circle mr-2"></i> @TempData["SuccessMessage"]
-                    </div>
-                }
+
                 @if (string.IsNullOrEmpty(Model.Email) || Model.Email.StartsWith("PENDING_"))
                 {
                     <div class="alert alert-warning border-0 shadow-sm mb-4" style="border-radius: 12px;">
@@ -36,7 +26,7 @@
                         Please provide your official email address to continue.
                     </div>
 
-                    using (Html.BeginForm("UpdateAndSendVerification", "Account", new { tenant = tenantToken }, FormMethod.Post, new { id = "updateEmailForm" }))
+                    using (Html.BeginForm("UpdateAndSendVerification", "Account", FormMethod.Post, new { id = "updateEmailForm" }))
                     {
                         @Html.AntiForgeryToken()
                         <div class="login-field-group mb-4">
@@ -68,7 +58,7 @@
                         Please enter it below to complete your login.
                     </div>
 
-                    using (Html.BeginForm("VerifyEmailSubmit", "Account", new { tenant = tenantToken }, FormMethod.Post, new { id = "verifyOtpForm" }))
+                    using (Html.BeginForm("VerifyEmailSubmit", "Account", FormMethod.Post, new { id = "verifyOtpForm" }))
                     {
                         @Html.AntiForgeryToken()
 
@@ -94,8 +84,8 @@
                     }
 
                     <div class="mt-4 text-center">
-                        <p class="text-muted small mb-2">Didn't receive the code?</p>
-                        <button type="button" class="btn btn-link text-primary font-weight-bold p-0" onclick="resendOtp()">
+                        <p class="text-muted small mb-2 font-weight-bold">Didn't receive the code?</p>
+                        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill font-weight-bold px-4 py-2 mt-1 shadow-sm" style="border-width: 2px;" onclick="resendOtp()">
                             <i class="fas fa-sync-alt mr-1"></i> Resend Verification Code
                         </button>
                         <div id="resendMessage" class="small mt-2 font-weight-bold"></div>
@@ -152,10 +142,4 @@
     </script>
 }
 
-<style>
-    .mfa-setup-wrapper { min-height: 80vh; align-items: center; display: flex; padding-top: 50px; }
-    .animate-fadeIn { animation: fadeIn 0.6s ease-out; }
-    @@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-    .opacity-75 { opacity: 0.75; }
-    .btn-link:hover { text-decoration: none; opacity: 0.8; }
-</style>
+@Html.Partial("_AuthStyles")

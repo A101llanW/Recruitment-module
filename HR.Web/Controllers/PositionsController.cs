@@ -513,8 +513,10 @@ namespace HR.Web.Controllers
         {
             try
             {
-                // Test eager loading - get questions with options
-                var questionsWithOptions = _uow.Questions.GetAll(q => q.QuestionOptions).ToList();
+                // Test eager loading - get questions with options (applying tenant filter)
+                var query = _uow.Questions.GetAll(q => q.QuestionOptions).AsQueryable();
+                query = _tenantService.ApplyTenantFilter(query);
+                var questionsWithOptions = query.ToList();
                 
                 var testResult = new
                 {
@@ -549,13 +551,21 @@ namespace HR.Web.Controllers
         [RoleBasedAuthorization("Admin")]
         public ActionResult TestQuestionOptions()
         {
-            var allOptions = _uow.Context.Set<QuestionOption>().ToList();
-            var allQuestions = _uow.Questions.GetAll(q => q.QuestionOptions).ToList();
+            // Apply tenant filtering to options and questions
+            var questionsQuery = _uow.Questions.GetAll(q => q.QuestionOptions).AsQueryable();
+            questionsQuery = _tenantService.ApplyTenantFilter(questionsQuery);
+            var allQuestions = questionsQuery.ToList();
+
+            var allOptions = _uow.Context.Set<QuestionOption>().AsQueryable();
+            // Since QuestionOption is an ITenantEntity (presumably, or we filter via Question)
+            // Let's filter options based on the filtered questions to be safe
+            var allowedQuestionIds = allQuestions.Select(q => q.Id).ToList();
+            var filteredOptions = allOptions.Where(o => allowedQuestionIds.Contains(o.QuestionId)).ToList();
             
             var result = new
             {
                 TotalQuestions = allQuestions.Count,
-                TotalOptions = allOptions.Count,
+                TotalOptions = filteredOptions.Count,
                 Questions = allQuestions.Select(q => new
                 {
                     q.Id,
@@ -563,7 +573,7 @@ namespace HR.Web.Controllers
                     q.Type,
                     OptionsCount = q.QuestionOptions != null ? q.QuestionOptions.Count() : 0
                 }).ToList(),
-                Options = allOptions.Select(o => new
+                Options = filteredOptions.Select(o => new
                 {
                     o.Id,
                     o.Text,

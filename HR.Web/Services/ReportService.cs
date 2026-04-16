@@ -187,6 +187,8 @@ namespace HR.Web.Services
             font-size: 14px;
             color: #2c3e50;
             font-weight: 600;
+            white-space: nowrap; /* Prevent html2canvas wrapping issue where time overlaps date */
+            display: inline-block;
         }
         .report-table { 
             border-collapse: collapse;
@@ -211,6 +213,9 @@ namespace HR.Web.Services
             border-bottom: 1px solid #f1f4f6;
             padding: 12px 15px;
             font-size: 13px;
+        }
+        .report-table td.date-cell {
+            white-space: nowrap; /* Fix html2canvas line-height bug for datetimes */
         }
         .report-table tr {
             page-break-inside: avoid;
@@ -460,7 +465,7 @@ namespace HR.Web.Services
                     <td>{1}</td>
                     <td>{2}</td>
                     <td><span class='status-badge {3}'>{4}</span></td>
-                    <td>{5:yyyy-MM-dd}</td>
+                    <td class='date-cell'>{5:yyyy-MM-dd}</td>
                     <td>{6}</td>
                 </tr>", a.Id, (a.Applicant != null ? a.Applicant.FullName : "N/A"), (a.Position != null ? a.Position.Title : "N/A"), badge, a.Status, a.AppliedOn, a.Score);
             }
@@ -525,7 +530,7 @@ namespace HR.Web.Services
                 <tr>
                     <td><strong>#{0}</strong></td>
                     <td>#{1}</td>
-                    <td>{2:yyyy-MM-dd HH:mm}</td>
+                    <td class='date-cell'>{2:yyyy-MM-dd HH:mm}</td>
                     <td>{3}</td>
                     <td>{4}</td>
                 </tr>", i.Id, i.ApplicationId, i.ScheduledAt, i.Mode, i.Notes);
@@ -687,7 +692,7 @@ namespace HR.Web.Services
             {
                 html += string.Format(@"
                 <tr>
-                    <td>{0:yyyy-MM-dd HH:mm}</td>
+                    <td class='date-cell'>{0:yyyy-MM-dd HH:mm}</td>
                     <td><strong>{1}</strong></td>
                     <td>{2}</td>
                     <td>{3}</td>

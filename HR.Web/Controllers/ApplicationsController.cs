@@ -18,6 +18,7 @@ namespace HR.Web.Controllers
     private readonly IStorageService _storage = new StorageService();
     private readonly IEmailService _email = new EmailService();
     private readonly ICandidateEvaluationService _evaluationService = new CandidateEvaluationService();
+    private readonly ScoringService _scoringService = new ScoringService();
     private readonly TenantService _tenantService = new TenantService();
 
     [Authorize]
@@ -423,29 +424,29 @@ namespace HR.Web.Controllers
             }
             _uow.Complete();
 
-            // Evaluate candidate using AI scoring
+            // Evaluate candidate using questionnaire scoring
             try
             {
-                System.Diagnostics.Debug.WriteLine("=== STARTING CANDIDATE EVALUATION ===");
+                System.Diagnostics.Debug.WriteLine("=== STARTING QUESTIONNAIRE SCORING ===");
                 System.Diagnostics.Debug.WriteLine("Application ID: " + application.Id);
-                
-                var score = _evaluationService.EvaluateApplication(application.Id, model, applicationAnswers);
-                
-                System.Diagnostics.Debug.WriteLine("EVALUATION RESULT: " + score.Score);
-                System.Diagnostics.Debug.WriteLine("SETTING APPLICATION SCORE TO: " + score.Score);
-                
-                application.Score = score.Score;
-                application.ScoreReason = score.Reason;
+
+                var score = _scoringService.CalculateApplicationScore(application);
+
+                System.Diagnostics.Debug.WriteLine("QUESTIONNAIRE SCORE: " + score);
+                System.Diagnostics.Debug.WriteLine("SETTING APPLICATION SCORE TO: " + score);
+
+                application.Score = score;
+                application.ScoreReason = "Questionnaire score calculated from responses.";
                 _uow.Applications.Update(application);
                 _uow.Complete();
                 
-                System.Diagnostics.Debug.WriteLine("SCORE SAVED TO DATABASE");
+                System.Diagnostics.Debug.WriteLine("QUESTIONNAIRE SCORE SAVED TO DATABASE");
                 System.Diagnostics.Debug.WriteLine("===============================");
             }
             catch (Exception ex)
             {
                 // Log error but don't fail the application submission
-                System.Diagnostics.Debug.WriteLine("Error evaluating application: " + ex.Message);
+                System.Diagnostics.Debug.WriteLine("Error scoring application: " + ex.Message);
             }
         }
 

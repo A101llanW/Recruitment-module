@@ -16,6 +16,17 @@ namespace HR.Web.Services
     {
         private readonly UnitOfWork _uow;
         private readonly MCPService _mcpService;
+        private static readonly HashSet<string> StopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+            "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does",
+            "did", "will", "would", "could", "should", "may", "might", "can", "what", "how", "when",
+            "where", "why", "who", "whom", "which", "this", "that", "these", "those", "your", "you",
+            "i", "me", "my", "we", "our", "us", "they", "them", "their", "it", "its", "as", "from",
+            "into", "about", "over", "under", "up", "down", "out", "so", "if", "then", "than", "just",
+            "also", "very", "really", "more", "most", "some", "any", "each", "few", "many", "much",
+            "such", "only", "not", "no", "yes", "because", "since", "while", "during"
+        };
 
         public ScoringService()
         {
@@ -110,44 +121,8 @@ namespace HR.Web.Services
         public decimal CalculateQuestionScore(Question question, string answerText, int positionId)
         {
             if (string.IsNullOrEmpty(answerText)) return 0;
-
-            try
-            {
-                // Use MCPService for content-based scoring
-                var mcpService = new MCPService();
-                var parameters = new Dictionary<string, object>
-                {
-                    { "questionText", question.Text },
-                    { "selectedAnswer", answerText },
-                    { "questionType", question.Type },
-                    { "maxPoints", GetMaxScoreForQuestion(question, positionId) }
-                };
-
-                var result = mcpService.CallToolAsync("evaluate-answer", parameters).Result;
-                
-                if (result.Success && result.Result != null)
-                {
-                    var content = result.Result.contents[0];
-                    var evaluation = JsonConvert.DeserializeObject<AnswerEvaluationResponse>(content.text);
-                    
-                    // Log the content-based scoring for debugging
-                    System.Diagnostics.Debug.WriteLine($"MCPService Score - Question: {question.Text.Substring(0, Math.Min(50, question.Text.Length))}..., Answer: {answerText.Substring(0, Math.Min(30, answerText.Length))}..., Score: {evaluation.score}");
-                    
-                    return evaluation.score;
-                }
-                else
-                {
-                    // Fallback to traditional scoring if MCPService fails
-                    System.Diagnostics.Debug.WriteLine($"MCPService failed for question {question.Id}, using fallback scoring");
-                    return CalculateQuestionScoreFallback(question, answerText, positionId);
-                }
-            }
-            catch (Exception ex)
-            {
-                // Log error and use fallback
-                System.Diagnostics.Debug.WriteLine($"Error in MCPService scoring: {ex.Message}, using fallback");
-                return CalculateQuestionScoreFallback(question, answerText, positionId);
-            }
+            // Use deterministic scoring to avoid async deadlocks during submission.
+            return CalculateQuestionScoreFallback(question, answerText, positionId);
         }
 
         /// <summary>
@@ -213,39 +188,6 @@ namespace HR.Web.Services
         /// </summary>
         private decimal CalculateRatingScore(Question question, string answerText)
         {
-            try
-            {
-                // Use AI to validate and contextualize rating answers
-                var parameters = new
-                {
-                    questionText = question.Text,
-                    ratingValue = answerText,
-                    questionType = "rating",
-                    maxPoints = 10,
-                    context = "1-5 scale" // Inform AI about expected scale
-                };
-
-                var callTask = _mcpService.CallToolAsync("evaluate-answer", parameters);
-                var completed = Task.WhenAny(callTask, Task.Delay(1500));
-                
-                if (completed.Result == callTask && callTask.Result.Success)
-                {
-                    var content = callTask.Result.Result.contents[0];
-                    var evaluation = JsonConvert.DeserializeObject<AnswerEvaluationResponse>(content.text);
-                    
-                    // Use AI-validated score if reasonable
-                    if (evaluation.score >= 0 && evaluation.score <= 10)
-                    {
-                        return evaluation.score;
-                    }
-                }
-            }
-            catch
-            {
-                // Fall through to existing logic
-            }
-
-            // Existing rating logic as fallback
             int rating;
             if (int.TryParse(answerText, out rating))
             {
@@ -261,39 +203,6 @@ namespace HR.Web.Services
         /// </summary>
         private decimal CalculateNumberScore(Question question, string answerText)
         {
-            try
-            {
-                // Use AI to validate and contextualize numeric answers
-                var parameters = new
-                {
-                    questionText = question.Text,
-                    numericValue = answerText,
-                    questionType = "number",
-                    maxPoints = 10,
-                    context = ExtractQuestionContext(question.Text)
-                };
-
-                var callTask = _mcpService.CallToolAsync("evaluate-answer", parameters);
-                var completed = Task.WhenAny(callTask, Task.Delay(1500));
-                
-                if (completed.Result == callTask && callTask.Result.Success)
-                {
-                    var content = callTask.Result.Result.contents[0];
-                    var evaluation = JsonConvert.DeserializeObject<AnswerEvaluationResponse>(content.text);
-                    
-                    // Use AI-validated score if reasonable
-                    if (evaluation.score >= 0 && evaluation.score <= 10)
-                    {
-                        return evaluation.score;
-                    }
-                }
-            }
-            catch
-            {
-                // Fall through to existing logic
-            }
-
-            // Existing number logic as fallback
             decimal number;
             if (decimal.TryParse(answerText, out number))
             {
@@ -356,7 +265,7 @@ namespace HR.Web.Services
             score += CalculateLengthScore(answerText);
 
             // 2. Advanced keyword extraction with word boundaries
-            score += ExtractAndScoreKeywords(question, answerText, lowerText);
+            score += ExtractAndScoreKeywords(question, answerText, lowerText, jobContext);
 
             // 3. Experience Intensity and Answer Strength
             score += AnalyzeAnswerStrength(answerText, lowerText);
@@ -367,13 +276,16 @@ namespace HR.Web.Services
             // 5. Contextual relevance
             score += AnalyzeContextualRelevance(question, answerText, lowerText);
 
-            // 6. Technical indicators
+            // 6. Semantic intensity (meaningful specificity and strength)
+            score += CalculateSemanticIntensityScore(question, answerText, lowerText, jobContext);
+
+            // 7. Technical indicators
             score += AnalyzeTechnicalIndicators(lowerText);
 
-            // 7. Structure and coherence
+            // 8. Structure and coherence
             score += AnalyzeStructureAndCoherence(answerText, lowerText);
 
-            // 8. Quality penalties (including Repetition Penalty)
+            // 9. Quality penalties (including Repetition Penalty)
             score = ApplyQualityAdjustments(score, answerText, lowerText, jobContext);
 
             var finalScore = Math.Max(0, score); // Removed cap - unlimited points per question
@@ -408,7 +320,7 @@ namespace HR.Web.Services
         /// <summary>
         /// Advanced keyword extraction with semantic analysis
         /// </summary>
-        private decimal ExtractAndScoreKeywords(Question question, string answerText, string lowerText)
+        private decimal ExtractAndScoreKeywords(Question question, string answerText, string lowerText, string jobContext)
         {
             var score = 0m;
             
@@ -424,7 +336,7 @@ namespace HR.Web.Services
             else if (uniqueWords.Count >= 8) score += 0.5m;
 
             // Industry-specific keyword detection
-            var industryKeywords = GetIndustryKeywords(question.Text);
+            var industryKeywords = GetIndustryKeywords(question.Text, jobContext);
             var industryMatches = words.Count(w => industryKeywords.Contains(w));
             score += Math.Min(2m, industryMatches * 0.4m);
 
@@ -434,11 +346,15 @@ namespace HR.Web.Services
             score += Math.Min(1.5m, actionMatches * 0.3m);
 
             // Skill and technology detection
-            var techKeywords = GetTechnologyKeywords();
-            var techMatches = words.Count(w => techKeywords.Contains(w));
+            var techKeywords = GetSkillKeywords(question.Text, jobContext);
+            var normalizedTechKeywords = new HashSet<string>(techKeywords.Select(NormalizeToken).Where(k => !string.IsNullOrWhiteSpace(k)));
+            var techMatches = uniqueWords.Count(w => normalizedTechKeywords.Contains(w));
             score += Math.Min(2m, techMatches * 0.5m);
 
-            System.Diagnostics.Debug.WriteLine(string.Format("Keyword extraction score: {0} (Industry: {1}, Actions: {2}, Tech: {3})", score, industryMatches, actionMatches, techMatches));
+            // Reward specificity for skills tied to the question context
+            score += CalculateSpecificityBonus(question, words, jobContext);
+
+            System.Diagnostics.Debug.WriteLine(string.Format("Keyword extraction score: {0} (Industry: {1}, Actions: {2}, Tech/Skill: {3})", score, industryMatches, actionMatches, techMatches));
             return score;
         }
 
@@ -561,6 +477,51 @@ namespace HR.Web.Services
         }
 
         /// <summary>
+        /// Evaluate semantic intensity and specificity for text answers
+        /// </summary>
+        private decimal CalculateSemanticIntensityScore(Question question, string answerText, string lowerText, string jobContext)
+        {
+            if (string.IsNullOrWhiteSpace(answerText)) return 0m;
+
+            var score = 0m;
+            var answerWords = TokenizeText(lowerText);
+
+            // 1. Phrase-based domain evidence (multi-word skills/techniques)
+            var domainPhrases = GetDomainPhrases(question != null ? question.Text : "", jobContext);
+            var matchedPhrases = domainPhrases.Where(p => lowerText.Contains(p)).Distinct().ToList();
+            score += Math.Min(4m, matchedPhrases.Count * 0.6m);
+
+            // 2. Action/result language density
+            var actionPhrases = new[]
+            {
+                "responsible for", "led", "managed", "implemented", "delivered",
+                "optimized", "improved", "trained", "mentored", "reduced", "increased"
+            };
+            var actionMatches = actionPhrases.Count(p => lowerText.Contains(p));
+            score += Math.Min(2m, actionMatches * 0.4m);
+
+            // 3. Evidence of measurable experience
+            if (Regex.IsMatch(lowerText, @"\b\d+\+?\s*(years?|months?)\b", RegexOptions.IgnoreCase))
+                score += 0.8m;
+            if (Regex.IsMatch(lowerText, @"\b\d+\s*(clients?|customers?|people|appointments?|cuts|haircuts)\b", RegexOptions.IgnoreCase))
+                score += 0.8m;
+            if (Regex.IsMatch(lowerText, @"\b(certified|licensed|apprentice|journeyman)\b", RegexOptions.IgnoreCase))
+                score += 0.6m;
+
+            // 4. Context alignment with job description/responsibilities
+            var contextKeywords = ExtractContextKeywords(jobContext);
+            if (contextKeywords.Any() && answerWords.Any())
+            {
+                var uniqueAnswerWords = new HashSet<string>(answerWords);
+                var contextMatches = contextKeywords.Count(k => uniqueAnswerWords.Contains(k));
+                score += Math.Min(2m, contextMatches * 0.2m);
+            }
+
+            System.Diagnostics.Debug.WriteLine(string.Format("Semantic intensity score: {0} (Phrases: {1}, Actions: {2})", score, matchedPhrases.Count, actionMatches));
+            return score;
+        }
+
+        /// <summary>
         /// Analyze technical and domain-specific indicators
         /// </summary>
         private decimal AnalyzeTechnicalIndicators(string lowerText)
@@ -660,7 +621,9 @@ namespace HR.Web.Services
 
             // Penalty for repetitive content
             var words = TokenizeText(lowerText);
-            var repetitionRatio = (double)words.Count - words.Distinct().Count() / (double)words.Count;
+            var repetitionRatio = words.Count > 0
+                ? ((double)words.Count - words.Distinct().Count()) / (double)words.Count
+                : 0;
             if (repetitionRatio > 0.3) score -= 0.5m;
 
             // Bonus for well-formatted answers
@@ -674,33 +637,51 @@ namespace HR.Web.Services
         /// </summary>
         private List<string> TokenizeText(string text)
         {
-            return text.Split(new[] { ' ', '.', ',', ';', ':', '!', '?', '-', '_', '/', '\\', '(', ')', '[', ']', '{', '}', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)
-                     .Where(word => word.Length > 1) // Filter out single characters
-                     .ToList();
+            if (string.IsNullOrWhiteSpace(text)) return new List<string>();
+
+            var matches = Regex.Matches(text, @"\b[\p{L}\p{N}']+\b");
+            var tokens = new List<string>();
+
+            foreach (Match match in matches)
+            {
+                var normalized = NormalizeToken(match.Value);
+                if (normalized.Length > 1 && !StopWords.Contains(normalized))
+                {
+                    tokens.Add(normalized);
+                }
+            }
+
+            return tokens;
         }
 
         /// <summary>
         /// Get industry-specific keywords based on question context
         /// </summary>
-        private List<string> GetIndustryKeywords(string questionText)
+        private List<string> GetIndustryKeywords(string questionText, string jobContext = null)
         {
-            var lowerQuestion = questionText.ToLower();
+            var lowerQuestion = (questionText ?? string.Empty).ToLower();
+            var lowerContext = (jobContext ?? string.Empty).ToLower();
+            var combined = string.Format("{0} {1}", lowerQuestion, lowerContext);
             
-            if (lowerQuestion.Contains("software") || lowerQuestion.Contains("developer") || lowerQuestion.Contains("programming"))
+            if (combined.Contains("software") || combined.Contains("developer") || combined.Contains("programming"))
             {
                 return new List<string> { "coding", "programming", "development", "software", "application", "system", "algorithm", "database", "api", "framework" };
             }
-            else if (lowerQuestion.Contains("management") || lowerQuestion.Contains("lead") || lowerQuestion.Contains("team"))
+            else if (combined.Contains("management") || combined.Contains("lead") || combined.Contains("team"))
             {
                 return new List<string> { "leadership", "management", "team", "project", "strategy", "planning", "coordination", "supervision", "mentoring" };
             }
-            else if (lowerQuestion.Contains("sales") || lowerQuestion.Contains("marketing") || lowerQuestion.Contains("customer"))
+            else if (combined.Contains("sales") || combined.Contains("marketing") || combined.Contains("customer"))
             {
                 return new List<string> { "sales", "marketing", "customer", "client", "revenue", "growth", "target", "negotiation", "relationship" };
             }
-            else if (lowerQuestion.Contains("design") || lowerQuestion.Contains("creative") || lowerQuestion.Contains("ux"))
+            else if (combined.Contains("design") || combined.Contains("creative") || combined.Contains("ux"))
             {
                 return new List<string> { "design", "creative", "user", "experience", "interface", "visual", "prototype", "wireframe", "branding" };
+            }
+            else if (combined.Contains("barber") || combined.Contains("hair") || combined.Contains("salon") || combined.Contains("groom"))
+            {
+                return new List<string> { "barbering", "fade", "taper", "clippers", "scissors", "shear", "trim", "shave", "lineup", "beard", "styling", "texture", "blending", "sanitation", "razor", "haircut", "cutting", "grooming", "edge", "pomade", "clipper" };
             }
             
             // General business keywords
@@ -721,10 +702,24 @@ namespace HR.Web.Services
         }
 
         /// <summary>
-        /// Get technology and skill keywords
+        /// Get technology and specific skill keywords
         /// </summary>
-        private List<string> GetTechnologyKeywords()
+        private List<string> GetSkillKeywords(string questionText, string jobContext = null)
         {
+            var lowerQuestion = (questionText ?? string.Empty).ToLower();
+            var lowerContext = (jobContext ?? string.Empty).ToLower();
+            var combined = string.Format("{0} {1}", lowerQuestion, lowerContext);
+
+            if (combined.Contains("barber") || combined.Contains("hair") || combined.Contains("salon") || combined.Contains("groom"))
+            {
+                return new List<string> {
+                    "scissor", "clipper", "razor", "blade", "trimmer", "blowdryer", "shears", "comb", "brush",
+                    "taper", "fade", "blend", "lineup", "straight", "texture", "layer", "shave", "guard",
+                    "pomade", "gel", "wax", "sanitization", "barbicide", "sterilization", "hygiene", "clippers"
+                };
+            }
+
+            // Default to software/tech keywords
             return new List<string> {
                 "javascript", "python", "java", "csharp", "c++", "ruby", "php", "swift", "kotlin",
                 "html", "css", "sql", "nosql", "mongodb", "postgresql", "mysql", "oracle",
@@ -735,17 +730,117 @@ namespace HR.Web.Services
             };
         }
 
+        private List<string> GetDomainPhrases(string questionText, string jobContext)
+        {
+            var combined = string.Format("{0} {1}", questionText ?? "", jobContext ?? "").ToLower();
+            var phrases = new List<string>();
+
+            if (combined.Contains("barber") || combined.Contains("hair") || combined.Contains("salon") || combined.Contains("groom"))
+            {
+                phrases.AddRange(new[]
+                {
+                    "skin fade", "low fade", "high fade", "mid fade", "taper fade",
+                    "line up", "line-up", "beard lineup", "straight razor", "hot towel",
+                    "shear over comb", "clipper over comb", "texturizing shears",
+                    "beard trim", "beard shaping", "neck shave", "razor shave"
+                });
+            }
+
+            if (combined.Contains("developer") || combined.Contains("software") || combined.Contains("programming"))
+            {
+                phrases.AddRange(new[]
+                {
+                    "unit testing", "code review", "continuous integration",
+                    "api design", "database migration", "performance tuning"
+                });
+            }
+
+            // Generic phrases that indicate concrete experience
+            phrases.AddRange(new[]
+            {
+                "for example", "for instance", "in my role", "as a", "responsible for"
+            });
+
+            return phrases.Distinct().ToList();
+        }
+
         /// <summary>
         /// Extract keywords from question text
         /// </summary>
         private List<string> ExtractQuestionKeywords(string questionText)
         {
-            var stopWords = new[] { "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "is", "are", "was", "were", "be", "been", "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might", "can", "what", "how", "when", "where", "why", "describe", "explain", "tell", "your" };
-            
-            return TokenizeText(questionText.ToLower())
-                     .Where(word => !stopWords.Contains(word) && word.Length > 2)
+            return TokenizeText(questionText)
+                     .Where(word => word.Length > 2)
                      .Distinct()
                      .ToList();
+        }
+
+        private string NormalizeToken(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token)) return string.Empty;
+
+            var normalized = token.Trim('\'').ToLowerInvariant();
+
+            // Basic suffix stripping for better matching (light stemming)
+            if (normalized.Length > 4 && normalized.EndsWith("ing"))
+                normalized = normalized.Substring(0, normalized.Length - 3);
+            else if (normalized.Length > 3 && normalized.EndsWith("ed"))
+                normalized = normalized.Substring(0, normalized.Length - 2);
+            else if (normalized.Length > 3 && normalized.EndsWith("es"))
+                normalized = normalized.Substring(0, normalized.Length - 2);
+            else if (normalized.Length > 3 && normalized.EndsWith("s"))
+                normalized = normalized.Substring(0, normalized.Length - 1);
+
+            return normalized;
+        }
+
+        private decimal CalculateSpecificityBonus(Question question, List<string> answerWords, string jobContext)
+        {
+            if (question == null || answerWords == null || answerWords.Count == 0) return 0m;
+
+            var skillKeywords = GetSkillKeywords(question.Text, jobContext)
+                .Select(NormalizeToken)
+                .Where(k => !string.IsNullOrWhiteSpace(k));
+            var industryKeywords = GetIndustryKeywords(question.Text, jobContext)
+                .Select(NormalizeToken)
+                .Where(k => !string.IsNullOrWhiteSpace(k));
+            var questionKeywords = ExtractQuestionKeywords(question.Text);
+            var contextKeywords = ExtractContextKeywords(jobContext);
+
+            var targetKeywords = new HashSet<string>(skillKeywords
+                .Concat(industryKeywords)
+                .Concat(questionKeywords)
+                .Concat(contextKeywords));
+
+            if (targetKeywords.Count == 0) return 0m;
+
+            var uniqueAnswers = answerWords.Distinct().ToList();
+            var uniqueMatches = uniqueAnswers.Count(w => targetKeywords.Contains(w));
+            var density = uniqueAnswers.Count > 0 ? (decimal)uniqueMatches / uniqueAnswers.Count : 0m;
+
+            var score = Math.Min(3m, uniqueMatches * 0.4m);
+            if (density >= 0.25m) score += 1.0m;
+            else if (density >= 0.15m) score += 0.6m;
+            else if (density >= 0.08m) score += 0.3m;
+
+            return score;
+        }
+
+        private List<string> ExtractContextKeywords(string jobContext)
+        {
+            if (string.IsNullOrWhiteSpace(jobContext)) return new List<string>();
+
+            var tokens = TokenizeText(jobContext);
+            var grouped = tokens
+                .GroupBy(t => t)
+                .Select(g => new { Token = g.Key, Count = g.Count() })
+                .OrderByDescending(g => g.Count)
+                .ThenBy(g => g.Token)
+                .Take(20)
+                .Select(g => g.Token)
+                .ToList();
+
+            return grouped;
         }
 
         /// <summary>
@@ -871,39 +966,6 @@ namespace HR.Web.Services
         /// </summary>
         private decimal CalculateChoiceScore(Question question, string answerText, int positionId)
         {
-            try
-            {
-                // Use AI to validate and score choice answers
-                var parameters = new
-                {
-                    questionText = question.Text,
-                    selectedAnswer = answerText,
-                    questionType = "choice",
-                    availableOptions = GetQuestionOptions(question.Id),
-                    maxPoints = 10
-                };
-
-                var callTask = _mcpService.CallToolAsync("evaluate-answer", parameters);
-                var completed = Task.WhenAny(callTask, Task.Delay(2000));
-                
-                if (completed.Result == callTask && callTask.Result.Success)
-                {
-                    var content = callTask.Result.Result.contents[0];
-                    var evaluation = JsonConvert.DeserializeObject<AnswerEvaluationResponse>(content.text);
-                    
-                    // Use AI score if available and reasonable
-                    if (evaluation.score >= 0 && evaluation.score <= 10)
-                    {
-                        return evaluation.score;
-                    }
-                }
-            }
-            catch
-            {
-                // Fall through to existing logic
-            }
-
-            // Existing choice scoring logic as fallback
             return CalculateChoiceScoreFallback(question, answerText, positionId);
         }
 

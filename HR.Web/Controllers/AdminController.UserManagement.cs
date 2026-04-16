@@ -117,5 +117,88 @@ namespace HR.Web.Controllers
             TempData["Message"] = string.Format("User {0} has been elevated to SuperAdmin.", user.UserName);
             return RedirectToAction("GlobalUserManagement");
         }
+
+        /// <summary>
+        /// Deletes a user permanently including all associated records (applications, interviews, audit logs, etc.)
+        /// </summary>
+        [HttpPost]
+        [Authorize(Roles = "SuperAdmin")]
+        [ValidateAntiForgeryToken]
+        public ActionResult DeleteUser(int id)
+        {
+            var user = _uow.Users.Get(id);
+            if (user == null)
+            {
+                return HttpNotFound();
+            }
+
+            // Prevent deleting oneself
+            string lowerUsername = User.Identity.Name.ToLower();
+            if (user.UserName.ToLower() == lowerUsername)
+            {
+                TempData["Message"] = "You cannot delete your own account.";
+                return RedirectToAction("GlobalUserManagement");
+            }
+
+            string deletedUsername = user.UserName;
+
+            try
+            {
+                // 1. Delete associated Applicant records if role is Client
+                if (user.Role == "Client" && !string.IsNullOrEmpty(user.Email))
+                {
+                    var emailLower = user.Email.ToLower();
+                    // Match applicants by email
+                    var applicants = _uow.Context.Applicants.Where(a => a.Email.ToLower() == emailLower).ToList();
+                    
+                    foreach (var applicant in applicants)
+                    {
+                        var applications = _uow.Context.Applications.Where(app => app.ApplicantId == applicant.Id).ToList();
+                        foreach (var app in applications)
+                        {
+                            // Delete deep relations for each application
+                            var answers = _uow.Context.ApplicationAnswers.Where(ans => ans.ApplicationId == app.Id);
+                            _uow.Context.ApplicationAnswers.RemoveRange(answers);
+
+                            var interviews = _uow.Context.Interviews.Where(i => i.ApplicationId == app.Id);
+                            _uow.Context.Interviews.RemoveRange(interviews);
+
+                            var onboardings = _uow.Context.Onboardings.Where(o => o.ApplicationId == app.Id);
+                            _uow.Context.Onboardings.RemoveRange(onboardings);
+
+                            _uow.Context.Applications.Remove(app);
+                        }
+                        _uow.Context.Applicants.Remove(applicant);
+                    }
+                }
+
+                // 2. Delete User-specific Security and Session records
+                var impersonations = _uow.Context.ImpersonationRequests.Where(r => r.RequestedFrom == user.UserName || r.RequestedBy == user.UserName);
+                _uow.Context.ImpersonationRequests.RemoveRange(impersonations);
+
+                var resets = _uow.Context.PasswordResets.Where(p => p.UserId == user.Id);
+                _uow.Context.PasswordResets.RemoveRange(resets);
+
+                var loginAttempts = _uow.Context.LoginAttempts.Where(l => l.Username == user.UserName);
+                _uow.Context.LoginAttempts.RemoveRange(loginAttempts);
+
+                // Delete audit logs strictly tied to this user to wipe individual records completely
+                var auditLogs = _uow.Context.AuditLogs.Where(a => a.Username == user.UserName);
+                _uow.Context.AuditLogs.RemoveRange(auditLogs);
+
+                // 3. Finally, remove the User record
+                _uow.Context.Users.Remove(user);
+                _uow.Complete();
+
+                _auditService.LogAction(User.Identity.Name, "DELETE_USER", "UserManagement", id.ToString(), true, string.Format("Permanently deleted user {0} and all associated records", deletedUsername));
+                TempData["Message"] = string.Format("User {0} and all associated records have been permanently deleted.", deletedUsername);
+            }
+            catch (Exception ex)
+            {
+                TempData["Message"] = "Error deleting user: " + ex.Message;
+            }
+
+            return RedirectToAction("GlobalUserManagement");
+        }
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Web;
+using System.Security.Cryptography;
 using HR.Web.Data;
 using HR.Web.Models;
 using Google.Authenticator;
@@ -106,21 +107,33 @@ namespace HR.Web.Services
         }
         public string GenerateSecureToken()
         {
-            using (var rng = new System.Security.Cryptography.RNGCryptoServiceProvider())
+            var bytes = new byte[32];
+            using (var rng = RandomNumberGenerator.Create())
             {
-                var bytes = new byte[32];
                 rng.GetBytes(bytes);
-                return Convert.ToBase64String(bytes)
-                    .Replace("/", "")
-                    .Replace("+", "")
-                    .Replace("=", "")
-                    .Substring(0, 32);
             }
+            return Convert.ToBase64String(bytes)
+                .Replace("/", "")
+                .Replace("+", "")
+                .Replace("=", "")
+                .Substring(0, 32);
         }
 
         public string GenerateMfaSecret()
         {
-            return Guid.NewGuid().ToString().Replace("-", "").Substring(0, 10);
+            var bytes = new byte[10];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(bytes);
+            }
+            // Use hex to avoid characters that QR generators might dislike, or just alphanumeric
+            var res = new char[10];
+            string allowedChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Alphanumeric without ambiguous chars
+            for (int i = 0; i < 10; i++)
+            {
+                res[i] = allowedChars[bytes[i] % allowedChars.Length];
+            }
+            return new string(res);
         }
 
         public string GetQrCodeBase64(string username, string secret)
@@ -155,8 +168,13 @@ namespace HR.Web.Services
 
         public string GenerateTemporaryCode()
         {
-            var random = new Random();
-            return random.Next(100000, 999999).ToString();
+            var bytes = new byte[4];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(bytes);
+            }
+            uint randomValue = BitConverter.ToUInt32(bytes, 0);
+            return (100000 + (randomValue % 900000)).ToString(); // 6 digits starting from 100000
         }
 
         public bool ValidateTemporaryCode(User user, string code)

@@ -92,42 +92,6 @@ namespace HR.Web.Controllers
 
 
         /// <summary>
-        /// Recalculate all scores for a position
-        /// </summary>
-        [HttpPost]
-        [Authorize(Roles = "Admin,HR")]
-        [ValidateAntiForgeryToken]
-        public ActionResult RecalculateScores(int positionId)
-        {
-            try
-            {
-                var applications = _uow.Applications.GetAll()
-                    .Where(a => a.PositionId == positionId)
-                    .ToList();
-
-                var updatedCount = 0;
-                foreach (var application in applications)
-                {
-                    var newScore = _scoringService.CalculateApplicationScore(application);
-                    if (application.Score != newScore)
-                    {
-                        application.Score = newScore;
-                        _uow.Applications.Update(application);
-                        updatedCount++;
-                    }
-                }
-
-                _uow.Complete();
-                TempData["Message"] = string.Format("Scores recalculated for {0} applications.", updatedCount);
-                return Json(new { success = true, updatedCount });
-            }
-            catch (Exception ex)
-            {
-                return Json(new { success = false, message = ex.Message });
-            }
-        }
-
-        /// <summary>
         /// Get scoring statistics for dashboard
         /// </summary>
         public ActionResult ScoringStatistics()
@@ -155,6 +119,43 @@ namespace HR.Web.Controllers
             }
 
             return View(statistics);
+        }
+
+        /// <summary>
+        /// Recalculate all scores for a position
+        /// </summary>
+        [HttpPost]
+        [Authorize(Roles = "Admin,HR")]
+        [ValidateAntiForgeryToken]
+        public ActionResult RecalculateScores(int positionId)
+        {
+            try
+            {
+                var applications = _uow.Applications.GetAll()
+                    .Where(a => a.PositionId == positionId)
+                    .ToList();
+
+                var updatedCount = 0;
+                foreach (var application in applications)
+                {
+                    var newScore = _scoringService.CalculateApplicationScore(application);
+                    if (application.Score != newScore)
+                    {
+                        application.Score = newScore;
+                        application.ScoreReason = "Questionnaire score recalculated.";
+                        _uow.Applications.Update(application);
+                        updatedCount++;
+                    }
+                }
+
+                _uow.Complete();
+                TempData["Message"] = string.Format("Scores recalculated for {0} applications.", updatedCount);
+                return Json(new { success = true, updatedCount });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = ex.Message });
+            }
         }
 
         /// <summary>

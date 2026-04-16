@@ -2,6 +2,12 @@
 @{
     ViewBag.Title = "Create Company";
     Layout = "~/Views/Shared/_Layout.cshtml";
+
+    bool showSimilarityWarning = false;
+    if (!ViewData.ModelState.IsValid && ViewData.ModelState.ContainsKey("Name"))
+    {
+        showSimilarityWarning = ViewData.ModelState["Name"].Errors.Any(e => e.ErrorMessage != null && e.ErrorMessage.StartsWith("Warning: A company with a similar name"));
+    }
 }
 
 <style>
@@ -150,7 +156,7 @@
                                 <p class="field-hint">Optional. If unspecified, a default 1-year license will be granted from today.</p>
                             </div>
 
-                            if (!ViewData.ModelState.IsValid)
+                            if (showSimilarityWarning)
                             {
                                 <div class="form-group mb-4 mt-3 p-3" style="background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px;">
                                     <div class="form-check">
@@ -184,5 +190,19 @@
 </div>
 
 @section Scripts {
-    @Scripts.Render("~/Scripts/validation")
+    @Scripts.Render("~/bundles/jqueryval")
+    <script>
+        $(document).ready(function () {
+            $('#createCompanyForm').on('submit', function (e) {
+                if ($(this).valid()) {
+                    var $btn = $(this).find('button[type="submit"]');
+                    if ($btn.hasClass('disabled')) {
+                        e.preventDefault();
+                        return false;
+                    }
+                    $btn.addClass('disabled').html('<i class="fas fa-spinner fa-spin mr-1"></i> Processing...');
+                }
+            });
+        });
+    </script>
 }

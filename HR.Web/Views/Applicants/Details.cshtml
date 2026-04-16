@@ -242,6 +242,7 @@
                                     }
                                     @if (hasAnswers)
                                     {
+                                        var answerScores = ViewBag.AnswerScores as System.Collections.Generic.Dictionary<int, decimal>;
                                         <ul class="list-group list-group-flush">
                                             @foreach (var ans in answers)
                                             {
@@ -264,8 +265,11 @@
                                                             questionText = "Question not available";
                                                         }
                                                     }
-                                                    <strong>@questionText</strong><br />
-                                                    <span class="text-muted">@ans.AnswerText</span>
+                                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                                        <strong>@questionText</strong>
+                                                    @* Rating removed on request *@
+                                                    </div>
+                                                    <span class="text-muted d-block mt-1">@ans.AnswerText</span>
                                                 </li>
                                             }
                                         </ul>
@@ -282,7 +286,6 @@
                             <div class="alert alert-info mb-0">
                                 No applications found for this applicant yet.
                             </div>
-                        }
                         }
                     </div>
                 </div>

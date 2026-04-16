@@ -2,155 +2,171 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Register";
+    ViewBag.HideNavbar = true;
     bool isSuperAdmin = ViewBag.IsSuperAdmin != null && (bool)ViewBag.IsSuperAdmin;
 }
 
-<div class="row justify-content-center mt-4">
-    <div class="col-md-8">
-        <h3>Create an account</h3>
-        
-        @{
-            if (!string.IsNullOrEmpty(ViewBag.ApplicationMessage))
-            {
-                <div class="alert alert-warning mb-4">
-                    <h6><i class="fas fa-info-circle"></i> Application Required</h6>
-                    <p class="mb-0">@ViewBag.ApplicationMessage</p>
+<style>
+    .mfa-setup-wrapper {
+        max-width: 1200px !important;
+        width: 95% !important;
+    }
+    .col-md-5, .col-md-12 {
+        max-width: 100% !important;
+    }
+</style>
+
+<div class="row justify-content-center mfa-setup-wrapper animate-fadeIn">
+    <div class="col-md-12">
+        <div class="mfa-card shadow-lg border-0">
+            <div class="mfa-header text-white bg-primary p-4 rounded-top">
+                <div class="login-icon-wrap bg-white text-primary mb-3 mx-auto d-flex align-items-center justify-content-center shadow-sm" style="width: 70px; height: 70px; border-radius: 50%;">
+                    <i class="fas fa-user-plus fa-2x"></i>
                 </div>
-            }
-        }
-        
-        <div class="alert alert-info mb-4">
-            <h6><i class="fas fa-shield-alt"></i> Enhanced Password Security</h6>
-            <p class="mb-2"><strong>Password Requirements:</strong></p>
-            <ul class="mb-0">
-                <li>At least 8 characters long</li>
-                <li>Contains uppercase letters (A-Z)</li>
-                <li>Contains lowercase letters (a-z)</li>
-                <li>Contains numbers (0-9)</li>
-                <li>Contains special characters (!@@#$%^&*)</li>
-                <li>Cannot contain common patterns (password, 123456, qwerty, etc.)</li>
-                <li>Cannot contain sequential characters (abc, 123, etc.)</li>
-            </ul>
-        </div>
-        
-        @using (Html.BeginForm("Register", "Account", FormMethod.Post, new { autocomplete = "off" })) {
-            @Html.AntiForgeryToken()
-            @Html.ValidationSummary(true, "", new { @class = "text-danger" })
-            
-            @Html.Hidden("ReturnUrl", ViewBag.ReturnUrl as string)
-            
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="form-group">
-                        @Html.LabelFor(m => m.FirstName)
-                        @Html.TextBoxFor(m => m.FirstName, new { @class = "form-control", placeholder = "Enter your first name" })
-                        @Html.ValidationMessageFor(m => m.FirstName, "", new { @class = "text-danger" })
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        @Html.LabelFor(m => m.LastName)
-                        @Html.TextBoxFor(m => m.LastName, new { @class = "form-control", placeholder = "Enter your last name" })
-                        @Html.ValidationMessageFor(m => m.LastName, "", new { @class = "text-danger" })
-                    </div>
-                </div>
+                <h3 class="font-weight-bold">Create an account</h3>
+                <p class="mb-0 opacity-75">Register to securely access the platform.</p>
             </div>
-            
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="form-group">
-                        @Html.LabelFor(m => m.UserName)
-                        @Html.TextBoxFor(m => m.UserName, new { @class = "form-control", autocomplete = "off" })
-                        @Html.ValidationMessageFor(m => m.UserName, "", new { @class = "text-danger" })
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        @Html.LabelFor(m => m.Email)
-                        @Html.TextBoxFor(m => m.Email, new { @class = "form-control" })
-                        @Html.ValidationMessageFor(m => m.Email, "", new { @class = "text-danger" })
-                    </div>
-                </div>
-            </div>
-            
-            <div class="row">
-                @if (isSuperAdmin)
-                {
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            @Html.LabelFor(m => m.CompanyId)
-                            @Html.DropDownListFor(m => m.CompanyId, new SelectList(Model.Companies, "Id", "Name", Model.CompanyId), "-- Select Company --", new { @class = "form-control" })
-                            @Html.ValidationMessageFor(m => m.CompanyId, "", new { @class = "text-danger" })
+
+            <div class="mfa-body p-4 bg-white rounded-bottom">
+                @{
+                    if (!string.IsNullOrEmpty(ViewBag.ApplicationMessage))
+                    {
+                        <div class="alert alert-warning border-0 shadow-sm mb-4" style="border-radius: 12px;">
+                            <i class="fas fa-info-circle mr-2"></i> <strong>Application Required:</strong> @ViewBag.ApplicationMessage
                         </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            @Html.LabelFor(m => m.Phone)
-                            @Html.TextBoxFor(m => m.Phone, new { @class = "form-control", placeholder = "Enter phone number" })
-                            @Html.ValidationMessageFor(m => m.Phone, "", new { @class = "text-danger" })
-                        </div>
-                    </div>
+                    }
                 }
-                else
-                {
-                    <div class="col-md-12">
-                        <div class="form-group">
-                            @Html.LabelFor(m => m.Phone)
-                            @Html.TextBoxFor(m => m.Phone, new { @class = "form-control", placeholder = "Enter phone number" })
-                            @Html.ValidationMessageFor(m => m.Phone, "", new { @class = "text-danger" })
+                
+                <div class="alert alert-info border-0 shadow-sm mb-4" style="border-radius: 12px;">
+                    <i class="fas fa-shield-alt mr-2"></i> <strong>Enhanced Password Security:</strong> Must be 8+ characters, with uppercase, lowercase, numbers, and special characters (!@@#$%^&*).
+                </div>
+
+                @using (Html.BeginForm("Register", "Account", FormMethod.Post, new { autocomplete = "off", id = "registerForm" })) {
+                    @Html.AntiForgeryToken()
+                    @Html.ValidationSummary(true, "", new { @class = "text-danger small font-weight-bold mb-3 d-block" })
+                    
+                    @Html.Hidden("ReturnUrl", ViewBag.ReturnUrl as string)
+                    
+                    <div class="row">
+                        <div class="col-md-6 login-field-group mb-4">
+                            <label for="FirstName" class="font-weight-bold text-muted small text-uppercase">First Name</label>
+                            <div class="login-input-wrap position-relative">
+                                <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;"><i class="fas fa-user"></i></span>
+                                @Html.TextBoxFor(m => m.FirstName, new { @class = "form-control form-control-lg", placeholder = "First name", style = "padding-left: 45px; height: 50px; border-radius: 10px; border: 2px solid #e9ecef;" })
+                            </div>
+                            @Html.ValidationMessageFor(m => m.FirstName, "", new { @class = "text-danger small font-weight-bold mt-1 d-block" })
+                        </div>
+                        <div class="col-md-6 login-field-group mb-4">
+                            <label for="LastName" class="font-weight-bold text-muted small text-uppercase">Last Name</label>
+                            <div class="login-input-wrap position-relative">
+                                <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;"><i class="fas fa-user-tag"></i></span>
+                                @Html.TextBoxFor(m => m.LastName, new { @class = "form-control form-control-lg", placeholder = "Last name", style = "padding-left: 45px; height: 50px; border-radius: 10px; border: 2px solid #e9ecef;" })
+                            </div>
+                            @Html.ValidationMessageFor(m => m.LastName, "", new { @class = "text-danger small font-weight-bold mt-1 d-block" })
                         </div>
                     </div>
-                }
-            </div>
-            
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="form-group">
-                        @Html.LabelFor(m => m.Password)
-                        <div class="input-group">
-                            @Html.PasswordFor(m => m.Password, new { @class = "form-control", id = "passwordInput", placeholder = "Enter secure password", autocomplete = "new-password" })
-                            <div class="input-group-append">
-                                <button class="btn btn-outline-secondary" type="button" id="togglePassword" style="border-color: #ced4da;">
+                    
+                    <div class="row">
+                        <div class="col-md-6 login-field-group mb-4">
+                            <label for="UserName" class="font-weight-bold text-muted small text-uppercase">Username</label>
+                            <div class="login-input-wrap position-relative">
+                                <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;"><i class="fas fa-id-badge"></i></span>
+                                @Html.TextBoxFor(m => m.UserName, new { @class = "form-control form-control-lg", autocomplete = "off", placeholder = "Unique username", style = "padding-left: 45px; height: 50px; border-radius: 10px; border: 2px solid #e9ecef;" })
+                            </div>
+                            @Html.ValidationMessageFor(m => m.UserName, "", new { @class = "text-danger small font-weight-bold mt-1 d-block" })
+                        </div>
+                        <div class="col-md-6 login-field-group mb-4">
+                            <label for="Email" class="font-weight-bold text-muted small text-uppercase">Email Address</label>
+                            <div class="login-input-wrap position-relative">
+                                <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;"><i class="fas fa-envelope"></i></span>
+                                @Html.TextBoxFor(m => m.Email, new { @class = "form-control form-control-lg", placeholder = "your-email@example.com", style = "padding-left: 45px; height: 50px; border-radius: 10px; border: 2px solid #e9ecef;" })
+                            </div>
+                            @Html.ValidationMessageFor(m => m.Email, "", new { @class = "text-danger small font-weight-bold mt-1 d-block" })
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        @if (isSuperAdmin)
+                        {
+                            <div class="col-md-6 login-field-group mb-4">
+                                <label for="CompanyId" class="font-weight-bold text-muted small text-uppercase">Company</label>
+                                <div class="login-input-wrap position-relative">
+                                    <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;"><i class="fas fa-building"></i></span>
+                                    @Html.DropDownListFor(m => m.CompanyId, new SelectList(Model.Companies, "Id", "Name", Model.CompanyId), "-- Select Company --", new { @class = "form-control form-control-lg", style = "padding-left: 45px; height: 50px; border-radius: 10px; border: 2px solid #e9ecef;" })
+                                </div>
+                                @Html.ValidationMessageFor(m => m.CompanyId, "", new { @class = "text-danger small font-weight-bold mt-1 d-block" })
+                            </div>
+                            <div class="col-md-6 login-field-group mb-4">
+                                <label for="Phone" class="font-weight-bold text-muted small text-uppercase">Phone</label>
+                                <div class="login-input-wrap position-relative">
+                                    <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;"><i class="fas fa-phone"></i></span>
+                                    @Html.TextBoxFor(m => m.Phone, new { @class = "form-control form-control-lg", placeholder = "Enter phone number", style = "padding-left: 45px; height: 50px; border-radius: 10px; border: 2px solid #e9ecef;" })
+                                </div>
+                                @Html.ValidationMessageFor(m => m.Phone, "", new { @class = "text-danger small font-weight-bold mt-1 d-block" })
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="col-md-12 login-field-group mb-4">
+                                <label for="Phone" class="font-weight-bold text-muted small text-uppercase">Phone</label>
+                                <div class="login-input-wrap position-relative">
+                                    <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;"><i class="fas fa-phone"></i></span>
+                                    @Html.TextBoxFor(m => m.Phone, new { @class = "form-control form-control-lg", placeholder = "Enter phone number", style = "padding-left: 45px; height: 50px; border-radius: 10px; border: 2px solid #e9ecef;" })
+                                </div>
+                                @Html.ValidationMessageFor(m => m.Phone, "", new { @class = "text-danger small font-weight-bold mt-1 d-block" })
+                            </div>
+                        }
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 login-field-group mb-4">
+                            <label for="Password" class="font-weight-bold text-muted small text-uppercase">Password</label>
+                            <div class="login-input-wrap position-relative">
+                                <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;"><i class="fas fa-lock"></i></span>
+                                @Html.PasswordFor(m => m.Password, new { @class = "form-control form-control-lg login-input", id = "passwordInput", placeholder = "Enter secure password", autocomplete = "new-password", style = "padding-left: 45px; padding-right: 45px; height: 50px; border-radius: 10px; border: 2px solid #e9ecef;" })
+                                <button type="button" class="login-toggle-pwd" id="togglePassword" style="border: none; background: transparent; position: absolute; right: 15px; top: 50%; transform: translateY(-50%); z-index: 10; outline: none;">
                                     <i class="fas fa-eye" id="toggleIcon"></i>
                                 </button>
                             </div>
+                            @Html.ValidationMessageFor(m => m.Password, "", new { @class = "text-danger small font-weight-bold mt-1 d-block" })
                         </div>
-                        @Html.ValidationMessageFor(m => m.Password, "", new { @class = "text-danger" })
                         
-                        <!-- Password strength indicator -->
-                        <div class="mt-2">
-                            <div class="progress" style="height: 5px;">
-                                <div id="passwordStrength" class="progress-bar" role="progressbar" style="width: 0%;"></div>
-                            </div>
-                            <small id="strengthText" class="form-text text-muted">Enter a password to check strength</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        @Html.LabelFor(m => m.ConfirmPassword)
-                        <div class="input-group">
-                            @Html.PasswordFor(m => m.ConfirmPassword, new { @class = "form-control", id = "confirmPasswordInput", placeholder = "Confirm password" })
-                            <div class="input-group-append">
-                                <button class="btn btn-outline-secondary" type="button" id="toggleConfirmPassword" style="border-color: #ced4da;">
+                        <div class="col-md-6 login-field-group mb-4">
+                            <label for="ConfirmPassword" class="font-weight-bold text-muted small text-uppercase">Confirm Password</label>
+                            <div class="login-input-wrap position-relative">
+                                <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;"><i class="fas fa-lock"></i></span>
+                                @Html.PasswordFor(m => m.ConfirmPassword, new { @class = "form-control form-control-lg login-input", id = "confirmPasswordInput", placeholder = "Confirm password", style = "padding-left: 45px; padding-right: 45px; height: 50px; border-radius: 10px; border: 2px solid #e9ecef;" })
+                                <button type="button" class="login-toggle-pwd" id="toggleConfirmPassword" style="border: none; background: transparent; position: absolute; right: 15px; top: 50%; transform: translateY(-50%); z-index: 10; outline: none;">
                                     <i class="fas fa-eye" id="toggleConfirmIcon"></i>
                                 </button>
                             </div>
+                            @Html.ValidationMessageFor(m => m.ConfirmPassword, "", new { @class = "text-danger small font-weight-bold mt-1 d-block" })
                         </div>
-                        @Html.ValidationMessageFor(m => m.ConfirmPassword, "", new { @class = "text-danger" })
                     </div>
+
+                    <!-- Password strength indicator moved uniformly below the row -->
+                    <div class="mb-4 text-center px-2">
+                        <div class="progress" style="height: 6px; border-radius: 4px; background: #e9ecef;">
+                            <div id="passwordStrength" class="progress-bar" role="progressbar" style="width: 0%;"></div>
+                        </div>
+                        <small id="strengthText" class="form-text text-muted font-weight-bold mt-2">Enter a password to check strength</small>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg btn-block shadow-lg font-weight-bold" style="height: 55px; border-radius: 12px;" id="submitBtn">
+                            <i class="fas fa-user-plus mr-2"></i> Create Account
+                        </button>
+                    </div>
+                }
+
+                <div class="mt-4 text-center">
+                    <p class="text-muted small mb-0 font-weight-bold">Already have an account?</p>
+                    <a href="@Url.Action("Login")" class="btn btn-outline-primary btn-sm rounded-pill font-weight-bold px-4 py-2 mt-2 shadow-sm" style="border-width: 2px;">
+                        <i class="fas fa-sign-in-alt mr-1"></i> Back to Login
+                    </a>
                 </div>
             </div>
-            
-            <div class="form-group">
-                <button type="submit" class="btn btn-primary" id="submitBtn">
-                    <i class="fas fa-user-plus"></i> Register
-                </button>
-                <a class="btn btn-link" href="@Url.Action("Login")">
-                    <i class="fas fa-arrow-left"></i> Back to login
-                </a>
-            </div>
-        }
+        </div>
     </div>
 </div>
 
@@ -290,3 +306,5 @@
         confirmPasswordInput.addEventListener('input', checkPasswordMatch);
     });
 </script>
+
+@Html.Partial("_AuthStyles")

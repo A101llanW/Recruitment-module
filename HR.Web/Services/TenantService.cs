@@ -351,14 +351,19 @@ namespace HR.Web.Services
                 return "company-" + Guid.NewGuid().ToString("N").Substring(0, 8);
 
             // Generate access token style slug (e.g., A0809273)
-            var random = new Random();
+            var bytes = new byte[9];
+            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(bytes);
+            }
+
             string letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
             string numbers = "0123456789";
             
-            string slug = letters[random.Next(0, 26)].ToString();
-            for (int i = 0; i < 8; i++)
+            string slug = letters[bytes[0] % letters.Length].ToString();
+            for (int i = 1; i < 9; i++)
             {
-                slug += numbers[random.Next(0, 10)].ToString();
+                slug += numbers[bytes[i] % numbers.Length].ToString();
             }
 
             // Ensure slug is unique
