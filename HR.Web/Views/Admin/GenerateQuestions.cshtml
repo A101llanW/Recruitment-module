@@ -30,6 +30,7 @@
         </div>
         <div class="card-body">
             <form id="aiGenerationForm">
+                @Html.AntiForgeryToken()
                 <div class="row">
                     <div class="col-md-6">
                         <div class="form-group">
@@ -229,6 +230,12 @@
 // Store generated questions globally for action functions
 var generatedQuestions = [];
 
+function withAntiForgeryToken(data) {
+    data = data || {};
+    data.__RequestVerificationToken = $('input[name="__RequestVerificationToken"]').first().val();
+    return data;
+}
+
 // Define functions globally so they can be accessed by onclick handlers
 function updateSelectedCount() {
     var total = $('.question-checkbox').length;
@@ -306,9 +313,9 @@ function addGeneratedQuestionsToBank() {
     $.ajax({
         url: '@Url.Action("AddGeneratedQuestionsToBank", "Admin")',
         type: 'POST',
-        data: {
+        data: withAntiForgeryToken({
             questionsJson: JSON.stringify(selectedQuestions)
-        },
+        }),
         success: function(response) {
             if (response.success) {
                 alert(response.message);
@@ -339,9 +346,9 @@ function addGeneratedQuestionsToSample() {
     $.ajax({
         url: '@Url.Action("CheckDuplicateQuestions", "Admin")',
         type: 'POST',
-        data: {
+        data: withAntiForgeryToken({
             questionsJson: JSON.stringify(selectedQuestions)
-        },
+        }),
         success: function(response) {
             if (response.success) {
                 if (response.duplicates && response.duplicates.length > 0) {
@@ -365,9 +372,9 @@ function addQuestionsToSample(questions) {
     $.ajax({
         url: '@Url.Action("AddQuestionsToSample", "Admin")',
         type: 'POST',
-        data: {
+        data: withAntiForgeryToken({
             questionsJson: JSON.stringify(questions)
-        },
+        }),
         success: function(response) {
             if (response.success) {
                 alert(response.message);
@@ -424,7 +431,7 @@ function createPositionAndAddQuestions() {
     $.ajax({
         url: '@Url.Action("CreatePositionWithQuestions", "Admin")',
         type: 'POST',
-        data: {
+        data: withAntiForgeryToken({
             positionTitle: positionTitle,
             positionDescription: positionDescription,
             positionDepartment: positionDepartment,
@@ -433,7 +440,7 @@ function createPositionAndAddQuestions() {
             positionKeyResponsibilities: positionKeyResponsibilities,
             positionRequiredQualifications: positionRequiredQualifications,
             questionsJson: JSON.stringify(selectedQuestions)
-        },
+        }),
         success: function(response) {
             if (response.success) {
                 alert(response.message);
@@ -595,9 +602,9 @@ function processDuplicateDecisions(newCount, duplicateCount) {
     $.ajax({
         url: '@Url.Action("ProcessDuplicateDecisions", "Admin")',
         type: 'POST',
-        data: {
+        data: withAntiForgeryToken({
             decisionsJson: JSON.stringify(decisions)
-        },
+        }),
         success: function(response) {
             if (response.success) {
                 var modalEl = document.getElementById('duplicateDecisionModal');
@@ -730,7 +737,7 @@ $(document).ready(function() {
             url: '@Url.Action("GenerateQuestions", "Admin")',
             type: 'POST',
             traditional: true,
-            data: {
+            data: withAntiForgeryToken({
                 jobTitle: jobTitle,
                 jobDescription: jobDescription,
                 keyResponsibilities: keyResponsibilities,
@@ -738,7 +745,7 @@ $(document).ready(function() {
                 experience: 'mid',
                 questionTypes: questionTypes,
                 count: count
-            },
+            }),
             success: function(response) {
                 console.log('Received response:', response);
                 console.log('Response success:', response.success);
@@ -870,7 +877,7 @@ $(document).ready(function() {
                     url: '@Url.Action("CheckQuestionStatus", "Admin")?_=' + new Date().getTime(),
                     type: 'POST',
                     traditional: true,
-                    data: {
+                    data: withAntiForgeryToken({
                         jobTitle: jobTitle,
                         jobDescription: jobDescription,
                         keyResponsibilities: keyResponsibilities,
@@ -878,7 +885,7 @@ $(document).ready(function() {
                         experience: 'mid',
                         questionTypes: questionTypes,
                         count: count
-                    },
+                    }),
                     success: function(response) {
                         console.log('Status check response:', response);
                         

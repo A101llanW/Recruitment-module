@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -8,8 +9,6 @@ namespace HR.Web.Services
 {
     public class DynamicQuestionService
     {
-        private readonly Random _random = new Random();
-
         public class GeneratedQuestion
         {
             public GeneratedQuestion()
@@ -72,10 +71,19 @@ namespace HR.Web.Services
             string jobTitle,
             string jobDescription,
             string keyResponsibilities,
+            string requiredQualifications)
+        {
+            return GenerateQuestions(jobTitle, jobDescription, keyResponsibilities, requiredQualifications, "mid", 5, null);
+        }
+
+        public QuestionGenerationResult GenerateQuestions(
+            string jobTitle,
+            string jobDescription,
+            string keyResponsibilities,
             string requiredQualifications,
-            string experience = "mid",
-            int questionCount = 5,
-            List<string> questionTypes = null)
+            string experience,
+            int questionCount,
+            List<string> questionTypes)
         {
             try
             {
@@ -106,7 +114,7 @@ namespace HR.Web.Services
                 }
 
                 // Shuffle and limit to requested count
-                questions = questions.OrderBy(q => _random.Next()).Take(questionCount).ToList();
+                questions = ShuffleSecurely(questions).Take(questionCount).ToList();
 
                 return new QuestionGenerationResult
                 {
@@ -704,9 +712,9 @@ namespace HR.Web.Services
             if (analysis.TechnicalSkills == null || !analysis.TechnicalSkills.Any())
             {
                 var defaultSkills = new[] { "problem-solving", "communication", "project management", "teamwork", "leadership" };
-                return defaultSkills[_random.Next(defaultSkills.Length)];
+                return defaultSkills[GetSecureRandomInt(defaultSkills.Length)];
             }
-            return analysis.TechnicalSkills[_random.Next(analysis.TechnicalSkills.Count)];
+            return analysis.TechnicalSkills[GetSecureRandomInt(analysis.TechnicalSkills.Count)];
         }
 
         private string GetRandomResponsibility(JobAnalysis analysis)
@@ -714,11 +722,11 @@ namespace HR.Web.Services
             if (analysis.Responsibilities == null || !analysis.Responsibilities.Any())
             {
                 var defaultResponsibilities = new[] { "managing projects", "working with clients", "developing solutions", "analyzing data", "leading teams" };
-                return defaultResponsibilities[_random.Next(defaultResponsibilities.Length)];
+                return defaultResponsibilities[GetSecureRandomInt(defaultResponsibilities.Length)];
             }
 
             // Pick a responsibility and try to clean/shorten it
-            var raw = analysis.Responsibilities[_random.Next(analysis.Responsibilities.Count)];
+            var raw = analysis.Responsibilities[GetSecureRandomInt(analysis.Responsibilities.Count)];
             
             // If it's too long, try to take just the first part (before a comma or period)
             if (raw.Length > 80)
@@ -732,6 +740,44 @@ namespace HR.Web.Services
             }
             
             return raw.Trim();
+        }
+
+        private static List<T> ShuffleSecurely<T>(IEnumerable<T> source)
+        {
+            var items = source.ToList();
+            for (int i = items.Count - 1; i > 0; i--)
+            {
+                int j = GetSecureRandomInt(i + 1);
+                var temp = items[i];
+                items[i] = items[j];
+                items[j] = temp;
+            }
+
+            return items;
+        }
+
+        private static int GetSecureRandomInt(int maxExclusive)
+        {
+            if (maxExclusive <= 0)
+            {
+                throw new ArgumentOutOfRangeException("maxExclusive");
+            }
+
+            var bytes = new byte[4];
+            var bound = (uint)maxExclusive;
+            var max = uint.MaxValue - (uint.MaxValue % bound);
+            uint value;
+
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                do
+                {
+                    rng.GetBytes(bytes);
+                    value = BitConverter.ToUInt32(bytes, 0);
+                } while (value >= max);
+            }
+
+            return (int)(value % bound);
         }
 
                 // Helper methods for template variable replacement

@@ -1,0 +1,8 @@
+---
+exclude_paths:
+  - ".codacy/**"
+  - "Publish/**"
+  - "**/bin/**"
+  - "**/obj/**"
+  - "HR.Web/App_Data/**"
+  - "HR.Web/Scripts/**/*.min.js"

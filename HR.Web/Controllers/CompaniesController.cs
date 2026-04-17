@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Web.Mvc;
 using HR.Web.Data;
 using HR.Web.Models;
@@ -155,7 +157,7 @@ namespace HR.Web.Controllers
                     .OrderByDescending(u => u.Id)
                     .FirstOrDefault();
 
-                string tempPassword = "";
+                string tempPassword = null;
                 if (adminUser != null)
                 {
                     // Generate a new temporary password for admin user
@@ -164,11 +166,7 @@ namespace HR.Web.Controllers
                     _uow.Users.Update(adminUser);
                     _uow.Complete();
                 }
-                else
-                {
-                    // Fallback: If we can't find the user by ID (unlikely), try by username/company
-                    string adminGuess = _tenantService.GenerateDefaultPassword(); // just for safety
-                }
+                // If adminUser is null we skip credential generation and continue with fallback messaging.
 
                 // Clear the form key
                 TempData.Remove(formKey);
@@ -235,15 +233,16 @@ namespace HR.Web.Controllers
                 // Clear the form key on error
                 System.Web.HttpRuntime.Cache.Remove(formKey);
                 
-                string errorMsg = ex.Message;
+                var errorBuilder = new StringBuilder(ex.Message);
                 Exception inner = ex.InnerException;
                 while (inner != null)
                 {
-                    errorMsg += " | Inner: " + inner.Message;
+                    errorBuilder.Append(" | Inner: ");
+                    errorBuilder.Append(inner.Message);
                     inner = inner.InnerException;
                 }
                 
-                ModelState.AddModelError("", "Error creating company: " + errorMsg);
+                ModelState.AddModelError("", "Error creating company: " + errorBuilder.ToString());
                 return View(model);
             }
         }
@@ -443,7 +442,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult RequestImpersonation(int companyId, string targetAdmin, string reason = null)
+        public ActionResult RequestImpersonation(int companyId, string targetAdmin, string reason)
         {
             if (string.IsNullOrWhiteSpace(targetAdmin))
             {
@@ -712,23 +711,15 @@ namespace HR.Web.Controllers
 
                 foreach (var company in companies)
                 {
-                    // Generate new token-style slug
-                    var random = new Random();
-                    string letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-                    string numbers = "0123456789";
-                    
-                    string newSlug = letters[random.Next(0, 26)].ToString();
-                    for (int i = 0; i < 8; i++)
-                    {
-                        newSlug += numbers[random.Next(0, 10)].ToString();
-                    }
+                    // Generate new token-style slug using cryptographically secure randomness
+                    string newSlug = GenerateSecureTokenSlug();
 
                     // Ensure slug is unique
                     var originalSlug = newSlug;
                     int counter = 1;
                     while (_uow.Companies.GetAll().Any(c => c.Slug.Equals(newSlug, StringComparison.OrdinalIgnoreCase) && c.Id != company.Id))
                     {
-                        newSlug = originalSlug + "-" + counter;
+                        newSlug = string.Concat(originalSlug, "-", counter);
                         counter++;
                     }
 
@@ -867,6 +858,46 @@ namespace HR.Web.Controllers
                 slug = slug.Substring(0, 50);
 
             return slug;
+        }
+
+        private static string GenerateSecureTokenSlug()
+        {
+            const string letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            const string numbers = "0123456789";
+
+            var slugChars = new char[9];
+            slugChars[0] = letters[GetSecureRandomInt(letters.Length)];
+
+            for (int i = 1; i < slugChars.Length; i++)
+            {
+                slugChars[i] = numbers[GetSecureRandomInt(numbers.Length)];
+            }
+
+            return new string(slugChars);
+        }
+
+        private static int GetSecureRandomInt(int maxExclusive)
+        {
+            if (maxExclusive <= 0)
+            {
+                throw new ArgumentOutOfRangeException("maxExclusive");
+            }
+
+            var bytes = new byte[4];
+            var bound = (uint)maxExclusive;
+            var max = uint.MaxValue - (uint.MaxValue % bound);
+            uint value;
+
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                do
+                {
+                    rng.GetBytes(bytes);
+                    value = BitConverter.ToUInt32(bytes, 0);
+                } while (value >= max);
+            }
+
+            return (int)(value % bound);
         }
 
         protected override void Dispose(bool disposing)

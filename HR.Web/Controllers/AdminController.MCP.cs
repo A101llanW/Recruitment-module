@@ -32,10 +32,13 @@ namespace HR.Web.Controllers
 
         // POST: Admin/GenerateQuestions
         [HttpPost]
-        public async Task<ActionResult> GenerateQuestions(string jobTitle, string jobDescription, string keyResponsibilities, string requiredQualifications, int count, string experience = "mid", string[] questionTypes = null)
+        [ValidateAntiForgeryToken]
+        public async Task<ActionResult> GenerateQuestions(string jobTitle, string jobDescription, string keyResponsibilities, string requiredQualifications, int count, string experience, string[] questionTypes)
         {
             try
             {
+                experience = string.IsNullOrWhiteSpace(experience) ? "mid" : experience;
+
                 // Debug: Log to System.Diagnostics instead of Response
                 var debugMsg = string.Format("=== GenerateQuestions Debug ===\njobTitle: {0}\njobDescription length: {1}\ncount: {2}\nexperience: {3}\nquestionTypes: {4}\n",
                     jobTitle, jobDescription != null ? jobDescription.Length : 0, count, experience, questionTypes != null ? string.Join(", ", questionTypes) : "null");
@@ -126,6 +129,7 @@ namespace HR.Web.Controllers
         /// Check status of question generation and retrieve results (for compatibility with existing frontend)
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<ActionResult> CheckQuestionStatus()
         {
             try
@@ -431,7 +435,6 @@ namespace HR.Web.Controllers
         {
             try
             {
-                var questions = JsonConvert.DeserializeObject<List<GeneratedQuestion>>(questionsJson);
                 var currentCompanyId = _tenantService.GetCurrentUserCompanyId();
                 
                 // Debug: Log to System.Diagnostics

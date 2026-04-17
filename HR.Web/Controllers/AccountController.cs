@@ -382,11 +382,12 @@ namespace HR.Web.Controllers
                     return RedirectToAction("Index", "Positions", new { tenant = correctTenantSlug });
                 }
 
-                // If they are on the right URL and have a returnUrl, use it
-                if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                // If there is a safe, approved in-app return target, use it.
+                var safeReturnResult = BuildSafeReturnRedirect(returnUrl, correctTenantSlug);
+                if (safeReturnResult != null)
                 {
-                    AuditSvc.LogAction(username, "LOGIN_REDIRECT_RETURNURL", "Account", user.Id.ToString(), true, "Redirecting to returnUrl: " + returnUrl);
-                    return Redirect(returnUrl);
+                    AuditSvc.LogAction(username, "LOGIN_REDIRECT_RETURNURL", "Account", user.Id.ToString(), true, "Redirecting to validated return target");
+                    return safeReturnResult;
                 }
 
                 // Default home for regular users
@@ -496,44 +497,8 @@ namespace HR.Web.Controllers
                 AuditSvc.LogAction(username, "PASSWORD_CHANGED", "Account", user.Id.ToString(), 
                     "Password successfully changed to meet security requirements");
 
-                // Check if this was a forced password change
-                var checkAuthCookie = Request.Cookies[FormsAuthentication.FormsCookieName];
-                bool wasForcedChange = false;
-                
-                if (checkAuthCookie != null)
-                {
-                    var ticket = FormsAuthentication.Decrypt(checkAuthCookie.Value);
-                    if (ticket != null && ticket.UserData.Contains("RequirePasswordChange"))
-                    {
-                        wasForcedChange = true;
-                        // Issue new regular auth cookie
-                        // Issue new regular auth cookie with AccessToken + UA fingerprint
-                        var newUserRole = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
-                        
-                        // Structure: Role|CompanyId|AccessToken|UAHash
-                        var userData = string.Format("{0}|{1}|{2}|{3}", 
-                            newUserRole, 
-                            user.CompanyId, 
-                            user.AccessToken,
-                            ComputeUaHash(Request.UserAgent));
-
-                        var newTicket = new FormsAuthenticationTicket(
-                            1,
-                            username,
-                            DateTime.Now,
-                            DateTime.Now.AddHours(8),
-                            false,
-                            userData);
-                            
-                        var newEncrypted = FormsAuthentication.Encrypt(newTicket);
-                        var newCookie = new HttpCookie(FormsAuthentication.FormsCookieName, newEncrypted)
-                        {
-                            HttpOnly = true,
-                            Secure   = Request.IsSecureConnection
-                        };
-                        Response.Cookies.Add(newCookie);
-                    }
-                }
+                // Preserve forced-change messaging for users who were required to rotate credentials.
+                bool wasForcedChange = isForcedChange;
 
                 if (wasForcedChange)
                 {
@@ -544,20 +509,9 @@ namespace HR.Web.Controllers
                     TempData["SuccessMessage"] = "Your password has been successfully updated!";
                 }
                 
-                // Redirect based on user role for both forced and voluntary changes
-                var userRole = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
-                var tenantToken = RouteData.Values["tenant"] as string;
-
-                if (string.Equals(userRole, "Client", StringComparison.OrdinalIgnoreCase))
-                {
-                    return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
-                }
-                else if (string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Bypass AdminController entirely - go directly to a known working action
-                    return RedirectToAction("Index", "Dashboard", new { tenant = tenantToken });
-                }
-                return RedirectToAction("Index", "Dashboard", new { tenant = tenantToken });
+                // Rebuild cookie + redirect via the same normalized role flow used after login.
+                // This prevents SuperAdmins (Role=Admin + CompanyId=null) from being treated as company admins.
+                return CompleteLogin(user);
             }
             catch (Exception ex)
             {
@@ -997,8 +951,13 @@ namespace HR.Web.Controllers
                 {
                     try
                     {
-                        var uri = new Uri("http://dummy.com" + returnUrl);
-                        var query = HttpUtility.ParseQueryString(uri.Query);
+                        var queryStart = returnUrl.IndexOf('?');
+                        if (queryStart < 0)
+                        {
+                            throw new InvalidOperationException("No query string in returnUrl.");
+                        }
+
+                        var query = HttpUtility.ParseQueryString(returnUrl.Substring(queryStart));
                         var posIdStr = query["positionId"];
                         int posId;
                         if (int.TryParse(posIdStr, out posId))
@@ -1191,9 +1150,10 @@ namespace HR.Web.Controllers
                 // Check if there's a return URL (from application attempt)
                 var returnUrl = Request.Form["ReturnUrl"];
 
-                if (!string.IsNullOrEmpty(returnUrl))
+                var safeRegisterReturn = BuildSafeReturnRedirect(returnUrl, tenantToken);
+                if (safeRegisterReturn != null)
                 {
-                    return Redirect(returnUrl);
+                    return safeRegisterReturn;
                 }
 
                 return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
@@ -1465,6 +1425,130 @@ namespace HR.Web.Controllers
             }
         }
 
+        private ActionResult BuildSafeReturnRedirect(string returnUrl, string tenantSlug)
+        {
+            Uri parsedUri;
+            if (!TryParseSafeLocalReturnUri(returnUrl, out parsedUri))
+            {
+                return null;
+            }
+
+            var segments = SplitPathSegments(parsedUri.AbsolutePath);
+            if (segments.Length == 0)
+            {
+                return null;
+            }
+
+            string pathTenant;
+            string controllerSegment;
+            string actionSegment;
+            ResolveRouteSegments(segments, out pathTenant, out controllerSegment, out actionSegment);
+
+            var resolvedTenant = ResolveTenantSlug(tenantSlug, pathTenant);
+            return BuildWhitelistedRedirect(controllerSegment, actionSegment, segments.Length, resolvedTenant, parsedUri.Query);
+        }
+
+        private bool TryParseSafeLocalReturnUri(string returnUrl, out Uri parsedUri)
+        {
+            parsedUri = null;
+            if (string.IsNullOrWhiteSpace(returnUrl) || !Url.IsLocalUrl(returnUrl))
+            {
+                return false;
+            }
+
+            if (returnUrl.StartsWith("//", StringComparison.Ordinal) || returnUrl.StartsWith(@"/\", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return Uri.TryCreate("https://local.test" + returnUrl, UriKind.Absolute, out parsedUri);
+        }
+
+        private static string[] SplitPathSegments(string path)
+        {
+            return (path ?? string.Empty).Trim('/').Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private static void ResolveRouteSegments(string[] segments, out string pathTenant, out string controllerSegment, out string actionSegment)
+        {
+            pathTenant = null;
+            if (segments.Length >= 2 && IsTenantAwareController(segments[1]))
+            {
+                pathTenant = segments[0];
+                controllerSegment = segments[1];
+                actionSegment = segments.Length >= 3 ? segments[2] : "Index";
+                return;
+            }
+
+            controllerSegment = segments[0];
+            actionSegment = segments.Length >= 2 ? segments[1] : "Index";
+        }
+
+        private static bool IsTenantAwareController(string segment)
+        {
+            return segment.Equals("Applications", StringComparison.OrdinalIgnoreCase) ||
+                   segment.Equals("Positions", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ResolveTenantSlug(string tenantSlug, string pathTenant)
+        {
+            return string.IsNullOrWhiteSpace(tenantSlug) ? pathTenant : tenantSlug;
+        }
+
+        private ActionResult BuildWhitelistedRedirect(string controllerSegment, string actionSegment, int segmentLength, string resolvedTenant, string queryString)
+        {
+            var query = HttpUtility.ParseQueryString(queryString ?? string.Empty);
+            ActionResult applicationRedirect;
+
+            if (controllerSegment.Equals("Applications", StringComparison.OrdinalIgnoreCase) &&
+                TryBuildApplicationsRedirect(actionSegment, query, resolvedTenant, out applicationRedirect))
+            {
+                return applicationRedirect;
+            }
+
+            if (IsPositionsIndexRoute(controllerSegment, actionSegment, segmentLength))
+            {
+                return RedirectToAction("Index", "Positions", new { tenant = resolvedTenant });
+            }
+
+            return null;
+        }
+
+        private bool TryBuildApplicationsRedirect(string actionSegment, System.Collections.Specialized.NameValueCollection query, string resolvedTenant, out ActionResult redirectResult)
+        {
+            redirectResult = null;
+
+            int positionId;
+            if (!int.TryParse(query["positionId"], out positionId))
+            {
+                return false;
+            }
+
+            if (actionSegment.Equals("Questionnaire", StringComparison.OrdinalIgnoreCase))
+            {
+                redirectResult = RedirectToAction("Questionnaire", "Applications", new { tenant = resolvedTenant, positionId = positionId });
+                return true;
+            }
+
+            if (actionSegment.Equals("Apply", StringComparison.OrdinalIgnoreCase))
+            {
+                redirectResult = RedirectToAction("Apply", "Applications", new { tenant = resolvedTenant, positionId = positionId });
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsPositionsIndexRoute(string controllerSegment, string actionSegment, int segmentLength)
+        {
+            if (!controllerSegment.Equals("Positions", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return actionSegment.Equals("Index", StringComparison.OrdinalIgnoreCase) || segmentLength == 1;
+        }
+
         // ── MFA Setup ──────────────────────────────────────────────────────────
         [HttpGet]
         public ActionResult SetupMFA()
@@ -1631,7 +1715,12 @@ namespace HR.Web.Controllers
             return Json(new { success = true });
         }
 
-        private void SendMfaCode(User user, string overrideMethod = null)
+        private void SendMfaCode(User user)
+        {
+            SendMfaCode(user, null);
+        }
+
+        private void SendMfaCode(User user, string overrideMethod)
         {
             string method = overrideMethod ?? user.MfaMethod;
             if (method != "Email") return;

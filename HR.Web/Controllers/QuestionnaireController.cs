@@ -192,6 +192,7 @@ namespace HR.Web.Controllers
         /// API endpoint for live preview
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult LivePreview(int positionId, List<int> questionIds)
         {
             try

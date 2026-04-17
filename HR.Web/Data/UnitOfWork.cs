@@ -37,11 +37,17 @@ namespace HR.Web.Data
         }
 
         /// <summary>
-        /// Execute raw SQL command
+        /// Execute SQL command with parameter placeholders and values.
+        /// Example: ExecuteSql("UPDATE Users SET IsActive = @p0 WHERE Id = @p1", isActive, userId);
         /// </summary>
-        public void ExecuteSql(string sql)
+        public void ExecuteSql(string sql, params object[] parameters)
         {
-            _context.Database.ExecuteSqlCommand(sql);
+            if (string.IsNullOrWhiteSpace(sql))
+            {
+                throw new ArgumentException("SQL command cannot be null or empty.", "sql");
+            }
+
+            _context.Database.ExecuteSqlCommand(sql, parameters ?? new object[0]);
         }
 
         public void Dispose()

@@ -23,6 +23,7 @@ namespace HR.Web.Controllers
 
         // POST: ReportGenerator/GenerateDirect
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult GenerateDirect(string reportType, string format = "csv")
         {
             try
@@ -50,6 +51,7 @@ namespace HR.Web.Controllers
 
         // POST: ReportGenerator/Preview
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult Preview(string reportType)
         {
             try
