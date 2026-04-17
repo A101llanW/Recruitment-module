@@ -17,7 +17,6 @@ permissions:
 jobs:
   codacy-analysis:
     name: Codacy Analysis
-    if: ${{ secrets.CODACY_PROJECT_TOKEN != '' || secrets.CODACY_API_TOKEN != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
