@@ -12,8 +12,8 @@ namespace HR.Web.Utilities
             {
                 var smtpHost = "smtp.gmail.com";
                 var smtpPort = 587;
-                var smtpUser = "ntlafrica@gmail.com";
-                var smtpPass = "dskdswueofsuxzlt";
+                var smtpUser = "nanosoft.africa@gmail.com";
+                var smtpPass = "rhhbtungmedmdksr";
                 var enableSsl = true;
 
                 using (var client = new SmtpClient(smtpHost, smtpPort))
@@ -32,12 +32,12 @@ namespace HR.Web.Utilities
                     // Test with a simple message
                     var mailMessage = new MailMessage
                     {
-                        From = new MailAddress("ntlafrica@gmail.com", "Test"),
+                        From = new MailAddress("nanosoft.africa@gmail.com", "Test"),
                         Subject = "SMTP Test",
                         Body = "This is a test message",
                         IsBodyHtml = false
                     };
-                    mailMessage.To.Add("ntlafrica@gmail.com");
+                    mailMessage.To.Add("nanosoft.africa@gmail.com");
 
                     client.Send(mailMessage);
                     Console.WriteLine("✅ Email sent successfully!");
