@@ -254,6 +254,7 @@
     <Compile Include="Controllers\ApplicantsController.cs" />
     <Compile Include="Controllers\DepartmentsController.cs" />
     <Compile Include="Controllers\AccountController.cs" />
+    <Compile Include="Controllers\AccountController.PasswordResetFlows.cs" />
     <Compile Include="Controllers\AccountController.SecurityFlows.cs" />
     <Compile Include="Controllers\ReportGeneratorController.cs" />
     <Compile Include="Controllers\AdminController.UserManagement.cs" />
