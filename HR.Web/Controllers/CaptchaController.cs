@@ -8,6 +8,13 @@ namespace HR.Web.Controllers
     {
         private readonly RealisticCaptchaService _captchaService = new RealisticCaptchaService();
 
+        private sealed class CaptchaSessionState
+        {
+            public string CaptchaText { get; set; }
+            public DateTime? Expiry { get; set; }
+            public string CaptchaId { get; set; }
+        }
+
         [AllowAnonymous]
         // Test endpoint to verify controller is working
         public ActionResult Test()
@@ -47,42 +54,57 @@ namespace HR.Web.Controllers
         {
             try
             {
-                // Check if captcha exists and hasn't expired
-                var sessionText = Session["CaptchaText"] as string;
-                var sessionExpiry = Session["CaptchaExpiry"] as DateTime?;
-                var sessionId = Session["CaptchaId"] as string;
-                
-                if (string.IsNullOrEmpty(sessionText) || !sessionExpiry.HasValue || string.IsNullOrEmpty(sessionId))
+                var state = GetCaptchaSessionState();
+                var validationErrorResult = ValidateCaptchaSessionState(state, captchaId);
+                if (validationErrorResult != null)
                 {
-                    return Json(new { success = false, message = "CAPTCHA session expired" });
+                    return validationErrorResult;
                 }
-                
-                if (DateTime.UtcNow > sessionExpiry.Value)
-                {
-                    ClearCaptchaSession();
-                    return Json(new { success = false, message = "CAPTCHA expired" });
-                }
-                
-                if (sessionId != captchaId)
-                {
-                    return Json(new { success = false, message = "Invalid CAPTCHA ID" });
-                }
-                
+
                 var isValid = _captchaService.ValidateCaptcha(captchaId, userInput);
-                
-                if (isValid && string.Equals(sessionText, userInput, StringComparison.OrdinalIgnoreCase))
+                if (isValid && string.Equals(state.CaptchaText, userInput, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Clear captcha after successful validation
                     ClearCaptchaSession();
                     return Json(new { success = true });
                 }
-                
+
                 return Json(new { success = false, message = "Invalid CAPTCHA" });
             }
             catch (Exception ex)
             {
                 return Json(new { success = false, message = ex.Message });
             }
+        }
+
+        private CaptchaSessionState GetCaptchaSessionState()
+        {
+            return new CaptchaSessionState
+            {
+                CaptchaText = Session["CaptchaText"] as string,
+                Expiry = Session["CaptchaExpiry"] as DateTime?,
+                CaptchaId = Session["CaptchaId"] as string
+            };
+        }
+
+        private JsonResult ValidateCaptchaSessionState(CaptchaSessionState state, string captchaId)
+        {
+            if (string.IsNullOrEmpty(state.CaptchaText) || !state.Expiry.HasValue || string.IsNullOrEmpty(state.CaptchaId))
+            {
+                return Json(new { success = false, message = "CAPTCHA session expired" });
+            }
+
+            if (DateTime.UtcNow > state.Expiry.Value)
+            {
+                ClearCaptchaSession();
+                return Json(new { success = false, message = "CAPTCHA expired" });
+            }
+
+            if (state.CaptchaId != captchaId)
+            {
+                return Json(new { success = false, message = "Invalid CAPTCHA ID" });
+            }
+
+            return null;
         }
 
         [HttpGet]

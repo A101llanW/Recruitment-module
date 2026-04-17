@@ -18,50 +18,68 @@ namespace HR.Web.Controllers
 
         public ActionResult Index()
         {
-            // If the user is unauthenticated, show the guest redirect message
             if (User == null || !User.Identity.IsAuthenticated)
             {
                 ViewBag.Message = "Please sign in or create account first to view your interviews.";
                 return View("GuestAccess");
             }
 
+            var user = GetCurrentInterviewUser();
+            if (user == null)
+            {
+                return View(Enumerable.Empty<Interview>());
+            }
+
+            if (IsManagementUser(user))
+            {
+                return View(GetManagementInterviews().ToList());
+            }
+
+            return View(GetApplicantInterviews(user).ToList());
+        }
+
+        private User GetCurrentInterviewUser()
+        {
             var username = User.Identity.Name;
             var lowerUsername = username.ToLower();
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
-            if (user == null) return View(Enumerable.Empty<Interview>());
+            return _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+        }
 
-            // Consolidated check for management roles (Admin or SuperAdmin)
-            bool isManagement = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || user.Role == "Admin" || user.Role == "SuperAdmin";
+        private bool IsManagementUser(User user)
+        {
+            return User.IsInRole("Admin") ||
+                User.IsInRole("SuperAdmin") ||
+                user.Role == "Admin" ||
+                user.Role == "SuperAdmin";
+        }
 
-            // If the user is Admin or SuperAdmin, show all interviews for their context
-            if (isManagement)
-            {
-                var items = _uow.Context.Interviews
-                    .Include("Application.Applicant")
-                    .Include("Application.Position")
-                    .Include("Interviewer")
-                    .AsQueryable();
+        private IQueryable<Interview> GetManagementInterviews()
+        {
+            var items = _uow.Context.Interviews
+                .Include("Application.Applicant")
+                .Include("Application.Position")
+                .Include("Interviewer")
+                .AsQueryable();
 
-                items = _tenantService.ApplyTenantFilter(items);
-                return View(items.ToList());
-            }
-            
-            // Otherwise, show only interviews for the logged-in applicant (Client role)
+            return _tenantService.ApplyTenantFilter(items);
+        }
+
+        private IQueryable<Interview> GetApplicantInterviews(User user)
+        {
             var applicant = _uow.Context.Applicants.FirstOrDefault(a => a.Email == user.Email);
-            if (applicant != null)
+            if (applicant == null)
             {
-                var items = _uow.Context.Interviews
-                    .Include("Application.Applicant")
-                    .Include("Application.Position")
-                    .Include("Interviewer")
-                    .Where(i => i.Application.ApplicantId == applicant.Id)
-                    .AsQueryable();
-                
-                items = _tenantService.ApplyTenantFilter(items);
-                return View(items.ToList());
+                return Enumerable.Empty<Interview>().AsQueryable();
             }
-            // If not matched, show empty list
-            return View(Enumerable.Empty<Interview>());
+
+            var items = _uow.Context.Interviews
+                .Include("Application.Applicant")
+                .Include("Application.Position")
+                .Include("Interviewer")
+                .Where(i => i.Application.ApplicantId == applicant.Id)
+                .AsQueryable();
+
+            return _tenantService.ApplyTenantFilter(items);
         }
         
         [HttpPost]

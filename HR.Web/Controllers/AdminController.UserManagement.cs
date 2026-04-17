@@ -16,73 +16,7 @@ namespace HR.Web.Controllers
         [Authorize(Roles = "SuperAdmin")]
         public ActionResult GlobalUserManagement()
         {
-            // Verify if user is actually a global admin (SuperAdmin or Admin with no company)
-            // if (!_tenantService.IsSuperAdmin()) 
-            // {
-            //     return new HttpStatusCodeResult(403, "Only SuperAdmins or Global Admins can access this view.");
-            // }
-
-            var allUsers = _uow.Users.GetAll(u => u.Company).ToList();
-            
-            // Optimization: Get last login for all users once
-            var allLastLogins = _uow.AuditLogs.GetAll()
-                .Where(a => a.Action == "LOGIN_SUCCESS")
-                .ToList()
-                .GroupBy(a => a.Username)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First());
-
-            var viewModel = new SuperAdminUserManagementViewModel
-            {
-                GlobalUsers = new List<UserManagementViewModel>(),
-                Admins = new List<UserManagementViewModel>(),
-                UsersByCompany = new Dictionary<string, List<UserManagementViewModel>>()
-            };
-
-            foreach (var user in allUsers)
-            {
-                var lastLogin = allLastLogins.ContainsKey(user.UserName) ? allLastLogins[user.UserName] : null;
-                var isLocked = _securityService.IsAccountLocked(user.UserName);
-
-                var userVm = new UserManagementViewModel
-                {
-                    Id = user.Id,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    UserName = user.UserName,
-                    Email = user.Email,
-                    Role = user.Role,
-                    CompanyName = user.Company != null ? user.Company.Name : "System",
-                    IsLocked = isLocked,
-                    LastLoginDate = lastLogin != null ? (DateTime?)lastLogin.Timestamp : null,
-                    LastLoginIP = lastLogin != null ? lastLogin.IPAddress : null,
-                    CreatedDate = DateTime.Now // Placeholder
-                };
-
-                // 1. System Users: Only SuperAdmins
-                if (user.Role == "SuperAdmin")
-                {
-                    viewModel.GlobalUsers.Add(userVm);
-                }
-                
-                // 2. Global Admins: Company admins only (Admin role + has Company, excluding SuperAdmins)
-                if (user.Role == "Admin" && user.CompanyId.HasValue)
-                {
-                    viewModel.Admins.Add(userVm);
-                }
-
-                // 3. Tenant Users: Clients only (no admins or superadmins)
-                if (user.Role != "Admin" && user.Role != "SuperAdmin" && user.CompanyId.HasValue)
-                {
-                    var companyName = user.Company != null ? user.Company.Name : "Unknown";
-                    if (!viewModel.UsersByCompany.ContainsKey(companyName))
-                    {
-                        viewModel.UsersByCompany[companyName] = new List<UserManagementViewModel>();
-                    }
-                    viewModel.UsersByCompany[companyName].Add(userVm);
-                }
-            }
-
-            return View(viewModel);
+            return BuildGlobalUserManagementView();
         }
 
         /// <summary>
@@ -126,79 +60,290 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult DeleteUser(int id)
         {
-            var user = _uow.Users.Get(id);
+            return HandleDeleteUser(id);
+        }
+
+        private ActionResult HandleUserRoleUpdate(UserRoleUpdateViewModel model)
+        {
+            var isActualSuperAdmin = _tenantService.IsActualSuperAdmin();
+            if (!ModelState.IsValid)
+            {
+                return ReturnUserRoleView(model, isActualSuperAdmin);
+            }
+
+            var user = _uow.Users.Get(model.UserId);
             if (user == null)
             {
                 return HttpNotFound();
             }
 
-            // Prevent deleting oneself
-            string lowerUsername = User.Identity.Name.ToLower();
-            if (user.UserName.ToLower() == lowerUsername)
+            ValidateRoleUpdateIdentityUniqueness(user, model);
+            if (!ModelState.IsValid)
             {
-                TempData["Message"] = "You cannot delete your own account.";
-                return RedirectToAction("GlobalUserManagement");
+                return ReturnUserRoleView(model, isActualSuperAdmin);
             }
 
-            string deletedUsername = user.UserName;
-
-            try
+            var tenantAccessResult = ValidateRoleUpdateTenantAccess(user, isActualSuperAdmin);
+            if (tenantAccessResult != null)
             {
-                // 1. Delete associated Applicant records if role is Client
-                if (user.Role == "Client" && !string.IsNullOrEmpty(user.Email))
+                return tenantAccessResult;
+            }
+
+            var roleRestrictionResult = ValidateRoleChangeRestrictions(user, model, isActualSuperAdmin);
+            if (roleRestrictionResult != null)
+            {
+                return roleRestrictionResult;
+            }
+
+            var snapshot = CaptureUserRoleSnapshot(user);
+            if (!TryApplyUserRoleUpdates(user, model, snapshot, isActualSuperAdmin))
+            {
+                return ReturnUserRoleView(model, isActualSuperAdmin);
+            }
+
+            var persistenceResult = PersistUserRoleUpdate(user, model, snapshot, isActualSuperAdmin);
+            if (persistenceResult != null)
+            {
+                return persistenceResult;
+            }
+
+            SetUserRoleUpdateSuccess(user, snapshot.OldRole, isActualSuperAdmin);
+            return RedirectAfterUserRoleUpdate(isActualSuperAdmin);
+        }
+
+        private ActionResult ReturnUserRoleView(UserRoleUpdateViewModel model, bool isActualSuperAdmin)
+        {
+            if (isActualSuperAdmin)
+            {
+                model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
+            }
+
+            return View("UpdateUserRole", model);
+        }
+
+        private void ValidateRoleUpdateIdentityUniqueness(User user, UserRoleUpdateViewModel model)
+        {
+            if (user.UserName != model.UserName)
+            {
+                var existingUserByName = _uow.Users.GetAll().FirstOrDefault(u => u.UserName == model.UserName && u.Id != user.Id);
+                if (existingUserByName != null)
                 {
-                    var emailLower = user.Email.ToLower();
-                    // Match applicants by email
-                    var applicants = _uow.Context.Applicants.Where(a => a.Email.ToLower() == emailLower).ToList();
-                    
-                    foreach (var applicant in applicants)
-                    {
-                        var applications = _uow.Context.Applications.Where(app => app.ApplicantId == applicant.Id).ToList();
-                        foreach (var app in applications)
-                        {
-                            // Delete deep relations for each application
-                            var answers = _uow.Context.ApplicationAnswers.Where(ans => ans.ApplicationId == app.Id);
-                            _uow.Context.ApplicationAnswers.RemoveRange(answers);
+                    ModelState.AddModelError("UserName", "This username is already taken.");
+                }
+            }
 
-                            var interviews = _uow.Context.Interviews.Where(i => i.ApplicationId == app.Id);
-                            _uow.Context.Interviews.RemoveRange(interviews);
+            if (user.Email != model.Email)
+            {
+                var existingUserByEmail = _uow.Users.GetAll().FirstOrDefault(u => u.Email == model.Email && u.Id != user.Id);
+                if (existingUserByEmail != null)
+                {
+                    ModelState.AddModelError("Email", "This email address is already in use.");
+                }
+            }
+        }
 
-                            var onboardings = _uow.Context.Onboardings.Where(o => o.ApplicationId == app.Id);
-                            _uow.Context.Onboardings.RemoveRange(onboardings);
+        private ActionResult ValidateRoleUpdateTenantAccess(User user, bool isActualSuperAdmin)
+        {
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            if (companyId.HasValue && user.CompanyId != companyId.Value && !isActualSuperAdmin)
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
 
-                            _uow.Context.Applications.Remove(app);
-                        }
-                        _uow.Context.Applicants.Remove(applicant);
-                    }
+            return null;
+        }
+
+        private ActionResult ValidateRoleChangeRestrictions(User user, UserRoleUpdateViewModel model, bool isActualSuperAdmin)
+        {
+            if (isActualSuperAdmin)
+            {
+                return null;
+            }
+
+            if (user.Role == "SuperAdmin")
+            {
+                TempData["ErrorMessage"] = "Admin users cannot modify SuperAdmin accounts.";
+                return RedirectToAction("UserManagement");
+            }
+
+            if (model.NewRole == "SuperAdmin")
+            {
+                TempData["ErrorMessage"] = "Admin users cannot assign SuperAdmin role to any user.";
+                return RedirectToAction("UserManagement");
+            }
+
+            return null;
+        }
+
+        private UserRoleSnapshot CaptureUserRoleSnapshot(User user)
+        {
+            return new UserRoleSnapshot
+            {
+                OldRole = user.Role,
+                OldCompanyId = user.CompanyId,
+                OldFirstName = user.FirstName,
+                OldLastName = user.LastName,
+                OldUserName = user.UserName,
+                OldEmail = user.Email
+            };
+        }
+
+        private bool TryApplyUserRoleUpdates(User user, UserRoleUpdateViewModel model, UserRoleSnapshot snapshot, bool isActualSuperAdmin)
+        {
+            if (user.Email != model.Email)
+            {
+                var existingUserByEmail = _uow.Users.GetAll().FirstOrDefault(u => u.Email == model.Email && u.Id != user.Id);
+                if (existingUserByEmail != null)
+                {
+                    ModelState.AddModelError("Email", "This email address is already in use.");
+                    return false;
                 }
 
-                // 2. Delete User-specific Security and Session records
-                var impersonations = _uow.Context.ImpersonationRequests.Where(r => r.RequestedFrom == user.UserName || r.RequestedBy == user.UserName);
-                _uow.Context.ImpersonationRequests.RemoveRange(impersonations);
+                user.AccessToken = _securityService.GenerateSecureToken();
+            }
 
-                var resets = _uow.Context.PasswordResets.Where(p => p.UserId == user.Id);
-                _uow.Context.PasswordResets.RemoveRange(resets);
+            user.FirstName = model.FirstName;
+            user.LastName = model.LastName;
+            user.UserName = model.UserName;
+            user.Email = model.Email;
+            user.Phone = model.Phone;
+            user.Role = model.NewRole;
 
-                var loginAttempts = _uow.Context.LoginAttempts.Where(l => l.Username == user.UserName);
-                _uow.Context.LoginAttempts.RemoveRange(loginAttempts);
+            if (snapshot.OldUserName != user.UserName || snapshot.OldRole != user.Role)
+            {
+                user.AccessToken = _securityService.GenerateSecureToken();
+            }
 
-                // Delete audit logs strictly tied to this user to wipe individual records completely
-                var auditLogs = _uow.Context.AuditLogs.Where(a => a.Username == user.UserName);
-                _uow.Context.AuditLogs.RemoveRange(auditLogs);
+            if (isActualSuperAdmin)
+            {
+                user.CompanyId = model.CompanyId;
+                user.RequirePasswordChange = model.RequirePasswordChange;
+            }
 
-                // 3. Finally, remove the User record
-                _uow.Context.Users.Remove(user);
+            return true;
+        }
+
+        private ActionResult PersistUserRoleUpdate(User user, UserRoleUpdateViewModel model, UserRoleSnapshot snapshot, bool isActualSuperAdmin)
+        {
+            try
+            {
+                SyncApplicantForUserRoleUpdate(user, model, snapshot.OldEmail);
                 _uow.Complete();
 
-                _auditService.LogAction(User.Identity.Name, "DELETE_USER", "UserManagement", id.ToString(), true, string.Format("Permanently deleted user {0} and all associated records", deletedUsername));
-                TempData["Message"] = string.Format("User {0} and all associated records have been permanently deleted.", deletedUsername);
+                _auditService.LogUpdate(
+                    User.Identity.Name,
+                    "Account",
+                    user.Id.ToString(),
+                    new
+                    {
+                        FirstName = snapshot.OldFirstName,
+                        LastName = snapshot.OldLastName,
+                        UserName = snapshot.OldUserName,
+                        Email = snapshot.OldEmail,
+                        Role = snapshot.OldRole,
+                        CompanyId = snapshot.OldCompanyId
+                    },
+                    new
+                    {
+                        FirstName = user.FirstName,
+                        LastName = user.LastName,
+                        UserName = user.UserName,
+                        Email = user.Email,
+                        Role = model.NewRole,
+                        CompanyId = user.CompanyId
+                    });
+
+                return null;
+            }
+            catch (System.Data.Entity.Validation.DbEntityValidationException ex)
+            {
+                TempData["ErrorMessage"] = "Data Validation Error: " + BuildValidationErrorMessage(ex);
+                return ReturnUserRoleView(model, isActualSuperAdmin);
             }
             catch (Exception ex)
             {
-                TempData["Message"] = "Error deleting user: " + ex.Message;
+                TempData["ErrorMessage"] = "Error updating user: " + ex.Message;
+                return ReturnUserRoleView(model, isActualSuperAdmin);
+            }
+        }
+
+        private void SyncApplicantForUserRoleUpdate(User user, UserRoleUpdateViewModel model, string oldEmail)
+        {
+            var applicant = _uow.Context.Set<Applicant>().FirstOrDefault(a => a.Email == oldEmail);
+            if (applicant != null)
+            {
+                applicant.FullName = string.Format("{0} {1}", model.FirstName, model.LastName);
+                applicant.Email = model.Email;
+                applicant.Phone = model.Phone;
+                applicant.CompanyId = user.CompanyId;
+                return;
             }
 
-            return RedirectToAction("GlobalUserManagement");
+            if (model.NewRole != "Client")
+            {
+                return;
+            }
+
+            var newApplicant = new Applicant
+            {
+                FullName = string.Format("{0} {1}", model.FirstName, model.LastName),
+                Email = user.Email,
+                Phone = model.Phone,
+                CompanyId = user.CompanyId
+            };
+            _uow.Applicants.Add(newApplicant);
+        }
+
+        private string BuildValidationErrorMessage(System.Data.Entity.Validation.DbEntityValidationException ex)
+        {
+            var errorMessages = new List<string>();
+            foreach (var validationErrors in ex.EntityValidationErrors)
+            {
+                foreach (var validationError in validationErrors.ValidationErrors)
+                {
+                    var message = string.Format("Property: {0} Error: {1}", validationError.PropertyName, validationError.ErrorMessage);
+                    errorMessages.Add(message);
+                    System.Diagnostics.Debug.WriteLine(message);
+                }
+            }
+
+            return string.Join("; ", errorMessages);
+        }
+
+        private void SetUserRoleUpdateSuccess(User user, string oldRole, bool isActualSuperAdmin)
+        {
+            var successMessage = string.Format("User {0} updated successfully.", user.UserName);
+            if (oldRole != user.Role)
+            {
+                successMessage += string.Format(" Role changed from {0} to {1}.", oldRole, user.Role);
+            }
+
+            TempData["SuccessMessage"] = successMessage;
+
+            if (user.UserName == User.Identity.Name)
+            {
+                Session["IsActualSuperAdmin"] = isActualSuperAdmin;
+            }
+        }
+
+        private ActionResult RedirectAfterUserRoleUpdate(bool isActualSuperAdmin)
+        {
+            if (isActualSuperAdmin || User.IsInRole("SuperAdmin"))
+            {
+                return RedirectToAction("GlobalUserManagement");
+            }
+
+            return RedirectToAction("UserManagement");
+        }
+
+        private class UserRoleSnapshot
+        {
+            public string OldRole { get; set; }
+            public int? OldCompanyId { get; set; }
+            public string OldFirstName { get; set; }
+            public string OldLastName { get; set; }
+            public string OldUserName { get; set; }
+            public string OldEmail { get; set; }
         }
     }
 }

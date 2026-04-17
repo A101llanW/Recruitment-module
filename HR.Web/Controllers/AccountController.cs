@@ -15,7 +15,7 @@ using HR.Web.ViewModels;
 
 namespace HR.Web.Controllers
 {
-    public class AccountController : Controller
+    public partial class AccountController : Controller
     {
         // Captcha image helper class
         public class CaptchaImage
@@ -427,99 +427,7 @@ namespace HR.Web.Controllers
         [ValidateInput(false)]
         public ActionResult ChangePassword(ChangePasswordViewModel model)
         {
-            if (!ModelState.IsValid)
-            {
-                return View(model);
-            }
-
-            var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
-            
-            if (user == null)
-            {
-                ModelState.AddModelError("", "User not found.");
-                return View(model);
-            }
-
-            // Check if this is a forced password change
-            var authCookie = Request.Cookies[FormsAuthentication.FormsCookieName];
-            bool isForcedChange = false;
-            
-            if (authCookie != null)
-            {
-                var ticket = FormsAuthentication.Decrypt(authCookie.Value);
-                if (ticket != null && ticket.UserData.Contains("RequirePasswordChange"))
-                {
-                    isForcedChange = true;
-                }
-            }
-
-            // For forced password changes, skip current password verification
-            if (!isForcedChange)
-            {
-                // Verify current password
-                if (!PasswordHelper.VerifyPassword(user.PasswordHash, model.CurrentPassword))
-                {
-                    ModelState.AddModelError("", "Current password is incorrect.");
-                    AuditSvc.LogAction(username, "PASSWORD_CHANGE_FAILED", "Account", user.Id.ToString(), 
-                        "Current password verification failed");
-                    return View(model);
-                }
-            }
-
-            // Check if new password meets security requirements
-            if (!PasswordHelper.IsPasswordStrong(model.NewPassword))
-            {
-                ModelState.AddModelError("", PasswordHelper.GetPasswordStrengthMessage());
-                return View(model);
-            }
-
-            // Check if new password is different from current password
-            if (PasswordHelper.VerifyPassword(user.PasswordHash, model.NewPassword))
-            {
-                ModelState.AddModelError("", "New password must be different from current password.");
-                return View(model);
-            }
-
-            try
-            {
-                // Update password
-                user.PasswordHash = PasswordHelper.HashPassword(model.NewPassword);
-                user.RequirePasswordChange = false;
-                user.LastPasswordChange = DateTime.Now;
-                user.PasswordChangeExpiry = null;
-                
-                _uow.Users.Update(user);
-                _uow.Complete();
-
-                // Log successful password change
-                AuditSvc.LogAction(username, "PASSWORD_CHANGED", "Account", user.Id.ToString(), 
-                    "Password successfully changed to meet security requirements");
-
-                // Preserve forced-change messaging for users who were required to rotate credentials.
-                bool wasForcedChange = isForcedChange;
-
-                if (wasForcedChange)
-                {
-                    TempData["SuccessMessage"] = "Your password has been successfully updated! You can now access the system with your new secure password.";
-                }
-                else
-                {
-                    TempData["SuccessMessage"] = "Your password has been successfully updated!";
-                }
-                
-                // Rebuild cookie + redirect via the same normalized role flow used after login.
-                // This prevents SuperAdmins (Role=Admin + CompanyId=null) from being treated as company admins.
-                return CompleteLogin(user);
-            }
-            catch (Exception ex)
-            {
-                ModelState.AddModelError("", "An error occurred while changing your password. Please try again.");
-                AuditSvc.LogAction(username, "PASSWORD_CHANGE_ERROR", "Account", user.Id.ToString(), 
-                    "Password change failed: " + ex.Message);
-                return View(model);
-            }
+            return HandleChangePassword(model);
         }
 
         [Authorize]
@@ -558,129 +466,12 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult Profile(ProfileViewModel model)
         {
-            if (!ModelState.IsValid) return View(model);
-
-            var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
-
-            if (user == null) return HttpNotFound();
-
-            var oldFirstName = user.FirstName;
-            var oldLastName = user.LastName;
-            var oldEmail = user.Email;
-            var oldPhone = user.Phone;
-
-            // Check if email changed and is unique
-            if (user.Email != model.Email)
-            {
-                var existingUser = _uow.Context.Users.FirstOrDefault(u => u.Email == model.Email && u.Id != user.Id);
-                if (existingUser != null)
-                {
-                    ModelState.AddModelError("Email", "This email address is already in use by another account.");
-                    return View(model);
-                }
-
-                // Identity changed, invalidate all existing sessions
-                user.AccessToken = SecuritySvc.GenerateSecureToken();
-
-                // Reset verification status since email has changed
-                user.IsEmailVerified = false;
-                user.EmailVerificationCode = null;
-                user.EmailVerificationExpiry = null;
-            }
-
-            user.FirstName = model.FirstName;
-            user.LastName = model.LastName;
-            user.Email = model.Email;
-            user.Phone = model.Phone;
-
-            _uow.Users.Update(user);
-            _uow.Complete();
-
-            // Renew authentication cookie to include the new AccessToken and prevent logout
-            var userRole = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
-            var uaHash = ComputeUaHash(Request.UserAgent);
-            var userData = string.Format("{0}|{1}|{2}|{3}", 
-                userRole, 
-                user.CompanyId, 
-                user.AccessToken,
-                uaHash);
-
-            var ticket = new FormsAuthenticationTicket(
-                1, 
-                username, 
-                DateTime.Now, 
-                DateTime.Now.AddHours(8), 
-                false, 
-                userData);
-
-            var cookie = new HttpCookie(FormsAuthentication.FormsCookieName, FormsAuthentication.Encrypt(ticket))
-            {
-                HttpOnly = true,
-                Secure   = Request.IsSecureConnection
-            };
-            Response.Cookies.Add(cookie);
-
-            // Sync with Applicant record if it exists
-            string syncOldEmail = oldEmail;
-            string syncNewEmail = model.Email;
-
-            // Use direct context query but with clearer separation to avoid captures that EF might dislike
-            var applicant = _uow.Context.Applicants.FirstOrDefault(a => a.Email == syncOldEmail);
-            
-            if (applicant == null && syncOldEmail != syncNewEmail)
-            {
-                applicant = _uow.Context.Applicants.FirstOrDefault(a => a.Email == syncNewEmail);
-            }
-
-            if (applicant != null)
-            {
-                applicant.FullName = string.Format("{0} {1}", model.FirstName, model.LastName);
-                applicant.Email = model.Email;
-                applicant.Phone = model.Phone;
-                _uow.Applicants.Update(applicant);
-                _uow.Complete();
-            }
-
-            AuditSvc.LogUpdate(username, "Account", user.Id.ToString(),
-                new { FirstName = oldFirstName, LastName = oldLastName, Email = oldEmail, Phone = oldPhone },
-                new { FirstName = model.FirstName, LastName = model.LastName, Email = model.Email, Phone = model.Phone });
-
-            TempData["SuccessMessage"] = "Your profile has been updated successfully!";
-            return RedirectToAction("Profile");
+            return HandleProfileUpdate(model);
         }
 
         private User GetCurrentUserFromIdentity(string username)
         {
-            var lowerUsername = username.ToLower();
-            int? companyId = null;
-            
-            // Try to extract from FormsIdentity
-            var formsIdentity = User.Identity as System.Web.Security.FormsIdentity;
-            if (formsIdentity == null && User is System.Web.Security.RolePrincipal rolePrincipal)
-            {
-                formsIdentity = rolePrincipal.Identity as System.Web.Security.FormsIdentity;
-            }
-            
-            if (formsIdentity != null)
-            {
-                var props = formsIdentity.Ticket.UserData.Split('|');
-                if (props.Length >= 2 && int.TryParse(props[1], out int cId)) companyId = cId;
-            }
-            
-            var user = companyId.HasValue 
-                ? _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername && u.CompanyId == companyId.Value)
-                : _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername && u.CompanyId == null);
-                
-            // Powerful Fallback: If scoped query failed (e.g. identity type mismatch), try global lookup.
-            // This is safe because we already matched the authenticated username.
-            if (user == null)
-            {
-                user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
-            }
-            
-            return user;
+            return ResolveCurrentUserFromIdentity(username);
         }
 
         [HttpGet]
@@ -791,85 +582,7 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult VerifyEmailSubmit(string code)
         {
-            var username = User.Identity.Name;
-            var user = GetCurrentUserFromIdentity(username);
-
-            if (user == null) return HttpNotFound();
-
-            if (string.IsNullOrEmpty(code) || user.EmailVerificationCode != code)
-            {
-                TempData["ErrorMessage"] = "Invalid verification code.";
-                return RedirectToAction("VerifyEmail");
-            }
-
-            if (user.EmailVerificationExpiry < DateTime.Now)
-            {
-                TempData["ErrorMessage"] = "Verification code has expired.";
-                return RedirectToAction("VerifyEmail");
-            }
-
-            // Success
-            user.IsEmailVerified = true;
-            user.EmailVerificationCode = null;
-            user.EmailVerificationExpiry = null;
-
-            // Automatically enable Email MFA since they just verified their email
-            // This satisfies the 2FA requirement going forward
-            if (!user.IsTwoFactorEnabled)
-            {
-                user.IsTwoFactorEnabled = true;
-                user.MfaMethod = "Email";
-            }
-
-            _uow.Users.Update(user);
-            _uow.Complete();
-
-            AuditSvc.LogAction(username, "EMAIL_VERIFIED", "Account", user.Id.ToString(), "Email verified via login screen");
-
-            // Sync with Applicant if exists
-            var userEmail = user.Email;
-            var applicant = _uow.Context.Applicants.FirstOrDefault(a => a.Email == userEmail);
-            if (applicant != null)
-            {
-                applicant.IsEmailVerified = true;
-                _uow.Applicants.Update(applicant);
-                _uow.Complete();
-            }
-
-            // 5. Handle Redirection Logic for MFA
-            var userRole = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
-            var isSuperAdmin = !user.CompanyId.HasValue && (
-                string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase) || 
-                string.Equals(userRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase)
-            );
-
-            if (isSuperAdmin || string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase))
-            {
-                // Both SuperAdmins and Company Admins are required to use MFA.
-                // However, since they JUST verified their email address successfully, 
-                // we consider this their MFA token for this session.
-                // We clear any pending blocks and redirect them directly to the dashboard.
-                Session.Remove("PendingMfaUsername");
-                Session.Remove("ForcedMfaSetup");
-                Session["MfaVerified"] = true; // Future-proofing
-
-                AuditSvc.LogAction(username, "LOGIN_MFA_BYPASSED", "Account", user.Id.ToString(), true, "MFA challenge seamlessly bypassed for first login after email verification");
-
-                var tToken = RouteData.Values["tenant"] as string;
-                if (isSuperAdmin)
-                {
-                    return RedirectToAction("Index", "Companies", new { tenant = (string)null });
-                }
-                return RedirectToAction("Index", "Positions", new { tenant = tToken });
-            }
-
-            // Redirect to appropriate dashboard based on role
-            var tenantToken = RouteData.Values["tenant"] as string;
-            if (isSuperAdmin)
-            {
-                return RedirectToAction("Index", "Companies", new { tenant = (string)null });
-            }
-            return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
+            return HandleVerifyEmailSubmit(code);
         }
 
 
@@ -1181,127 +894,7 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<ActionResult> ForgotPassword(ForgotPasswordViewModel model)
         {
-            // ── IP Rate Limiting ────────────────────────────────────────────────────
-            // Max 5 forgot-password requests per IP per 10 minutes.
-            // Silently drops excess requests — same response either way to prevent enumeration.
-            var clientIP = Request.ServerVariables["HTTP_X_FORWARDED_FOR"] ?? Request.UserHostAddress;
-            const int maxForgotRequests = 5;
-            const int forgotWindowMinutes = 10;
-
-            var requestWindowStart = DateTime.Now.AddMinutes(-forgotWindowMinutes);
-            var recentRequestCount = _uow.LoginAttempts.GetAll()
-                .Count(a => a.IPAddress == clientIP
-                         && a.FailureReason == "FORGOT_PASSWORD_REQUEST"
-                         && a.AttemptTime > requestWindowStart);
-
-            if (recentRequestCount >= maxForgotRequests)
-            {
-                // Log the rate-limit hit but show the same generic message
-                AuditSvc.LogAction("ANONYMOUS", "FORGOT_PASSWORD_RATE_LIMITED", "Account", "",
-                    string.Format("IP {0} exceeded forgot-password rate limit", clientIP));
-                ViewBag.Message = "If an account with that email exists, a reset link has been sent.";
-                return View();
-            }
-
-            // Record this attempt for future rate-limit checks
-            _uow.LoginAttempts.Add(new LoginAttempt
-            {
-                Username   = model.Email ?? "unknown",
-                IPAddress  = clientIP,
-                AttemptTime = DateTime.Now,
-                WasSuccessful = false,
-                FailureReason = "FORGOT_PASSWORD_REQUEST"
-            });
-            _uow.Complete();
-            // ────────────────────────────────────────────────────────────────────────
-
-            if (ModelState.IsValid)
-            {
-                try
-                {
-                    // Find user by email
-                    var user = _uow.Context.Users.FirstOrDefault(u => u.Email == model.Email);
-                    
-                    if (user != null)
-                    {
-                        // Generate secure token
-                        // Generate secure token using service
-                        var token = SecuritySvc.GenerateSecureToken();
-                        var expiryDate = DateTime.UtcNow.AddHours(24); // 24 hour expiry
-
-                        // Invalidate any existing tokens for this user
-                        var existingTokens = _uow.PasswordResets.GetAll().Where(t => t.UserId == user.Id && !t.IsUsed);
-                        foreach (var existingToken in existingTokens)
-                        {
-                            existingToken.IsUsed = true;
-                        }
-
-                        // Create new password reset token — store requesting IP for security tracking
-                        var requestingIp = Request.ServerVariables["HTTP_X_FORWARDED_FOR"] ?? Request.UserHostAddress;
-                        var passwordReset = new PasswordReset
-                        {
-                            UserId = user.Id,
-                            Token = token,
-                            ExpiryDate = expiryDate,
-                            CreatedDate = DateTime.UtcNow,
-                            RequestingIP = requestingIp
-                        };
-
-                        _uow.PasswordResets.Add(passwordReset);
-                        _uow.Complete();
-
-                        // Generate reset link - maintain tenant context if available
-                        var tenantToken = RouteData.Values["tenant"] as string;
-                        var resetUrl = Url.Action("ResetPassword", "Account", new { tenant = tenantToken, token = token }, Request.Url.Scheme);
-                        
-                        // TEMP DEBUG: Log reset URL to debug window for testing
-                        System.Diagnostics.Debug.WriteLine("=== PASSWORD RESET LINK ===");
-                        System.Diagnostics.Debug.WriteLine("Reset URL: " + resetUrl);
-                        System.Diagnostics.Debug.WriteLine("Token: " + token);
-                        System.Diagnostics.Debug.WriteLine("User Email: " + user.Email);
-                        System.Diagnostics.Debug.WriteLine("========================");
-                        
-                        // ── Send the reset email ────────────────────────────────────────
-                        // NOTE: The reset link is ONLY delivered via email.
-                        // It is NOT logged to disk or stored in the audit log
-                        // to prevent token exposure via log file theft.
-                        if (EmailSvc != null)
-                        {
-                            await EmailSvc.SendPasswordResetEmailAsync(user.Email, resetUrl);
-                        }
-
-                        // Audit: record the request — but NOT the token itself
-                        AuditSvc.LogAction(user.UserName, "PASSWORD_RESET_REQUEST", "Account",
-                            user.Id.ToString(), null, null, true,
-                            string.Format("Reset link sent to {0} from IP {1}",
-                                user.Email, Request.ServerVariables["HTTP_X_FORWARDED_FOR"] ?? Request.UserHostAddress));
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine("No user found with email: " + model.Email);
-                        // Log attempt for non-existent user
-                        AuditSvc.LogAction("GUEST", "PASSWORD_RESET_ATTEMPT", "Account", "", 
-                            null, null, false, "Email not found: " + model.Email);
-                    }
-
-                    // Always show success message to prevent email enumeration attacks
-                    ViewBag.SuccessMessage = "If an account with that email exists, a password reset link has been sent.";
-                    return View(model);
-                }
-                catch (Exception ex)
-                {
-                    var errorMessage = ex.Message;
-                    if (ex.InnerException != null) errorMessage += " Inner Error: " + ex.InnerException.Message;
-                    
-                    AuditSvc.LogAction("SYSTEM", "PASSWORD_RESET_ERROR", "Account", "", 
-                        "Password reset failed: " + errorMessage);
-                    var fullMessage = "An error occurred while processing your request: " + errorMessage;
-                    ModelState.AddModelError("", fullMessage);
-                    ViewBag.ErrorMessage = fullMessage;
-                }
-            }
-
-            return View(model);
+            return await HandleForgotPassword(model);
         }
 
         [AllowAnonymous]
@@ -1333,82 +926,7 @@ namespace HR.Web.Controllers
         [ValidateInput(false)]
         public ActionResult ResetPassword(ResetPasswordViewModel model)
         {
-            if (ModelState.IsValid)
-            {
-                try
-                {
-                    // Validate token again
-                    var passwordReset = _uow.PasswordResets.GetAll()
-                        .FirstOrDefault(t => t.Token == model.Token && !t.IsUsed && t.ExpiryDate > DateTime.UtcNow);
-
-                    if (passwordReset == null)
-                    {
-                        ViewBag.ErrorMessage = "This password reset link is invalid or has expired.";
-                        return View(model);
-                    }
-
-                    // Get user
-                    var user = _uow.Users.Get(passwordReset.UserId);
-                    if (user == null)
-                    {
-                        ViewBag.ErrorMessage = "User not found.";
-                        return View(model);
-                    }
-
-                    // Validate password strength
-                    if (!PasswordHelper.IsPasswordStrong(model.NewPassword))
-                    {
-                        ModelState.AddModelError("", PasswordHelper.GetPasswordStrengthMessage());
-                        return View(model);
-                    }
-
-                    // Record completing IP and check against originating IP
-                    var completingIp = Request.ServerVariables["HTTP_X_FORWARDED_FOR"] ?? Request.UserHostAddress;
-                    passwordReset.CompletedIP = completingIp;
-                    bool ipMismatch = !string.IsNullOrEmpty(passwordReset.RequestingIP)
-                                  && passwordReset.RequestingIP != completingIp;
-
-                    // Update password
-                    user.PasswordHash = PasswordHelper.HashPassword(model.NewPassword);
-                    user.RequirePasswordChange = false;
-                    user.LastPasswordChange = DateTime.UtcNow;
-                    user.PasswordChangeExpiry = null;
-
-                    // Mark token as used
-                    passwordReset.IsUsed = true;
-
-                    _uow.Complete();
-
-                    // Log successful password reset (include IP mismatch warning if detected)
-                    var resetNote = ipMismatch
-                        ? string.Format("Password reset completed. IP MISMATCH: requested from {0}, completed from {1}",
-                              passwordReset.RequestingIP, completingIp)
-                        : "Password was successfully reset";
-
-                    AuditSvc.LogAction(user.UserName, "PASSWORD_RESET_SUCCESS", "Account",
-                        user.Id.ToString(), resetNote);
-
-                    if (ipMismatch)
-                    {
-                        ViewBag.SuccessMessage = "Your password has been reset. "
-                            + "NOTE: This reset was completed from a different location than where it was requested. "
-                            + "If you did not initiate this reset, please contact your administrator immediately.";
-                    }
-                    else
-                    {
-                        ViewBag.SuccessMessage = "Your password has been successfully reset. You can now login with your new password.";
-                    }
-                    return RedirectToAction("Login");
-                }
-                catch (Exception ex)
-                {
-                    AuditSvc.LogAction("SYSTEM", "PASSWORD_RESET_ERROR", "Account", "", 
-                        "Password reset completion failed: " + ex.Message);
-                    ModelState.AddModelError("", "An error occurred while resetting your password. Please try again.");
-                }
-            }
-
-            return View(model);
+            return HandleResetPassword(model);
         }
 
         /// <summary>
@@ -1651,55 +1169,7 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult VerifyMFA(string code)
         {
-            string username = Session["PendingMfaUsername"] as string ?? (User.Identity.IsAuthenticated ? User.Identity.Name : null);
-            
-            if (string.IsNullOrEmpty(username)) 
-            {
-                AuditSvc.LogAction("ANONYMOUS", "MFA_VERIFY_KICKBACK", "Account", "", "Session lost or identity missing during MFA POST");
-                return RedirectToAction("Login");
-            }
-
-            var lowerUsername = username.ToLower();
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
-            
-            if (user == null)
-            {
-                AuditSvc.LogAction(username, "MFA_VERIFY_KICKBACK", "Account", "", "User not found during MFA POST");
-                return RedirectToAction("Login");
-            }
-
-            if (!user.IsTwoFactorEnabled)
-            {
-                AuditSvc.LogAction(username, "MFA_VERIFY_KICKBACK", "Account", user.Id.ToString(), "MFA was unexpectedly disabled during verification");
-                return RedirectToAction("Login");
-            }
-
-            bool isValid = false;
-            try 
-            {
-                isValid = SecuritySvc.ValidateTemporaryCode(user, code);
-            }
-            catch (Exception ex)
-            {
-                AuditSvc.LogAction(username, "MFA_VERIFY_ERROR", "Account", user.Id.ToString(), ex.Message);
-            }
-
-            if (isValid)
-            {
-                user.TwoFactorCode = null;
-                _uow.Users.Update(user);
-                _uow.Complete();
-
-                Session.Remove("PendingMfaUsername");
-                return CompleteLogin(user);
-            }
-
-            // Failure — render error
-            AuditSvc.LogAction(username, "MFA_VERIFY_FAILED", "Account", user.Id.ToString(), "Invalid or expired MFA code entered");
-            ModelState.AddModelError("", "Invalid or expired verification code.");
-            ViewBag.MfaMethod = user.MfaMethod ?? "Email";
-            ViewBag.EmailHint = MaskContactInfo(user.Email);
-            return View();
+            return HandleVerifyMfaSubmission(code);
         }
 
         [HttpPost]
@@ -1759,71 +1229,7 @@ namespace HR.Web.Controllers
 
         private ActionResult CompleteLogin(User user)
         {
-            var userRole = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
-            var isSuperAdmin = !user.CompanyId.HasValue && (
-                string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase) || 
-                string.Equals(userRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase)
-            );
-            if (isSuperAdmin) { userRole = "SuperAdmin"; }
-
-            var clientIP = Request.ServerVariables["HTTP_X_FORWARDED_FOR"] ?? Request.UserHostAddress;
-            var uaHash = ComputeUaHash(Request.UserAgent);
-            
-            if (string.IsNullOrEmpty(user.AccessToken))
-            {
-                user.AccessToken = SecuritySvc.GenerateSecureToken();
-                _uow.Users.Update(user);
-                _uow.Complete();
-            }
-
-            var userData = string.Format("{0}|{1}|{2}|{3}", 
-                userRole, 
-                user.CompanyId, 
-                user.AccessToken,
-                uaHash);
-
-            var ticket = new FormsAuthenticationTicket(
-                1, 
-                user.UserName, 
-                DateTime.Now, 
-                DateTime.Now.AddHours(8), 
-                false, 
-                userData);
-
-            var cookie = new HttpCookie(FormsAuthentication.FormsCookieName, FormsAuthentication.Encrypt(ticket))
-            {
-                HttpOnly = true,
-                Secure   = Request.IsSecureConnection
-            };
-            Response.Cookies.Add(cookie);
-
-            if (isSuperAdmin)
-            {
-                return RedirectToAction("Index", "Companies", new { tenant = (string)null });
-            }
-            else
-            {
-                string tenantSlug = null;
-                if (user.CompanyId.HasValue)
-                {
-                    var company = _uow.Companies.Get(user.CompanyId.Value);
-                    if (company != null) tenantSlug = company.Slug;
-                }
-
-                if (!string.IsNullOrEmpty(tenantSlug))
-                {
-                    // For regular admins, Dashboard is the logical landing page
-                    if (string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return RedirectToAction("Index", "Dashboard", new { tenant = tenantSlug });
-                    }
-                    // For regular users (Clients), Positions is the landing page
-                    return RedirectToAction("Index", "Positions", new { tenant = tenantSlug });
-                }
-
-                // Fallback for edge cases without company association
-                return RedirectToAction("Index", "Positions");
-            }
+            return CompleteUserLogin(user);
         }
     }
 }

@@ -239,19 +239,17 @@ namespace HR.Web.Controllers
         {
             try
             {
-                // Verify source position tenant
                 var sourcePosition = _uow.Positions.Get(sourcePositionId);
                 var targetPosition = _uow.Positions.Get(targetPositionId);
-                
-                if (sourcePosition == null || targetPosition == null) return HttpNotFound();
-                
-                var companyId = _tenantService.GetCurrentUserCompanyId();
-                if (companyId.HasValue && !_tenantService.IsSuperAdmin())
+                if (sourcePosition == null || targetPosition == null)
                 {
-                    if (sourcePosition.CompanyId != companyId.Value || targetPosition.CompanyId != companyId.Value)
-                    {
-                        return new HttpStatusCodeResult(403, "Access Denied");
-                    }
+                    return HttpNotFound();
+                }
+
+                var tenantAccessResult = EnsureCloneQuestionnaireTenantAccess(sourcePosition, targetPosition);
+                if (tenantAccessResult != null)
+                {
+                    return tenantAccessResult;
                 }
 
                 var sourceQuestions = _uow.Context.Set<PositionQuestion>()
@@ -259,22 +257,11 @@ namespace HR.Web.Controllers
                     .OrderBy(pq => pq.Order)
                     .ToList();
 
-                // Remove existing assignments from target
                 var existingTargetAssignments = _uow.Context.Set<PositionQuestion>()
                     .Where(pq => pq.PositionId == targetPositionId);
                 _uow.Context.Set<PositionQuestion>().RemoveRange(existingTargetAssignments);
 
-                // Clone assignments
-                for (int i = 0; i < sourceQuestions.Count; i++)
-                {
-                    var positionQuestion = new PositionQuestion
-                    {
-                        PositionId = targetPositionId,
-                        QuestionId = sourceQuestions[i].QuestionId,
-                        Order = i + 1
-                    };
-                    _uow.Context.Set<PositionQuestion>().Add(positionQuestion);
-                }
+                CloneQuestionAssignments(sourceQuestions, targetPositionId);
 
                 _uow.Complete();
                 return Json(new { success = true, message = "Questionnaire cloned successfully!" });
@@ -282,6 +269,36 @@ namespace HR.Web.Controllers
             catch (Exception ex)
             {
                 return Json(new { success = false, message = ex.Message });
+            }
+        }
+
+        private ActionResult EnsureCloneQuestionnaireTenantAccess(Position sourcePosition, Position targetPosition)
+        {
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            if (!companyId.HasValue || _tenantService.IsSuperAdmin())
+            {
+                return null;
+            }
+
+            if (sourcePosition.CompanyId == companyId.Value && targetPosition.CompanyId == companyId.Value)
+            {
+                return null;
+            }
+
+            return new HttpStatusCodeResult(403, "Access Denied");
+        }
+
+        private void CloneQuestionAssignments(IList<PositionQuestion> sourceQuestions, int targetPositionId)
+        {
+            for (var i = 0; i < sourceQuestions.Count; i++)
+            {
+                var positionQuestion = new PositionQuestion
+                {
+                    PositionId = targetPositionId,
+                    QuestionId = sourceQuestions[i].QuestionId,
+                    Order = i + 1
+                };
+                _uow.Context.Set<PositionQuestion>().Add(positionQuestion);
             }
         }
     }
