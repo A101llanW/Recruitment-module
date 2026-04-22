@@ -186,6 +186,7 @@
     <Compile Include="Migrations\202401290000000_AddReportEntity.cs" />
     <Compile Include="Migrations\202401300000000_AddLocationToPosition.cs" />
     <Compile Include="Migrations\202502020000000_AddPasswordChangeFields.cs" />
+    <Compile Include="Migrations\202604220000000_AddWeightToPositionQuestion.cs" />
     <Compile Include="Migrations\AddPasswordResetTable.cs" />
     <Compile Include="Migrations\Configuration.cs" />
     <Compile Include="Models\Application.cs" />
@@ -261,6 +262,7 @@
     <Compile Include="Controllers\AccountController.SecurityFlows.cs" />
     <Compile Include="Controllers\ReportGeneratorController.cs" />
     <Compile Include="Controllers\AdminController.UserManagement.cs" />
+    <Compile Include="Controllers\AdminController.Questionnaire.cs" />
     <Compile Include="Controllers\ReportsController.cs" />
     <Compile Include="Controllers\DebugController.cs" />
     <Compile Include="Controllers\CaptchaController.cs" />

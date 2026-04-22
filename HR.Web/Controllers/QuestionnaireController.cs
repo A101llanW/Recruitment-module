@@ -120,13 +120,15 @@ namespace HR.Web.Controllers
                 _uow.Context.Set<PositionQuestion>().RemoveRange(existingAssignments);
 
                 // Add new assignments
+                var normalizedWeights = BuildEqualWeights(model.SelectedQuestionIds.Count);
                 for (int i = 0; i < model.SelectedQuestionIds.Count; i++)
                 {
                     var positionQuestion = new PositionQuestion
                     {
                         PositionId = model.Position.Id,
                         QuestionId = model.SelectedQuestionIds[i],
-                        Order = i + 1
+                        Order = i + 1,
+                        Weight = normalizedWeights[i]
                     };
                     _uow.Context.Set<PositionQuestion>().Add(positionQuestion);
                 }
@@ -296,10 +298,37 @@ namespace HR.Web.Controllers
                 {
                     PositionId = targetPositionId,
                     QuestionId = sourceQuestions[i].QuestionId,
-                    Order = i + 1
+                    Order = i + 1,
+                    Weight = sourceQuestions[i].Weight
                 };
                 _uow.Context.Set<PositionQuestion>().Add(positionQuestion);
             }
+        }
+
+        private static List<decimal> BuildEqualWeights(int questionCount)
+        {
+            var weights = new List<decimal>();
+            if (questionCount <= 0)
+            {
+                return weights;
+            }
+
+            if (questionCount == 1)
+            {
+                weights.Add(100m);
+                return weights;
+            }
+
+            var equalWeight = Math.Round(100m / questionCount, 2, MidpointRounding.AwayFromZero);
+            for (var i = 0; i < questionCount; i++)
+            {
+                weights.Add(equalWeight);
+            }
+
+            var difference = 100m - weights.Sum();
+            weights[weights.Count - 1] += difference;
+
+            return weights;
         }
     }
 

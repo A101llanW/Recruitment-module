@@ -51,7 +51,7 @@ namespace HR.Web.Services
         /// </summary>
         public decimal CalculateApplicationScore(Application application)
         {
-            var rawScore = 0m;
+            var weightedScore = 0m;
 
             // Get position questions and their order
             var positionQuestions = _uow.Context.Set<PositionQuestion>()
@@ -60,6 +60,13 @@ namespace HR.Web.Services
                 .OrderBy(pq => pq.Order)
                 .ToList();
 
+            if (!positionQuestions.Any())
+            {
+                return 0;
+            }
+
+            var effectiveWeights = GetEffectiveQuestionWeights(positionQuestions);
+
             // Get application answers
             var answers = _uow.Context.Set<ApplicationAnswer>()
                 .Where(aa => aa.ApplicationId == application.Id)
@@ -67,10 +74,24 @@ namespace HR.Web.Services
 
             foreach (var positionQuestion in positionQuestions)
             {
+                decimal questionWeight;
+                if (!effectiveWeights.TryGetValue(positionQuestion.Id, out questionWeight))
+                {
+                    continue;
+                }
+
+                var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId);
+                if (rawMaxScore <= 0)
+                {
+                    continue;
+                }
+
                 var answer = answers.FirstOrDefault(a => a.QuestionId == positionQuestion.QuestionId);
                 if (answer != null)
                 {
-                    rawScore += CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, application.PositionId);
+                    var rawQuestionScore = CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, application.PositionId);
+                    var normalizedScore = Clamp01(rawQuestionScore / rawMaxScore);
+                    weightedScore += normalizedScore * questionWeight;
                 }
             }
 
@@ -78,41 +99,96 @@ namespace HR.Web.Services
             var maxPossibleScore = GetMaxPossibleScoreForPosition(positionQuestions);
             
             // Convert to percentage out of 100
-            var percentage = maxPossibleScore > 0 ? (rawScore / maxPossibleScore) * 100 : 0;
+            var percentage = maxPossibleScore > 0 ? (weightedScore / maxPossibleScore) * 100 : 0;
             
             return Math.Max(0, Math.Min(100, percentage)); // Cap at 100%
         }
 
         /// <summary>
-        /// Get maximum possible score for a position based on question types
+        /// Get maximum possible weighted score for a position
         /// </summary>
         private decimal GetMaxPossibleScoreForPosition(List<PositionQuestion> positionQuestions)
         {
-            var maxScore = 0m;
-            
-            foreach (var positionQuestion in positionQuestions)
+            if (positionQuestions == null || !positionQuestions.Any())
             {
-                switch (positionQuestion.Question.Type.ToLower())
+                return 0;
+            }
+
+            var effectiveWeights = GetEffectiveQuestionWeights(positionQuestions);
+            return effectiveWeights.Values.Sum();
+        }
+
+        private Dictionary<int, decimal> GetEffectiveQuestionWeights(IList<PositionQuestion> positionQuestions)
+        {
+            var weights = new Dictionary<int, decimal>();
+            if (positionQuestions == null || !positionQuestions.Any())
+            {
+                return weights;
+            }
+
+            if (positionQuestions.Count == 1)
+            {
+                weights[positionQuestions[0].Id] = 100m;
+                return weights;
+            }
+
+            var rawWeights = positionQuestions
+                .Select(pq => new
                 {
-                    case "choice":
-                        maxScore += GetMaxChoiceScore(positionQuestion.Question, positionQuestion.PositionId);
-                        break;
-                    case "rating":
-                        maxScore += 10; // Rating questions max 10 points
-                        break;
-                    case "number":
-                        maxScore += 10; // Number questions max 10 points
-                        break;
-                    case "text":
-                        maxScore += 30; // Text questions can now score up to ~30 points with enhanced algorithm
-                        break;
-                    default:
-                        maxScore += 0;
-                        break;
+                    pq.Id,
+                    RawWeight = pq.Weight,
+                    PositiveWeight = Math.Max(0m, pq.Weight ?? 0m)
+                })
+                .ToList();
+
+            var configured = rawWeights.Where(w => w.RawWeight.HasValue && w.RawWeight.Value > 0m).ToList();
+            var configuredTotal = configured.Sum(w => w.PositiveWeight);
+
+            if (configuredTotal <= 0m)
+            {
+                var equalWeight = Math.Round(100m / rawWeights.Count, 2, MidpointRounding.AwayFromZero);
+                foreach (var rawWeight in rawWeights)
+                {
+                    weights[rawWeight.Id] = equalWeight;
                 }
             }
-            
-            return maxScore;
+            else if (configuredTotal < 100m && configured.Count < rawWeights.Count)
+            {
+                foreach (var configuredWeight in configured)
+                {
+                    weights[configuredWeight.Id] = Math.Round(configuredWeight.PositiveWeight, 2, MidpointRounding.AwayFromZero);
+                }
+
+                var unconfiguredCount = rawWeights.Count - configured.Count;
+                var remainder = 100m - configuredTotal;
+                var unconfiguredWeight = Math.Round(remainder / unconfiguredCount, 2, MidpointRounding.AwayFromZero);
+                foreach (var rawWeight in rawWeights.Where(w => !configured.Any(c => c.Id == w.Id)))
+                {
+                    weights[rawWeight.Id] = unconfiguredWeight;
+                }
+            }
+            else
+            {
+                var totalRawWeight = rawWeights.Sum(w => w.PositiveWeight);
+                foreach (var rawWeight in rawWeights)
+                {
+                    var scaledWeight = totalRawWeight > 0m ? (rawWeight.PositiveWeight / totalRawWeight) * 100m : 0m;
+                    weights[rawWeight.Id] = Math.Round(scaledWeight, 2, MidpointRounding.AwayFromZero);
+                }
+            }
+
+            var diff = 100m - weights.Values.Sum();
+            var lastId = rawWeights.Last().Id;
+            weights[lastId] += diff;
+
+            return weights;
+        }
+
+        private static decimal Clamp01(decimal value)
+        {
+            if (value < 0m) return 0m;
+            if (value > 1m) return 1m;
+            return value;
         }
 
         /// <summary>
@@ -1059,6 +1135,8 @@ namespace HR.Web.Services
                 .OrderBy(pq => pq.Order)
                 .ToList();
 
+            var effectiveWeights = GetEffectiveQuestionWeights(positionQuestions);
+
             var answers = _uow.Context.Set<ApplicationAnswer>()
                 .Where(aa => aa.ApplicationId == application.Id)
                 .ToList();
@@ -1066,9 +1144,16 @@ namespace HR.Web.Services
             foreach (var positionQuestion in positionQuestions)
             {
                 var answer = answers.FirstOrDefault(a => a.QuestionId == positionQuestion.QuestionId);
-                var score = answer != null ? 
+                var rawScore = answer != null ?
                     CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, application.PositionId) : 0;
-                var maxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId);
+                var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId);
+                decimal weight;
+                if (!effectiveWeights.TryGetValue(positionQuestion.Id, out weight))
+                {
+                    weight = 0m;
+                }
+                var normalizedScore = rawMaxScore > 0 ? Clamp01(rawScore / rawMaxScore) : 0m;
+                var weightedScore = normalizedScore * weight;
 
                 breakdown.Add(new QuestionScoreBreakdown
                 {
@@ -1076,10 +1161,11 @@ namespace HR.Web.Services
                     QuestionText = positionQuestion.Question.Text,
                     QuestionType = positionQuestion.Question.Type,
                     Order = positionQuestion.Order,
-                    Answer = answer != null ? answer.AnswerText : null ?? "Not answered",
-                    Score = score,
-                    MaxScore = maxScore,
-                    Percentage = maxScore > 0 ? (score / maxScore) * 100 : 0
+                    Answer = answer != null ? answer.AnswerText : "Not answered",
+                    Weight = weight,
+                    Score = weightedScore,
+                    MaxScore = weight,
+                    Percentage = normalizedScore * 100m
                 });
             }
 
@@ -1216,6 +1302,7 @@ namespace HR.Web.Services
         public string QuestionType { get; set; }
         public int Order { get; set; }
         public string Answer { get; set; }
+        public decimal Weight { get; set; }
         public decimal Score { get; set; }
         public decimal MaxScore { get; set; }
         public decimal Percentage { get; set; }
