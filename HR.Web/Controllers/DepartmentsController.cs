@@ -7,6 +7,7 @@ using HR.Web.Filters;
 
 namespace HR.Web.Controllers
 {
+    [ModuleAccess(RoleModuleCatalog.Departments)]
     public class DepartmentsController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();
@@ -17,6 +18,8 @@ namespace HR.Web.Controllers
             var itemsQuery = _uow.Departments.GetAll().AsQueryable();
             itemsQuery = _tenantService.ApplyTenantFilter(itemsQuery);
             var items = itemsQuery.ToList();
+            ViewBag.CanManageDepartments = Request.IsAuthenticated &&
+                new RolePermissionService().CanCurrentUserAccessModule(RoleModuleCatalog.Departments, RoleAccessLevels.Manage);
             return View(items);
         }
 

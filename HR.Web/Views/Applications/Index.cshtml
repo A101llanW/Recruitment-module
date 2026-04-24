@@ -6,28 +6,40 @@
 
     var interviewers = ViewBag.Interviewers as List<HR.Web.Models.User>;
     var interviewedAppIds = ViewBag.InterviewedAppIds as List<int> ?? new List<int>();
-    var isAdmin = User != null && User.Identity != null && User.IsInRole("Admin");
+    var canManageApplications = ViewBag.CanManageApplications != null ? (bool)ViewBag.CanManageApplications : false;
+    var returnTo = Request != null ? Request.QueryString["returnTo"] : null;
+    var shouldReturnToInterviewsAfterBooking = string.Equals(returnTo, "interviews", StringComparison.OrdinalIgnoreCase);
 
-    Func<string, string> badge = s =>
+    var bookInterviewApplicationId = 0;
+    if (Request != null)
     {
-        switch (s)
-        {
-            case "Interviewing": return "warning";
-            case "Offer": return "success";
-            case "Rejected": return "danger";
-            case "Hired": return "success";
-            default: return "secondary";
-        }
-    };
+        int.TryParse(Request.QueryString["bookInterviewApplicationId"], out bookInterviewApplicationId);
+    }
+
+    var resumeEmailApplicationId = 0;
+    if (Request != null)
+    {
+        int.TryParse(Request.QueryString["resumeEmailApplicationId"], out resumeEmailApplicationId);
+    }
+
 }
 
 <style>
     .force-capitalize {
         text-transform: capitalize;
     }
+
+    .target-application {
+        border: 2px solid #dc3545 !important;
+        box-shadow: 0 0 0 0.15rem rgba(220, 53, 69, 0.25);
+    }
+
+    .passmark-control {
+        max-width: 460px;
+    }
 </style>
 
-@if (isAdmin)
+@if (canManageApplications)
 {
     <div class="d-flex flex-wrap align-items-center mb-3">
         <div class="form-inline mb-2">
@@ -39,6 +51,23 @@
             </select>
         </div>
     </div>
+
+    using (Html.BeginForm("UpdatePositionPassMark", "Applications", FormMethod.Post, new { id = "positionPassMarkTokenForm", @class = "d-none" }))
+    {
+        @Html.AntiForgeryToken()
+    }
+
+    <div id="passmarkUpdateError" class="alert alert-danger d-none"></div>
+}
+
+@if (TempData["ApplicationEmailSuccess"] != null)
+{
+    <div class="alert alert-success">@TempData["ApplicationEmailSuccess"]</div>
+}
+
+@if (TempData["ApplicationEmailError"] != null)
+{
+    <div class="alert alert-danger">@TempData["ApplicationEmailError"]</div>
 }
 
 @if (!Model.Any())
@@ -56,10 +85,20 @@ else
     foreach (var positionGroup in applicationsByPosition)
     {
         var position = positionGroup.Key;
+        var passMark = position.PassMark;
+        var passMarkRounded = (int)Math.Round(passMark, MidpointRounding.AwayFromZero);
+        passMarkRounded = Math.Max(0, Math.Min(100, passMarkRounded));
+        const int compactRecordLimit = 5;
 
         var positionApplications = positionGroup
             .OrderByDescending(a => a.Score ?? 0)
             .ThenBy(a => a.AppliedOn)
+            .ToList();
+        var passedApplications = positionApplications
+            .Where(a => (a.Score ?? 0m) >= passMark)
+            .ToList();
+        var failedApplications = positionApplications
+            .Where(a => (a.Score ?? 0m) < passMark)
             .ToList();
 
         string departmentName = position.Department != null
@@ -67,6 +106,7 @@ else
     : null;
 
         <div class="mb-5 p-4 rounded shadow-sm"
+             data-position-container-id="@position.Id"
              style="border:2px solid #6fb8dc;background:#f8fbff">
 
             <div class="mb-3 border-bottom pb-3">
@@ -85,127 +125,504 @@ else
                         <i class="fas fa-building"></i> @departmentName
                     </span>
                 }
+
+                @if (canManageApplications)
+                {
+                    <div class="passmark-control mt-3"
+                         data-position-id="@position.Id">
+                        <label class="font-weight-bold mb-1 d-block">
+                            <i class="fas fa-sliders-h"></i> Passmark Midpoint
+                        </label>
+                        <div class="d-flex align-items-center flex-wrap">
+                            <input type="range"
+                                   class="custom-range mr-3 position-passmark-slider"
+                                   min="0"
+                                   max="100"
+                                   step="1"
+                                   value="@passMarkRounded"
+                                   style="max-width: 240px;" />
+                            <input type="number"
+                                   class="form-control form-control-sm position-passmark-number"
+                                   min="0"
+                                   max="100"
+                                   step="1"
+                                   value="@passMarkRounded"
+                                   style="width: 90px;" />
+                            <span class="badge badge-dark ml-2">
+                                <span class="position-passmark-label">@passMarkRounded</span>%
+                            </span>
+                        </div>
+                        <small class="text-muted">
+                            Applicants above/equal passmark appear on the left. Below passmark appear on the right.
+                        </small>
+                    </div>
+                }
             </div>
 
-            <div class="row" id="appsCards-@position.Id" data-position-id="@position.Id">
-                @{ int rank = 1; }
-
-                @foreach (var item in positionApplications)
-                {
-                    var hasInterview = interviewedAppIds.Contains(item.Id);
-                    var score = item.Score ?? 0;
-
-                    <div class="col-12 col-lg-6 mb-3"
-                         data-status="@item.Status"
-                         data-date="@item.AppliedOn.ToString("yyyy-MM-dd")"
-                         data-score="@score">
-
-                        <div class="card h-100 shadow-sm">
-                            <div class="card-body d-flex flex-column">
-
-                                <div class="d-flex justify-content-between mb-2">
-                                    <div>
-                                        <div class="d-flex align-items-center">
-                                            @if (isAdmin && item.Score.HasValue)
-                                            {
-                                        <span class="badge badge-primary mr-2">#@rank</span>
-                                            }
-                                            @{
-                                                var applicantName = item.Applicant != null
-                                                    ? item.Applicant.FullName
-                                                    : "N/A";
-                                            }
-                                            <h5 class="mb-0 force-capitalize">
-                                                @applicantName
-                                            </h5>
-                                        </div>
-                                        <small class="text-muted">
-                                            Applied @item.AppliedOn.ToShortDateString()
-                                        </small>
-                                    </div>
-
-                                    <div class="text-right">
-                                        <span class="badge badge-@badge(item.Status)">
-                                            @item.Status
-                                        </span>
-
-                                        @if (isAdmin && item.Score.HasValue)
-                                        {
-                                            <div class="mt-1">
-                                                <span class="badge badge-info">
-                                                    Score: @item.Score.Value.ToString("F1")
-                                                </span>
-                                            </div>
-                                        }
-                                    </div>
+            @if (canManageApplications)
+            {
+                var passedContainerId = "passedApplicationsContainer-" + position.Id;
+                var passedToggleLabelId = "passedApplicationsToggleLabel-" + position.Id;
+                var passedToggleIconId = "passedApplicationsToggleIcon-" + position.Id;
+                var failedContainerId = "failedApplicationsContainer-" + position.Id;
+                var failedToggleLabelId = "failedApplicationsToggleLabel-" + position.Id;
+                var failedToggleIconId = "failedApplicationsToggleIcon-" + position.Id;
+                <div class="row">
+                    <div class="col-12 col-lg-6 mb-3">
+                        <div class="border rounded p-3 h-100 bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0 text-success">Top Candidates</h5>
+                                <span class="badge badge-success">@passedApplications.Count</span>
+                            </div>
+                            @if (passedApplications.Count > compactRecordLimit)
+                            {
+                                <div class="mb-2">
+                                    <button type="button"
+                                            class="btn btn-sm btn-link p-0 text-success"
+                                            onclick="toggleApplicationsCompact('@passedContainerId', '@passedToggleLabelId', '@passedToggleIconId')">
+                                        <span id="@passedToggleLabelId">Show All (@passedApplications.Count)</span>
+                                        <i id="@passedToggleIconId" class="fas fa-chevron-down ml-1"></i>
+                                    </button>
                                 </div>
-
-
-
-                                @if (isAdmin)
+                            }
+                            <div id="@passedContainerId"
+                                 class="applications-column-cards"
+                                 data-position-id="@position.Id"
+                                 data-compact-limit="@compactRecordLimit"
+                                 data-expanded="false"
+                                 data-toggle-label-id="@passedToggleLabelId"
+                                 data-toggle-icon-id="@passedToggleIconId">
+                                @if (!passedApplications.Any())
                                 {
-                                    <div class="mt-auto">
-                                        @if (hasInterview)
-                                        {
-                                            <span class="badge badge-success">
-                                                <i class="fas fa-check"></i> Interview Booked
-                                            </span>
-                                        }
-                                        else
-                                        {
-                                            using (Html.BeginForm("BookInterview", "Interviews", FormMethod.Post))
-                                            {
-                                                @Html.AntiForgeryToken()
-                                                @Html.Hidden("applicationId", item.Id)
-
-                                                <div class="form-row">
-                                                    <div class="col-12 col-md-4 mb-2">
-                                                        <select name="interviewerId"
-                                                                class="form-control form-control-sm"
-                                                                required>
-                                                            <option value="">Interviewer</option>
-                                                            @foreach (var i in interviewers ?? new List<HR.Web.Models.User>())
+                                    <div class="alert alert-light border mb-0">
+                                        No applicants are at or above the passmark.
+                                    </div>
+                                }
+                                else
+                                {
+                                    var rank = 1;
+                                    var passedCardIndex = 0;
+                                    foreach (var item in passedApplications)
+                                    {
+                                        var hasInterview = interviewedAppIds.Contains(item.Id);
+                                        var score = item.Score ?? 0m;
+                                        var applicantName = item.Applicant != null ? item.Applicant.FullName : "N/A";
+                                        var cardClass = passedCardIndex >= compactRecordLimit
+                                            ? "application-card mb-3 compact-extra d-none"
+                                            : "application-card mb-3";
+                                        <div class="@cardClass"
+                                             id="application-card-@item.Id"
+                                             data-status="@item.Status"
+                                             data-date="@item.AppliedOn.ToString("yyyy-MM-dd")"
+                                             data-score="@score"
+                                             data-name="@applicantName">
+                                            <div class="card h-100 shadow-sm">
+                                                <div class="card-body d-flex flex-column">
+                                                    <div class="d-flex justify-content-between mb-2">
+                                                        <div>
+                                                            <div class="d-flex align-items-center">
+                                                                @if (item.Score.HasValue)
+                                                                {
+                                                                    <span class="badge badge-primary mr-2">#@rank</span>
+                                                                }
+                                                                <h5 class="mb-0 force-capitalize">
+                                                                    @applicantName
+                                                                </h5>
+                                                            </div>
+                                                            <small class="text-muted">
+                                                                Applied @item.AppliedOn.ToShortDateString()
+                                                            </small>
+                                                        </div>
+                                                        <div class="text-right">
+                                                            @if (item.Score.HasValue)
                                                             {
-                                                                <option value="@i.Id">@i.UserName</option>
+                                                                <div class="mt-1">
+                                                                    <span class="badge badge-info">
+                                                                        Score: @item.Score.Value.ToString("F1")
+                                                                    </span>
+                                                                </div>
                                                             }
-                                                        </select>
+                                                        </div>
                                                     </div>
+                                                    <div class="mt-auto">
+                                                        <div class="mb-2">
+                                                            <a href="@Url.Action("Details", "Applicants", new { id = item.ApplicantId, returnTo = "applications" })"
+                                                               class="btn btn-sm btn-info">
+                                                                <i class="fas fa-user"></i> Profile
+                                                            </a>
+                                                        </div>
+                                                        @if (hasInterview)
+                                                        {
+                                                            <span class="badge badge-success">
+                                                                <i class="fas fa-check"></i> Interview Booked
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            using (Html.BeginForm("BookInterview", "Interviews", FormMethod.Post))
+                                                            {
+                                                                @Html.AntiForgeryToken()
+                                                                @Html.Hidden("applicationId", item.Id)
+                                                                if (shouldReturnToInterviewsAfterBooking && bookInterviewApplicationId == item.Id)
+                                                                {
+                                                                    @Html.Hidden("returnTo", "interviews")
+                                                                    @Html.Hidden("resumeEmailApplicationId", resumeEmailApplicationId > 0 ? resumeEmailApplicationId : item.Id)
+                                                                }
 
-                                                    <div class="col-12 col-md-4 mb-2">
-                                                        <input type="datetime-local"
-                                                               name="scheduledAt"
-                                                               class="form-control form-control-sm"
-                                                               required
-                                                               value="@DateTime.Now.AddDays(1).ToString("yyyy-MM-ddTHH:mm")" />
-                                                    </div>
+                                                                <div class="form-row">
+                                                                    <div class="col-12 col-md-4 mb-2">
+                                                                        <select name="interviewerId"
+                                                                                class="form-control form-control-sm"
+                                                                                required>
+                                                                            <option value="">Interviewer</option>
+                                                                            @foreach (var i in interviewers ?? new List<HR.Web.Models.User>())
+                                                                            {
+                                                                                <option value="@i.Id">@i.UserName</option>
+                                                                            }
+                                                                        </select>
+                                                                    </div>
 
-                                                    <div class="col-12 col-md-2 mb-2">
-                                                        <select name="mode"
-                                                                class="form-control form-control-sm"
-                                                                required>
-                                                            <option value="Remote">Remote</option>
-                                                            <option value="Onsite">Onsite</option>
-                                                        </select>
-                                                    </div>
+                                                                    <div class="col-12 col-md-4 mb-2">
+                                                                        <input type="datetime-local"
+                                                                               name="scheduledAt"
+                                                                               class="form-control form-control-sm"
+                                                                               required
+                                                                               value="@DateTime.Now.AddDays(1).ToString("yyyy-MM-ddTHH:mm")" />
+                                                                    </div>
 
-                                                    <div class="col-12 col-md-2">
-                                                        <button type="submit"
-                                                                class="btn btn-sm btn-success btn-block">
-                                                            Book
-                                                        </button>
+                                                                    <div class="col-12 col-md-2 mb-2">
+                                                                        <select name="mode"
+                                                                                class="form-control form-control-sm"
+                                                                                required>
+                                                                            <option value="Remote">Remote</option>
+                                                                            <option value="Onsite">Onsite</option>
+                                                                        </select>
+                                                                    </div>
+
+                                                                    <div class="col-12 col-md-2">
+                                                                        <button type="submit"
+                                                                                class="btn btn-sm btn-success btn-block">
+                                                                            Book
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            }
+                                                        }
                                                     </div>
                                                 </div>
-                                            }
-                                        }
-                                    </div>
+                                            </div>
+                                        </div>
+                                        passedCardIndex++;
+                                        rank++;
+                                    }
                                 }
                             </div>
                         </div>
                     </div>
+                    <div class="col-12 col-lg-6 mb-3">
+                        <div class="border rounded p-3 h-100 bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="mb-0 text-danger">Needs Review</h5>
+                                <span class="badge badge-danger">@failedApplications.Count</span>
+                            </div>
+                            @if (failedApplications.Any())
+                            {
+                                var bulkFormId = "bulkFailedEmailForm-" + position.Id;
+                                <div class="mb-3">
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-danger"
+                                            onclick="toggleElementById('@bulkFormId')">
+                                        <i class="fas fa-envelope"></i> Email All Failed Candidates
+                                    </button>
+                                </div>
+                                <div id="@bulkFormId" class="border rounded p-2 bg-light mb-3 d-none">
+                                    @using (Html.BeginForm("SendFailedCandidatesBulkEmail", "Applications", FormMethod.Post))
+                                    {
+                                        var defaultFailedSubject = string.Format(
+                                            "Update on your application for {0}",
+                                            string.IsNullOrWhiteSpace(position.Title) ? "this position" : position.Title);
 
-                    rank++;
+                                        @Html.AntiForgeryToken()
+                                        @Html.Hidden("positionId", position.Id)
+                                        <label class="font-weight-bold mb-1">Email subject</label>
+                                        <input type="text"
+                                               name="subject"
+                                               class="form-control form-control-sm mb-2"
+                                               maxlength="255"
+                                               required
+                                               value="@defaultFailedSubject"
+                                               placeholder="Type the email subject." />
+                                        <label class="font-weight-bold mb-1">Email body for all failed candidates</label>
+                                        <textarea name="body"
+                                                  class="form-control form-control-sm mb-2"
+                                                  rows="4"
+                                                  maxlength="4000"
+                                                  required
+                                                  placeholder="Type the email body to send to all failed candidates for this position."></textarea>
+                                        <div class="d-flex">
+                                            <button type="submit" class="btn btn-sm btn-danger mr-2">
+                                                Send to All Failed
+                                            </button>
+                                            <button type="button"
+                                                    class="btn btn-sm btn-secondary"
+                                                    onclick="hideElementById('@bulkFormId')">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            @if (failedApplications.Count > compactRecordLimit)
+                            {
+                                <div class="mb-2">
+                                    <button type="button"
+                                            class="btn btn-sm btn-link p-0 text-danger"
+                                            onclick="toggleApplicationsCompact('@failedContainerId', '@failedToggleLabelId', '@failedToggleIconId')">
+                                        <span id="@failedToggleLabelId">Show All (@failedApplications.Count)</span>
+                                        <i id="@failedToggleIconId" class="fas fa-chevron-down ml-1"></i>
+                                    </button>
+                                </div>
+                            }
+                            <div id="@failedContainerId"
+                                 class="applications-column-cards"
+                                 data-position-id="@position.Id"
+                                 data-compact-limit="@compactRecordLimit"
+                                 data-expanded="false"
+                                 data-toggle-label-id="@failedToggleLabelId"
+                                 data-toggle-icon-id="@failedToggleIconId">
+                                @if (!failedApplications.Any())
+                                {
+                                    <div class="alert alert-light border mb-0">
+                                        No applicants are below the passmark.
+                                    </div>
+                                }
+                                else
+                                {
+                                    var rank = 1;
+                                    var failedCardIndex = 0;
+                                    foreach (var item in failedApplications)
+                                    {
+                                        var hasInterview = interviewedAppIds.Contains(item.Id);
+                                        var score = item.Score ?? 0m;
+                                        var applicantName = item.Applicant != null ? item.Applicant.FullName : "N/A";
+                                        var cardClass = failedCardIndex >= compactRecordLimit
+                                            ? "application-card mb-3 compact-extra d-none"
+                                            : "application-card mb-3";
+                                        <div class="@cardClass"
+                                             id="application-card-@item.Id"
+                                             data-status="@item.Status"
+                                             data-date="@item.AppliedOn.ToString("yyyy-MM-dd")"
+                                             data-score="@score"
+                                             data-name="@applicantName">
+                                            <div class="card h-100 shadow-sm">
+                                                <div class="card-body d-flex flex-column">
+                                                    <div class="d-flex justify-content-between mb-2">
+                                                        <div>
+                                                            <div class="d-flex align-items-center">
+                                                                @if (item.Score.HasValue)
+                                                                {
+                                                                    <span class="badge badge-secondary mr-2">#@rank</span>
+                                                                }
+                                                                <h5 class="mb-0 force-capitalize">
+                                                                    @applicantName
+                                                                </h5>
+                                                            </div>
+                                                            <small class="text-muted">
+                                                                Applied @item.AppliedOn.ToShortDateString()
+                                                            </small>
+                                                        </div>
+                                                        <div class="text-right">
+                                                            @if (item.Score.HasValue)
+                                                            {
+                                                                <div class="mt-1">
+                                                                    <span class="badge badge-info">
+                                                                        Score: @item.Score.Value.ToString("F1")
+                                                                    </span>
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                    <div class="mt-auto">
+                                                        <div class="mb-2">
+                                                            <a href="@Url.Action("Details", "Applicants", new { id = item.ApplicantId, returnTo = "applications" })"
+                                                               class="btn btn-sm btn-info">
+                                                                <i class="fas fa-user"></i> Profile
+                                                            </a>
+                                                        </div>
+                                                        @{
+                                                            var itemEmailFormId = "failedEmailForm-" + item.Id;
+                                                        }
+                                                        <div class="mb-2">
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-danger"
+                                                                    onclick="toggleElementById('@itemEmailFormId')">
+                                                                <i class="fas fa-envelope"></i> Email Candidate
+                                                            </button>
+                                                        </div>
+                                                        <div id="@itemEmailFormId" class="border rounded p-2 bg-light mb-2 d-none">
+                                                            @using (Html.BeginForm("SendFailedCandidateEmail", "Applications", FormMethod.Post))
+                                                            {
+                                                                var defaultFailedSubject = string.Format(
+                                                                    "Update on your application for {0}",
+                                                                    string.IsNullOrWhiteSpace(position.Title) ? "this position" : position.Title);
+
+                                                                @Html.AntiForgeryToken()
+                                                                @Html.Hidden("applicationId", item.Id)
+                                                                <label class="font-weight-bold mb-1">Email subject</label>
+                                                                <input type="text"
+                                                                       name="subject"
+                                                                       class="form-control form-control-sm mb-2"
+                                                                       maxlength="255"
+                                                                       required
+                                                                       value="@defaultFailedSubject"
+                                                                       placeholder="Type the email subject." />
+                                                                <label class="font-weight-bold mb-1">Email body</label>
+                                                                <textarea name="body"
+                                                                          class="form-control form-control-sm mb-2"
+                                                                          rows="3"
+                                                                          maxlength="4000"
+                                                                          required
+                                                                          placeholder="Type the email body to send to this candidate."></textarea>
+                                                                <div class="d-flex">
+                                                                    <button type="submit" class="btn btn-sm btn-danger mr-2">
+                                                                        Send Email
+                                                                    </button>
+                                                                    <button type="button"
+                                                                            class="btn btn-sm btn-secondary"
+                                                                            onclick="hideElementById('@itemEmailFormId')">
+                                                                        Cancel
+                                                                    </button>
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                        @if (hasInterview)
+                                                        {
+                                                            <span class="badge badge-success">
+                                                                <i class="fas fa-check"></i> Interview Booked
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            using (Html.BeginForm("BookInterview", "Interviews", FormMethod.Post))
+                                                            {
+                                                                @Html.AntiForgeryToken()
+                                                                @Html.Hidden("applicationId", item.Id)
+                                                                if (shouldReturnToInterviewsAfterBooking && bookInterviewApplicationId == item.Id)
+                                                                {
+                                                                    @Html.Hidden("returnTo", "interviews")
+                                                                    @Html.Hidden("resumeEmailApplicationId", resumeEmailApplicationId > 0 ? resumeEmailApplicationId : item.Id)
+                                                                }
+
+                                                                <div class="form-row">
+                                                                    <div class="col-12 col-md-4 mb-2">
+                                                                        <select name="interviewerId"
+                                                                                class="form-control form-control-sm"
+                                                                                required>
+                                                                            <option value="">Interviewer</option>
+                                                                            @foreach (var i in interviewers ?? new List<HR.Web.Models.User>())
+                                                                            {
+                                                                                <option value="@i.Id">@i.UserName</option>
+                                                                            }
+                                                                        </select>
+                                                                    </div>
+
+                                                                    <div class="col-12 col-md-4 mb-2">
+                                                                        <input type="datetime-local"
+                                                                               name="scheduledAt"
+                                                                               class="form-control form-control-sm"
+                                                                               required
+                                                                               value="@DateTime.Now.AddDays(1).ToString("yyyy-MM-ddTHH:mm")" />
+                                                                    </div>
+
+                                                                    <div class="col-12 col-md-2 mb-2">
+                                                                        <select name="mode"
+                                                                                class="form-control form-control-sm"
+                                                                                required>
+                                                                            <option value="Remote">Remote</option>
+                                                                            <option value="Onsite">Onsite</option>
+                                                                        </select>
+                                                                    </div>
+
+                                                                    <div class="col-12 col-md-2">
+                                                                        <button type="submit"
+                                                                                class="btn btn-sm btn-success btn-block">
+                                                                            Book
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            }
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        failedCardIndex++;
+                                        rank++;
+                                    }
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                var publicContainerId = "allApplicationsContainer-" + position.Id;
+                var publicToggleLabelId = "allApplicationsToggleLabel-" + position.Id;
+                var publicToggleIconId = "allApplicationsToggleIcon-" + position.Id;
+                if (positionApplications.Count > compactRecordLimit)
+                {
+                    <div class="mb-2">
+                        <button type="button"
+                                class="btn btn-sm btn-link p-0 text-primary"
+                                onclick="toggleApplicationsCompact('@publicContainerId', '@publicToggleLabelId', '@publicToggleIconId')">
+                            <span id="@publicToggleLabelId">Show All (@positionApplications.Count)</span>
+                            <i id="@publicToggleIconId" class="fas fa-chevron-down ml-1"></i>
+                        </button>
+                    </div>
                 }
-            </div>
+                <div id="@publicContainerId"
+                     class="row applications-column-cards"
+                     data-position-id="@position.Id"
+                     data-compact-limit="@compactRecordLimit"
+                     data-expanded="false"
+                     data-toggle-label-id="@publicToggleLabelId"
+                     data-toggle-icon-id="@publicToggleIconId">
+                    @{
+                        var publicCardIndex = 0;
+                    }
+                    @foreach (var item in positionApplications)
+                    {
+                        var score = item.Score ?? 0m;
+                        var applicantName = item.Applicant != null ? item.Applicant.FullName : "N/A";
+                        var cardClass = publicCardIndex >= compactRecordLimit
+                            ? "application-card col-12 col-lg-6 mb-3 compact-extra d-none"
+                            : "application-card col-12 col-lg-6 mb-3";
+                        <div class="@cardClass"
+                             id="application-card-@item.Id"
+                             data-status="@item.Status"
+                             data-date="@item.AppliedOn.ToString("yyyy-MM-dd")"
+                             data-score="@score"
+                             data-name="@applicantName">
+                            <div class="card h-100 shadow-sm">
+                                <div class="card-body d-flex flex-column">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <div>
+                                            <h5 class="mb-0 force-capitalize">
+                                                @applicantName
+                                            </h5>
+                                            <small class="text-muted">
+                                                Applied @item.AppliedOn.ToShortDateString()
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        publicCardIndex++;
+                    }
+                </div>
+            }
         </div>
     }
 }
@@ -213,24 +630,275 @@ else
 @section Scripts {
     <script>
         (function () {
+            var targetApplicationId = @bookInterviewApplicationId;
+            if (!targetApplicationId) return;
+
+            var card = document.getElementById('application-card-' + targetApplicationId);
+            if (!card) return;
+
+            card.classList.add('target-application');
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        })();
+
+        function toggleElementById(id) {
+            var element = document.getElementById(id);
+            if (!element) return;
+
+            if (element.classList.contains('d-none')) {
+                element.classList.remove('d-none');
+            } else {
+                element.classList.add('d-none');
+            }
+        }
+
+        function hideElementById(id) {
+            var element = document.getElementById(id);
+            if (!element) return;
+            element.classList.add('d-none');
+        }
+
+        function applyCompactState(container) {
+            if (!container) return;
+
+            var limit = parseInt(container.getAttribute('data-compact-limit'), 10);
+            if (isNaN(limit) || limit <= 0) return;
+
+            var cards = Array.prototype.slice.call(container.querySelectorAll('.application-card'));
+            var expanded = container.getAttribute('data-expanded') === 'true';
+            cards.forEach(function (card, index) {
+                card.classList.toggle('d-none', !expanded && index >= limit);
+            });
+        }
+
+        function updateCompactToggleUi(container) {
+            if (!container) return;
+
+            var limit = parseInt(container.getAttribute('data-compact-limit'), 10);
+            if (isNaN(limit) || limit <= 0) return;
+
+            var cards = Array.prototype.slice.call(container.querySelectorAll('.application-card'));
+            var labelId = container.getAttribute('data-toggle-label-id');
+            var iconId = container.getAttribute('data-toggle-icon-id');
+            var label = labelId ? document.getElementById(labelId) : null;
+            var icon = iconId ? document.getElementById(iconId) : null;
+
+            if (cards.length <= limit) {
+                if (label && label.parentElement) {
+                    label.parentElement.style.display = 'none';
+                }
+                return;
+            }
+
+            var expanded = container.getAttribute('data-expanded') === 'true';
+            if (label) {
+                label.textContent = expanded ? ('Show Top ' + limit) : ('Show All (' + cards.length + ')');
+            }
+            if (icon) {
+                icon.classList.toggle('fa-chevron-down', !expanded);
+                icon.classList.toggle('fa-chevron-up', expanded);
+            }
+        }
+
+        function initializeCompactContainers(scope) {
+            var root = scope || document;
+            root.querySelectorAll('.applications-column-cards[data-compact-limit]').forEach(function (container) {
+                applyCompactState(container);
+                updateCompactToggleUi(container);
+            });
+        }
+
+        function toggleApplicationsCompact(containerId, labelId, iconId) {
+            var container = document.getElementById(containerId);
+            if (!container) return;
+
+            var expanded = container.getAttribute('data-expanded') === 'true';
+            container.setAttribute('data-expanded', expanded ? 'false' : 'true');
+
+            if (labelId) container.setAttribute('data-toggle-label-id', labelId);
+            if (iconId) container.setAttribute('data-toggle-icon-id', iconId);
+
+            applyCompactState(container);
+            updateCompactToggleUi(container);
+        }
+
+        function applyApplicationsSort() {
             var sortBy = document.getElementById('sortBy');
             if (!sortBy) return;
 
-            sortBy.addEventListener('change', function () {
-                var sortValue = sortBy.value;
-                document.querySelectorAll('[id^="appsCards-"]').forEach(function (container) {
-                    var cards = Array.from(container.children);
-                    cards.sort(function (a, b) {
-                        if (sortValue === 'score')
-                            return (+b.dataset.score) - (+a.dataset.score);
-                        if (sortValue === 'date')
-                            return a.dataset.date.localeCompare(b.dataset.date);
-                        return a.querySelector('h5').innerText
-                            .localeCompare(b.querySelector('h5').innerText);
-                    });
-                    cards.forEach(c => container.appendChild(c));
+            var sortValue = sortBy.value;
+            document.querySelectorAll('.applications-column-cards').forEach(function (container) {
+                var cards = Array.prototype.slice.call(container.querySelectorAll('.application-card'));
+                cards.sort(function (a, b) {
+                    if (sortValue === 'score') return (+b.dataset.score) - (+a.dataset.score);
+                    if (sortValue === 'date') return a.dataset.date.localeCompare(b.dataset.date);
+                    return (a.dataset.name || '').localeCompare(b.dataset.name || '');
                 });
+                cards.forEach(function (card) { container.appendChild(card); });
+                applyCompactState(container);
+                updateCompactToggleUi(container);
             });
+        }
+
+        (function () {
+            var sortBy = document.getElementById('sortBy');
+            if (!sortBy || sortBy.dataset.bound === '1') return;
+
+            sortBy.dataset.bound = '1';
+            sortBy.addEventListener('change', applyApplicationsSort);
+        })();
+
+        initializeCompactContainers(document);
+
+        (function () {
+            var tokenInput = document.querySelector('#positionPassMarkTokenForm input[name="__RequestVerificationToken"]');
+            var antiForgeryToken = tokenInput ? tokenInput.value : '';
+            var errorBanner = document.getElementById('passmarkUpdateError');
+            var updateUrl = '@Url.Action("UpdatePositionPassMark", "Applications")';
+            var savingByPosition = {};
+
+            function clamp(rawValue) {
+                var parsed = parseInt(rawValue, 10);
+                if (isNaN(parsed)) return 0;
+                return Math.max(0, Math.min(100, parsed));
+            }
+
+            function setError(message) {
+                if (!errorBanner) return;
+                if (!message) {
+                    errorBanner.classList.add('d-none');
+                    errorBanner.textContent = '';
+                    return;
+                }
+
+                errorBanner.textContent = message;
+                errorBanner.classList.remove('d-none');
+            }
+
+            function postPassmark(positionId, passMark) {
+                var payload = '__RequestVerificationToken=' + encodeURIComponent(antiForgeryToken)
+                    + '&positionId=' + encodeURIComponent(positionId)
+                    + '&passMark=' + encodeURIComponent(passMark);
+
+                return fetch(updateUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: payload,
+                    credentials: 'same-origin'
+                }).then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('Unable to update passmark.');
+                    }
+                    return response.json();
+                });
+            }
+
+            function refreshPositionContainer(positionId) {
+                var currentContainer = document.querySelector('[data-position-container-id="' + positionId + '"]');
+                if (!currentContainer) {
+                    return Promise.resolve();
+                }
+
+                var refreshUrl = window.location.pathname + window.location.search;
+                return fetch(refreshUrl, {
+                    method: 'GET',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin'
+                })
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error('Unable to refresh applicant columns.');
+                        }
+                        return response.text();
+                    })
+                    .then(function (html) {
+                        var parser = new DOMParser();
+                        var doc = parser.parseFromString(html, 'text/html');
+                        var replacement = doc.querySelector('[data-position-container-id="' + positionId + '"]');
+                        if (!replacement) {
+                            throw new Error('Unable to refresh applicant columns.');
+                        }
+
+                        currentContainer.replaceWith(replacement);
+                        bindPassmarkControl(replacement.querySelector('.passmark-control'));
+                        initializeCompactContainers(replacement);
+                        applyApplicationsSort();
+                    });
+            }
+
+            function bindPassmarkControl(control) {
+                if (!control || control.dataset.passmarkBound === '1') {
+                    return;
+                }
+
+                var positionId = control.getAttribute('data-position-id');
+                var slider = control.querySelector('.position-passmark-slider');
+                var number = control.querySelector('.position-passmark-number');
+                var label = control.querySelector('.position-passmark-label');
+
+                if (!positionId || !slider || !number || !label) {
+                    return;
+                }
+
+                control.dataset.passmarkBound = '1';
+
+                function sync(rawValue) {
+                    var value = clamp(rawValue);
+                    slider.value = value;
+                    number.value = value;
+                    label.textContent = value;
+                    return value;
+                }
+
+                function setSaving(isSaving) {
+                    slider.disabled = isSaving;
+                    number.disabled = isSaving;
+                }
+
+                function persist() {
+                    var value = sync(slider.value);
+                    if (savingByPosition[positionId] === true) return;
+
+                    savingByPosition[positionId] = true;
+                    setSaving(true);
+                    setError(null);
+
+                    postPassmark(positionId, value)
+                        .then(function (result) {
+                            if (!result || result.success !== true) {
+                                throw new Error(result && result.message ? result.message : 'Unable to update passmark.');
+                            }
+
+                            return refreshPositionContainer(positionId);
+                        })
+                        .catch(function (error) {
+                            setError(error && error.message ? error.message : 'Unable to update passmark.');
+                        })
+                        .then(function () {
+                            savingByPosition[positionId] = false;
+                            setSaving(false);
+                        });
+                }
+
+                slider.addEventListener('input', function () {
+                    sync(slider.value);
+                });
+
+                slider.addEventListener('change', persist);
+
+                number.addEventListener('input', function () {
+                    sync(number.value);
+                });
+
+                number.addEventListener('change', function () {
+                    sync(number.value);
+                    persist();
+                });
+            }
+
+            document.querySelectorAll('.passmark-control').forEach(bindPassmarkControl);
         })();
     </script>
 }

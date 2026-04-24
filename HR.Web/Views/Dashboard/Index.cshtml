@@ -38,8 +38,15 @@
 </div>
 
 @using HR.Web.Models
+@using HR.Web.Services
 @{
     var pendingImpersonation = ViewBag.PendingImpersonationRequests as List<ImpersonationRequest>;
+    var rolePermissionService = new RolePermissionService();
+    var canManageUsers = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.UserManagement, RoleAccessLevels.Manage);
+    var canViewSecurityLogs = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.SecurityLogs, RoleAccessLevels.View);
+    var canManageQuestions = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Questions, RoleAccessLevels.Manage);
+    var canViewApplications = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Applications, RoleAccessLevels.View);
+    var canManageRoleTemplates = rolePermissionService.CanCurrentUserManageRoleDefinitions();
 }
 
 @if (pendingImpersonation != null && pendingImpersonation.Any())
@@ -115,7 +122,7 @@
     </div>
 }
 
-@if (User != null && User.Identity != null && User.IsInRole("Admin"))
+@if (User != null && User.Identity != null && User.IsInRole("Admin") && (canManageUsers || canViewSecurityLogs || canManageQuestions || canViewApplications || canManageRoleTemplates))
 {
     <div class="row mt-4">
         <div class="col-12">
@@ -127,31 +134,49 @@
                 </div>
                 <div class="card-body">
                     <div class="row">
+                        @if (canManageUsers)
+                        {
                         <div class="col-md-3">
                             <a href="@Url.Action("UserManagement", "Admin")" class="btn btn-outline-primary btn-block mb-2">
                                 <i class="fas fa-users"></i> User Management
                             </a>
                         </div>
+                        }
+                        @if (canViewSecurityLogs)
+                        {
                         <div class="col-md-3">
                             <a href="@Url.Action("SecurityLogs", "Admin")" class="btn btn-outline-danger btn-block mb-2">
                                 <i class="fas fa-shield-alt"></i> Security Logs
                             </a>
                         </div>
+                        }
+                        @if (canManageQuestions)
+                        {
                         <div class="col-md-3">
                             <a href="@Url.Action("Questions", "Admin")" class="btn btn-outline-warning btn-block mb-2">
                                 <i class="fas fa-question-circle"></i> Questions
                             </a>
                         </div>
+                        }
+                        @if (canViewApplications)
+                        {
                         <div class="col-md-3">
                             <a href="@Url.Action("Index", "Applications")" class="btn btn-outline-success btn-block mb-2">
                                 <i class="fas fa-file-alt"></i> Applications
                             </a>
                         </div>
+                        }
+                        @if (canManageRoleTemplates)
+                        {
+                        <div class="col-md-3">
+                            <a href="@Url.Action("RoleManagement", "Admin")" class="btn btn-outline-secondary btn-block mb-2">
+                                <i class="fas fa-user-tag"></i> Role Templates
+                            </a>
+                        </div>
+                        }
                     </div>
                 </div>
             </div>
         </div>
     </div>
 }
-
-

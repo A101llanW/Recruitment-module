@@ -38,6 +38,20 @@
         min-height: 80vh;
         align-items: center;
     }
+
+    /* Opt-in wider auth layout (used by Register). */
+    .mfa-setup-wrapper.mfa-setup-wrapper-wide {
+        max-width: 1100px !important;
+        width: 96% !important;
+        padding-left: 24px !important;
+        padding-right: 24px !important;
+    }
+
+    @@media (max-width: 992px) {
+        .mfa-setup-wrapper.mfa-setup-wrapper-wide {
+            max-width: 760px !important;
+        }
+    }
     
     .col-md-5 {
         width: 100% !important;

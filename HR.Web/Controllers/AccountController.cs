@@ -94,29 +94,14 @@ namespace HR.Web.Controllers
         }
 
         [Authorize]
-        public ActionResult Profile()
+        public new ActionResult Profile()
         {
             try
             {
-                var username = User.Identity.Name;
-                var lowerUsername = username.ToLower();
-                var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
-
+                var user = GetCurrentUserFromIdentity(User.Identity.Name);
                 if (user == null) return HttpNotFound();
 
-                var viewModel = new ProfileViewModel
-                {
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    Email = user.Email,
-                    Phone = user.Phone,
-                    UserName = user.UserName,
-                    Role = user.Role,
-                    CompanyName = user.Company != null ? user.Company.Name : "System Global",
-                    IsEmailVerified = user.IsEmailVerified
-                };
-
-                return View(viewModel);
+                return View(BuildProfileViewModel(user));
             }
             catch (Exception ex)
             {
@@ -127,7 +112,7 @@ namespace HR.Web.Controllers
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
-        public ActionResult Profile(ProfileViewModel model)
+        public new ActionResult Profile(ProfileViewModel model)
         {
             return HandleProfileUpdate(model);
         }
@@ -305,16 +290,16 @@ namespace HR.Web.Controllers
         }
 
         [AllowAnonymous]
-        public ActionResult Register(int? companyId = null, bool isSuperAdmin = false)
+        public ActionResult Register(int? companyId = null, bool isSuperAdmin = false, string returnUrl = null)
         {
-            return HandleRegisterGet(companyId, isSuperAdmin);
+            return HandleRegisterGet(companyId, isSuperAdmin, returnUrl);
         }
         [HttpPost]
         [ValidateAntiForgeryToken]
         [AllowAnonymous]
-        public ActionResult Register(RegisterViewModel model, bool isSuperAdmin = false)
+        public ActionResult Register(RegisterViewModel model, bool isSuperAdmin = false, string returnUrl = null)
         {
-            return HandleRegisterPost(model, isSuperAdmin);
+            return HandleRegisterPost(model, isSuperAdmin, returnUrl);
         }
 
         // Forgot Password Actions

@@ -9,9 +9,11 @@ using HR.Web.Data;
 using HR.Web.Models;
 using HR.Web.Services;
 using HR.Web.Filters;
+using HR.Web.ViewModels;
 
 namespace HR.Web.Controllers
 {
+    [ModuleAccess(RoleModuleCatalog.Applications)]
     public partial class ApplicationsController : Controller
 {
     private readonly UnitOfWork _uow = new UnitOfWork();
@@ -106,6 +108,20 @@ namespace HR.Web.Controllers
             return closedPositionRedirect;
         }
 
+        var applicant = FindOrCreateApplicantForPosition(position.CompanyId);
+        if (applicant == null)
+        {
+            TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
+            return RedirectToAction("Index", "Positions");
+        }
+
+        var profile = GetApplicantProfile(applicant.Id);
+        if (!IsApplicantProfileComplete(profile, position.IsTechnical == true))
+        {
+            TempData["ErrorMessage"] = "Please complete your profile before taking the questionnaire.";
+            return RedirectToAction("ProfileDetails", new { positionId = position.Id });
+        }
+
         LogPositionQuestions(position);
 
         ViewBag.Position = position;
@@ -137,6 +153,20 @@ namespace HR.Web.Controllers
         if (tenantValidationResult != null)
         {
             return tenantValidationResult;
+        }
+
+        var applicant = FindOrCreateApplicantForPosition(position.CompanyId);
+        if (applicant == null)
+        {
+            TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
+            return RedirectToAction("Index", "Positions");
+        }
+
+        var profile = GetApplicantProfile(applicant.Id);
+        if (!IsApplicantProfileComplete(profile, position.IsTechnical == true))
+        {
+            TempData["ErrorMessage"] = "Please complete your profile before taking the questionnaire.";
+            return RedirectToAction("ProfileDetails", new { positionId = position.Id });
         }
 
         var positionQuestions = GetPositionQuestions(positionId, true);
@@ -199,8 +229,164 @@ namespace HR.Web.Controllers
         return RedirectToAction("Index", "Positions");
     }
 
+    [Authorize]
+    public ActionResult ProfileDetails(int positionId)
+    {
+        if (!IsCurrentUserAuthenticated())
+        {
+            return RedirectToApplicationRegistration();
+        }
+
+        var position = _uow.Positions.Get(positionId);
+        if (position == null)
+        {
+            return HttpNotFound();
+        }
+
+        var closedPositionRedirect = GetClosedPositionRedirect(position);
+        if (closedPositionRedirect != null)
+        {
+            return closedPositionRedirect;
+        }
+
+        var applicant = FindOrCreateApplicantForPosition(position.CompanyId);
+        if (applicant == null)
+        {
+            TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
+            return RedirectToAction("Index", "Positions");
+        }
+
+        var profile = GetApplicantProfile(applicant.Id);
+        var model = new ApplicantProfileViewModel
+        {
+            PositionId = position.Id,
+            PositionTitle = position.Title,
+            ApplicantId = applicant.Id,
+            IsTechnical = position.IsTechnical == true,
+            FullName = applicant.FullName,
+            Email = applicant.Email,
+            Phone = applicant.Phone,
+            Location = profile != null ? profile.Location : null,
+            TotalYearsExperience = profile != null ? profile.TotalYearsExperience : null,
+            RelevantYearsExperience = profile != null ? profile.RelevantYearsExperience : null,
+            MostRecentCompany = profile != null ? profile.MostRecentCompany : null,
+            MostRecentTitle = profile != null ? profile.MostRecentTitle : null,
+            MostRecentStartDate = profile != null ? profile.MostRecentStartDate : null,
+            MostRecentEndDate = profile != null ? profile.MostRecentEndDate : null,
+            SecondMostRecentCompany = profile != null ? profile.SecondMostRecentCompany : null,
+            SecondMostRecentTitle = profile != null ? profile.SecondMostRecentTitle : null,
+            SecondMostRecentStartDate = profile != null ? profile.SecondMostRecentStartDate : null,
+            SecondMostRecentEndDate = profile != null ? profile.SecondMostRecentEndDate : null,
+            EmploymentType = profile != null ? profile.EmploymentType : null,
+            Skills = profile != null ? profile.Skills : null,
+            Competencies = profile != null ? profile.Competencies : null,
+            EducationDegree = profile != null ? profile.EducationDegree : null,
+            EducationInstitution = profile != null ? profile.EducationInstitution : null,
+            KeyAchievement = profile != null ? profile.KeyAchievement : null,
+            Certifications = profile != null ? profile.Certifications : null,
+            PortfolioUrl = profile != null ? profile.PortfolioUrl : null,
+            WorkAuthorization = profile != null && profile.WorkAuthorization,
+            NoticePeriod = profile != null ? profile.NoticePeriod : null
+        };
+
+        ApplyPendingLinkedInImport(model);
+        PopulateLinkedInImportViewBag();
+        return View("ProfileDetails", model);
+    }
+
+    [HttpPost]
+    [Authorize]
+    [ValidateAntiForgeryToken]
+    public ActionResult ProfileDetails(ApplicantProfileViewModel model)
+    {
+        var position = _uow.Positions.Get(model.PositionId);
+        if (position == null)
+        {
+            return HttpNotFound();
+        }
+
+        var applicant = FindOrCreateApplicantForPosition(position.CompanyId);
+        if (applicant == null)
+        {
+            TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
+            return RedirectToAction("Index", "Positions");
+        }
+
+        model.PositionTitle = position.Title;
+        model.IsTechnical = position.IsTechnical == true;
+        model.ApplicantId = applicant.Id;
+        NormalizeSelectableProfileFields(model);
+
+        if (model.IsTechnical)
+        {
+            if (!model.RelevantYearsExperience.HasValue)
+            {
+                ModelState.AddModelError("RelevantYearsExperience", "Relevant years of experience is required for technical roles.");
+            }
+
+            if (string.IsNullOrWhiteSpace(model.Skills))
+            {
+                ModelState.AddModelError("Skills", "Please list your core technical skills.");
+            }
+        }
+        
+
+        if (!ModelState.IsValid)
+        {
+            PopulateLinkedInImportViewBag();
+            return View("ProfileDetails", model);
+        }
+
+        applicant.FullName = model.FullName != null ? model.FullName.Trim() : applicant.FullName;
+        applicant.Email = model.Email != null ? model.Email.Trim() : applicant.Email;
+        applicant.Phone = model.Phone != null ? model.Phone.Trim() : applicant.Phone;
+
+        var profile = GetApplicantProfile(applicant.Id);
+        if (profile == null)
+        {
+            profile = new ApplicantProfile
+            {
+                ApplicantId = applicant.Id,
+                CreatedOn = DateTime.UtcNow
+            };
+            _uow.Context.Set<ApplicantProfile>().Add(profile);
+        }
+
+        profile.Location = model.Location != null ? model.Location.Trim() : null;
+        profile.TotalYearsExperience = model.TotalYearsExperience;
+        profile.RelevantYearsExperience = model.RelevantYearsExperience;
+        profile.MostRecentCompany = model.MostRecentCompany != null ? model.MostRecentCompany.Trim() : null;
+        profile.MostRecentTitle = model.MostRecentTitle != null ? model.MostRecentTitle.Trim() : null;
+        profile.MostRecentStartDate = model.MostRecentStartDate;
+        profile.MostRecentEndDate = model.MostRecentEndDate;
+        profile.SecondMostRecentCompany = model.SecondMostRecentCompany != null ? model.SecondMostRecentCompany.Trim() : null;
+        profile.SecondMostRecentTitle = model.SecondMostRecentTitle != null ? model.SecondMostRecentTitle.Trim() : null;
+        profile.SecondMostRecentStartDate = model.SecondMostRecentStartDate;
+        profile.SecondMostRecentEndDate = model.SecondMostRecentEndDate;
+        profile.EmploymentType = model.EmploymentType != null ? model.EmploymentType.Trim() : null;
+        profile.Skills = model.Skills != null ? model.Skills.Trim() : null;
+        profile.Competencies = model.Competencies != null ? model.Competencies.Trim() : null;
+        profile.EducationDegree = model.EducationDegree != null ? model.EducationDegree.Trim() : null;
+        profile.EducationInstitution = model.EducationInstitution != null ? model.EducationInstitution.Trim() : null;
+        profile.KeyAchievement = model.KeyAchievement != null ? model.KeyAchievement.Trim() : null;
+        profile.Certifications = model.Certifications != null ? model.Certifications.Trim() : null;
+        profile.PortfolioUrl = model.PortfolioUrl != null ? model.PortfolioUrl.Trim() : null;
+        profile.WorkAuthorization = model.WorkAuthorization;
+        profile.NoticePeriod = model.NoticePeriod != null ? model.NoticePeriod.Trim() : null;
+        profile.UpdatedOn = DateTime.UtcNow;
+
+        _uow.Complete();
+        ClearPendingLinkedInImport();
+
+        TempData["SuccessMessage"] = "Profile details saved. Continue to the questionnaire.";
+        return RedirectToAction("Questionnaire", new { positionId = position.Id });
+    }
+
         public ActionResult Index()
         {
+            var rolePermissionService = new RolePermissionService();
+            ViewBag.CanManageApplications = false;
+
             if (!IsCurrentUserAuthenticated())
             {
                 ViewBag.Message = "Please sign in or create account first to view your applications.";
@@ -215,6 +401,7 @@ namespace HR.Web.Controllers
 
             if (IsManagementUser(user))
             {
+                ViewBag.CanManageApplications = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Applications, RoleAccessLevels.Manage);
                 return View(BuildManagementApplicationsView());
             }
 
@@ -252,9 +439,10 @@ namespace HR.Web.Controllers
             if (User == null || !User.Identity.IsAuthenticated)
             {
                 // Store the position they want to apply for
-                TempData["ReturnUrl"] = Request.Url != null ? Request.Url.ToString() : null;
+                var returnUrl = Request.Url != null ? Request.Url.PathAndQuery : null;
+                TempData["ReturnUrl"] = returnUrl;
                 TempData["ApplicationMessage"] = "Please register or login to apply for this position.";
-                return RedirectToAction("Register", "Account");
+                return RedirectToAction("Register", "Account", new { returnUrl = returnUrl });
             }
 
             // If the user is authenticated and not Admin/HR, attempt to preselect their Applicant record
@@ -426,6 +614,178 @@ namespace HR.Web.Controllers
             _uow.Complete();
             TempData["Message"] = "Applicant has been released from hold.";
             return RedirectToAction("Index", "Applicants");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin, SuperAdmin")]
+        [RoleBasedAuthorization("Admin")]
+        public async Task<ActionResult> SendFailedCandidateEmail(int applicationId, string subject, string body)
+        {
+            var app = _uow.Applications.GetAll(a => a.Applicant, a => a.Position)
+                .FirstOrDefault(a => a.Id == applicationId);
+            if (app == null)
+            {
+                return HttpNotFound();
+            }
+
+            var tenantValidationResult = ValidateApplicationTenantAccess(app, "Access Denied");
+            if (tenantValidationResult != null)
+            {
+                return tenantValidationResult;
+            }
+
+            var subjectValidationError = ValidateCustomEmailSubject(subject);
+            if (!string.IsNullOrWhiteSpace(subjectValidationError))
+            {
+                TempData["ApplicationEmailError"] = subjectValidationError;
+                return RedirectToAction("Index");
+            }
+
+            var messageValidationError = ValidateCustomEmailMessage(body);
+            if (!string.IsNullOrWhiteSpace(messageValidationError))
+            {
+                TempData["ApplicationEmailError"] = messageValidationError;
+                return RedirectToAction("Index");
+            }
+
+            var position = app.Position ?? _uow.Positions.Get(app.PositionId);
+            if (position == null)
+            {
+                TempData["ApplicationEmailError"] = "Position could not be found for this application.";
+                return RedirectToAction("Index");
+            }
+
+            if (!IsApplicationBelowPassMark(app, position))
+            {
+                TempData["ApplicationEmailError"] = "Email can only be sent from the failed-candidates list.";
+                return RedirectToAction("Index");
+            }
+
+            var recipientEmail = app.Applicant != null ? app.Applicant.Email : null;
+            if (string.IsNullOrWhiteSpace(recipientEmail))
+            {
+                TempData["ApplicationEmailError"] = "Candidate has no email address on file.";
+                return RedirectToAction("Index");
+            }
+
+            await _email.SendAsync(recipientEmail.Trim(), subject.Trim(), BuildCustomCandidateEmailBody(subject, body));
+
+            TempData["ApplicationEmailSuccess"] = string.Format("Email sent to {0}.", app.Applicant != null ? app.Applicant.FullName : recipientEmail.Trim());
+            return RedirectToAction("Index");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin, SuperAdmin")]
+        [RoleBasedAuthorization("Admin")]
+        public async Task<ActionResult> SendFailedCandidatesBulkEmail(int positionId, string subject, string body)
+        {
+            if (positionId <= 0)
+            {
+                TempData["ApplicationEmailError"] = "Invalid position selected.";
+                return RedirectToAction("Index");
+            }
+
+            var position = _uow.Positions.Get(positionId);
+            if (position == null)
+            {
+                return HttpNotFound();
+            }
+
+            var tenantValidationResult = ValidatePositionTenantAccess(position, "Access Denied");
+            if (tenantValidationResult != null)
+            {
+                return tenantValidationResult;
+            }
+
+            var subjectValidationError = ValidateCustomEmailSubject(subject);
+            if (!string.IsNullOrWhiteSpace(subjectValidationError))
+            {
+                TempData["ApplicationEmailError"] = subjectValidationError;
+                return RedirectToAction("Index");
+            }
+
+            var messageValidationError = ValidateCustomEmailMessage(body);
+            if (!string.IsNullOrWhiteSpace(messageValidationError))
+            {
+                TempData["ApplicationEmailError"] = messageValidationError;
+                return RedirectToAction("Index");
+            }
+
+            var failedApplications = _uow.Applications.GetAll(a => a.Applicant)
+                .Where(a => a.PositionId == positionId && (a.Score ?? 0m) < position.PassMark)
+                .ToList();
+
+            if (!failedApplications.Any())
+            {
+                TempData["ApplicationEmailError"] = "No failed candidates found for this position.";
+                return RedirectToAction("Index");
+            }
+
+            var recipients = failedApplications
+                .Where(a => a.Applicant != null && !string.IsNullOrWhiteSpace(a.Applicant.Email))
+                .GroupBy(a => a.Applicant.Email.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+
+            if (!recipients.Any())
+            {
+                TempData["ApplicationEmailError"] = "No valid candidate emails found among failed candidates.";
+                return RedirectToAction("Index");
+            }
+
+            var emailTasks = recipients.Select(r =>
+                _email.SendAsync(
+                    r.Applicant.Email.Trim(),
+                    subject.Trim(),
+                    BuildCustomCandidateEmailBody(subject, body)))
+                .ToList();
+
+            await Task.WhenAll(emailTasks);
+
+            TempData["ApplicationEmailSuccess"] = string.Format(
+                "Bulk email sent to {0} failed candidate{1} for {2}.",
+                recipients.Count,
+                recipients.Count == 1 ? string.Empty : "s",
+                string.IsNullOrWhiteSpace(position.Title) ? "the selected position" : position.Title);
+
+            return RedirectToAction("Index");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin, SuperAdmin")]
+        [RoleBasedAuthorization("Admin")]
+        public ActionResult UpdatePositionPassMark(int positionId, decimal passMark)
+        {
+            if (positionId <= 0)
+            {
+                return Json(new { success = false, message = "Invalid position selected." });
+            }
+
+            var position = _uow.Positions.Get(positionId);
+            if (position == null)
+            {
+                return Json(new { success = false, message = "Position not found." });
+            }
+
+            var tenantValidationResult = ValidatePositionTenantAccess(position, "Access Denied");
+            if (tenantValidationResult != null)
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            var normalizedPassMark = Math.Max(0m, Math.Min(100m, Math.Round(passMark, 0, MidpointRounding.AwayFromZero)));
+            position.PassMark = normalizedPassMark;
+            _uow.Positions.Update(position);
+            _uow.Complete();
+
+            return Json(new
+            {
+                success = true,
+                passMark = normalizedPassMark
+            });
         }
 
         [HttpPost]

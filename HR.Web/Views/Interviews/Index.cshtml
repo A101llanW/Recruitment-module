@@ -2,11 +2,40 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Interviews";
-    var isAdmin = User != null && User.Identity != null && User.IsInRole("Admin");
+    var canManageInterviews = ViewBag.CanManageInterviews != null ? (bool)ViewBag.CanManageInterviews : false;
+    var applicationsWithoutScheduledInterview = ViewBag.ApplicationsWithoutScheduledInterview as List<HR.Web.Models.Application>
+        ?? new List<HR.Web.Models.Application>();
+
+    var interviewEmailSuccess = TempData["InterviewEmailSuccess"] as string;
+    var interviewEmailInfo = TempData["InterviewEmailInfo"] as string;
+    var interviewEmailError = TempData["InterviewEmailError"] as string;
+    var bookingError = TempData["Error"] as string;
+
+    var resumeEmailMessage = ViewBag.ResumeEmailMessage as string;
+    var resumeEmailApplicationId = 0;
+    if (ViewBag.ResumeEmailApplicationId != null)
+    {
+        int.TryParse(ViewBag.ResumeEmailApplicationId.ToString(), out resumeEmailApplicationId);
+    }
+
+    var schedulePromptApplicationId = 0;
+    if (TempData["InterviewEmailSchedulePromptApplicationId"] != null)
+    {
+        int.TryParse(TempData["InterviewEmailSchedulePromptApplicationId"].ToString(), out schedulePromptApplicationId);
+    }
+    var schedulePromptCandidateName = TempData["InterviewEmailSchedulePromptCandidateName"] as string;
+
+    var scheduleRedirectUrl = schedulePromptApplicationId > 0
+        ? (Url.Action("Index", "Applications", new
+        {
+            bookInterviewApplicationId = schedulePromptApplicationId,
+            returnTo = "interviews",
+            resumeEmailApplicationId = schedulePromptApplicationId
+        }) + "#application-card-" + schedulePromptApplicationId)
+        : null;
 }
 
 <style>
-    
     .card-blue {
         background: #fafdff;
         border-radius: 0.4rem;
@@ -15,11 +44,13 @@
         padding: 1.5rem;
         margin-top: 1.2rem;
     }
+
     .page-title {
         color: #0d2c4a;
         font-weight: 600;
         margin-bottom: 1rem;
     }
+
     .table thead th {
         background-color: #e9f4ff;
         border-color: #d3e6f7;
@@ -32,60 +63,252 @@
             <i class="fas fa-calendar-check"></i> Scheduled Interviews
         </h2>
 
+        @if (!string.IsNullOrWhiteSpace(interviewEmailSuccess))
+        {
+            <div class="alert alert-success">@interviewEmailSuccess</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(interviewEmailInfo))
+        {
+            <div class="alert alert-info">@interviewEmailInfo</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(bookingError))
+        {
+            <div class="alert alert-danger">@bookingError</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(interviewEmailError) && schedulePromptApplicationId <= 0)
+        {
+            <div class="alert alert-danger">@interviewEmailError</div>
+        }
+
+        @if (schedulePromptApplicationId > 0)
+        {
+            <div class="alert alert-warning">
+                <div class="mb-2">
+                    Candidate
+                    <strong>@(string.IsNullOrWhiteSpace(schedulePromptCandidateName) ? "selected applicant" : schedulePromptCandidateName)</strong>
+                    has no interview scheduled yet.
+                </div>
+                <div class="mb-2">Do you want to go book the interview now?</div>
+                <a href="@scheduleRedirectUrl" class="btn btn-sm btn-primary mr-2">Yes, Book Interview</a>
+                <a href="@Url.Action("Index", "Interviews")" class="btn btn-sm btn-secondary">No, Stay Here</a>
+            </div>
+        }
+
         @if (!Model.Any())
         {
             <div class="alert alert-info mb-0">No interviews scheduled yet.</div>
         }
         else
         {
-    <div class="table-responsive">
-        <table class="table table-hover table-bordered mb-0">
-            <thead class="thead-light">
-                <tr>
-                    <th>Applicant</th>
-                    <th class="d-none d-md-table-cell">Position</th>
-                    <th class="d-none d-md-table-cell">Interviewer</th>
-                    <th>Scheduled</th>
-                    <th>Mode</th>
-                    @if (isAdmin)
+            if (canManageInterviews)
+            {
+                const string batchInterviewEmailFormId = "batchInterviewEmailForm";
+                <div class="mb-3">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-primary"
+                            onclick="toggleElementById('@batchInterviewEmailFormId')">
+                        <i class="fas fa-envelope"></i> Email Candidates (Batch)
+                    </button>
+                </div>
+                <div id="@batchInterviewEmailFormId" class="border rounded p-2 bg-light mb-3 d-none">
+                    @using (Html.BeginForm("SendInterviewCandidatesBatchEmail", "Interviews", FormMethod.Post))
                     {
-                <th style="width: 120px;">Actions</th>
-}
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var item in Model)
-                {
-                    var applicantName = item.Application != null && item.Application.Applicant != null ? item.Application.Applicant.FullName : "N/A";
-                    var positionTitle = item.Application != null && item.Application.Position != null ? item.Application.Position.Title : "N/A";
-                    var interviewerName = item.Interviewer != null ? item.Interviewer.UserName : "N/A";
-                <tr>
-                    <td class="align-middle">@applicantName</td>
-                    <td class="align-middle d-none d-md-table-cell">@positionTitle</td>
-                    <td class="align-middle d-none d-md-table-cell">@interviewerName</td>
-                    <td class="align-middle">
-                        <span class="d-block">@item.ScheduledAt.ToString("d")</span>
-                        <small class="text-muted">@item.ScheduledAt.ToString("t")</small>
-                    </td>
-                    <td class="align-middle">
-                        <span class="badge badge-info">@item.Mode</span>
-                    </td>
-                    @if (isAdmin)
-                    {
-                <td class="align-middle">
-                    @Html.ActionLink(
-         "Reschedule",
-         "Edit",
-         "Interviews",
-         new { id = item.Id },
-         new { @class = "btn btn-sm btn-blue w-100 w-md-auto" }
-     )
-                </td>
-}
-                </tr>                }
-            </tbody>
-        </table>
-        </div>
+                        @Html.AntiForgeryToken()
+                        <label class="font-weight-bold mb-1">Batch message to all scheduled interview candidates</label>
+                        <textarea name="message"
+                                  class="form-control form-control-sm mb-2"
+                                  rows="4"
+                                  maxlength="4000"
+                                  required
+                                  placeholder="Type the email message for all candidates with scheduled interviews."></textarea>
+                        <div class="d-flex">
+                            <button type="submit" class="btn btn-sm btn-primary mr-2">Send Batch Email</button>
+                            <button type="button"
+                                    class="btn btn-sm btn-secondary"
+                                    onclick="hideElementById('@batchInterviewEmailFormId')">
+                                Cancel
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Applicant</th>
+                            <th class="d-none d-md-table-cell">Position</th>
+                            <th class="d-none d-md-table-cell">Interviewer</th>
+                            <th>Scheduled</th>
+                            <th>Mode</th>
+                            @if (canManageInterviews)
+                            {
+                                <th style="width: 360px;">Actions</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            var applicantName = item.Application != null && item.Application.Applicant != null ? item.Application.Applicant.FullName : "N/A";
+                            var positionTitle = item.Application != null && item.Application.Position != null ? item.Application.Position.Title : "N/A";
+                            var interviewerName = item.Interviewer != null ? item.Interviewer.UserName : "N/A";
+                            var emailFormId = "interviewEmailForm-" + item.ApplicationId;
+                            var isResumeTarget = resumeEmailApplicationId > 0 && resumeEmailApplicationId == item.ApplicationId;
+                            var defaultMessage = isResumeTarget ? (resumeEmailMessage ?? string.Empty) : string.Empty;
+
+                            <tr>
+                                <td class="align-middle">@applicantName</td>
+                                <td class="align-middle d-none d-md-table-cell">@positionTitle</td>
+                                <td class="align-middle d-none d-md-table-cell">@interviewerName</td>
+                                <td class="align-middle">
+                                    <span class="d-block">@item.ScheduledAt.ToString("d")</span>
+                                    <small class="text-muted">@item.ScheduledAt.ToString("t")</small>
+                                </td>
+                                <td class="align-middle">
+                                    <span class="badge badge-info">@item.Mode</span>
+                                </td>
+                                @if (canManageInterviews)
+                                {
+                                    <td class="align-middle">
+                                        <div class="d-flex flex-wrap mb-2">
+                                            @Html.ActionLink(
+                                                "Reschedule",
+                                                "Edit",
+                                                "Interviews",
+                                                new { id = item.Id },
+                                                new { @class = "btn btn-sm btn-blue mr-2 mb-2" }
+                                            )
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-primary mb-2"
+                                                    onclick="toggleElementById('@emailFormId')">
+                                                <i class="fas fa-envelope"></i> Email Candidate
+                                            </button>
+                                        </div>
+                                        <div id="@emailFormId" class="border rounded p-2 bg-light @(isResumeTarget ? string.Empty : "d-none")">
+                                            @using (Html.BeginForm("SendInterviewCandidateEmail", "Interviews", FormMethod.Post))
+                                            {
+                                                @Html.AntiForgeryToken()
+                                                @Html.Hidden("applicationId", item.ApplicationId)
+                                                <label class="font-weight-bold mb-1">Message</label>
+                                                <textarea name="message"
+                                                          class="form-control form-control-sm mb-2"
+                                                          rows="3"
+                                                          maxlength="4000"
+                                                          required
+                                                          placeholder="Type the email message to send.">@defaultMessage</textarea>
+                                                <div class="d-flex">
+                                                    <button type="submit" class="btn btn-sm btn-primary mr-2">Send Email</button>
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-secondary"
+                                                            onclick="hideElementById('@emailFormId')">
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            }
+                                        </div>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         }
     </div>
+
+    @if (canManageInterviews && applicationsWithoutScheduledInterview.Any())
+    {
+        <div class="card-blue">
+            <h4 class="page-title mb-3">
+                <i class="fas fa-exclamation-circle"></i> Candidates Without Scheduled Interview
+            </h4>
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Applicant</th>
+                            <th class="d-none d-md-table-cell">Position</th>
+                            <th>Applied</th>
+                            <th style="width: 380px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var app in applicationsWithoutScheduledInterview)
+                        {
+                            var applicantName = app.Applicant != null ? app.Applicant.FullName : "N/A";
+                            var positionTitle = app.Position != null ? app.Position.Title : "N/A";
+                            var emailFormId = "unscheduledEmailForm-" + app.Id;
+                            var bookUrl = Url.Action("Index", "Applications", new
+                            {
+                                bookInterviewApplicationId = app.Id,
+                                returnTo = "interviews",
+                                resumeEmailApplicationId = app.Id
+                            }) + "#application-card-" + app.Id;
+
+                            <tr>
+                                <td class="align-middle">@applicantName</td>
+                                <td class="align-middle d-none d-md-table-cell">@positionTitle</td>
+                                <td class="align-middle">@app.AppliedOn.ToString("d")</td>
+                                <td class="align-middle">
+                                    <div class="d-flex flex-wrap mb-2">
+                                        <a href="@bookUrl" class="btn btn-sm btn-success mr-2 mb-2">
+                                            <i class="fas fa-calendar-plus"></i> Book Interview
+                                        </a>
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-primary mb-2"
+                                                onclick="toggleElementById('@emailFormId')">
+                                            <i class="fas fa-envelope"></i> Email Candidate
+                                        </button>
+                                    </div>
+                                    <div id="@emailFormId" class="border rounded p-2 bg-light d-none">
+                                        @using (Html.BeginForm("SendInterviewCandidateEmail", "Interviews", FormMethod.Post))
+                                        {
+                                            @Html.AntiForgeryToken()
+                                            @Html.Hidden("applicationId", app.Id)
+                                            <label class="font-weight-bold mb-1">Message</label>
+                                            <textarea name="message"
+                                                      class="form-control form-control-sm mb-2"
+                                                      rows="3"
+                                                      maxlength="4000"
+                                                      required
+                                                      placeholder="Type the email message to send."></textarea>
+                                            <div class="d-flex">
+                                                <button type="submit" class="btn btn-sm btn-primary mr-2">Send Email</button>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-secondary"
+                                                        onclick="hideElementById('@emailFormId')">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
 </div>
+
+@section Scripts {
+    <script>
+        function toggleElementById(id) {
+            var element = document.getElementById(id);
+            if (!element) return;
+            element.classList.toggle('d-none');
+        }
+
+        function hideElementById(id) {
+            var element = document.getElementById(id);
+            if (!element) return;
+            element.classList.add('d-none');
+        }
+    </script>
+}

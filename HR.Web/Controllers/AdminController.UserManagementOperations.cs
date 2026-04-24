@@ -11,7 +11,7 @@ namespace HR.Web.Controllers
     {
         private ActionResult BuildGlobalUserManagementView()
         {
-            var allUsers = _uow.Users.GetAll(u => u.Company).ToList();
+            var allUsers = _uow.Users.GetAll(u => u.Company, u => u.RoleDefinition).ToList();
             var allLastLogins = GetLatestLoginByUsername();
             var viewModel = new SuperAdminUserManagementViewModel
             {
@@ -48,7 +48,8 @@ namespace HR.Web.Controllers
                 LastName = user.LastName,
                 UserName = user.UserName,
                 Email = user.Email,
-                Role = user.Role,
+                Role = _rolePermissionService.GetDisplayRole(user),
+                BaseRole = user.Role,
                 CompanyName = user.Company != null ? user.Company.Name : "System",
                 IsLocked = _securityService.IsAccountLocked(user.UserName),
                 LastLoginDate = lastLogin != null ? (DateTime?)lastLogin.Timestamp : null,
@@ -98,7 +99,7 @@ namespace HR.Web.Controllers
 
         private static bool IsCompanyAdmin(User user)
         {
-            return user.Role == "Admin" && user.CompanyId.HasValue;
+            return user.Role == "Admin" && user.CompanyId.HasValue && !user.RoleDefinitionId.HasValue;
         }
 
         private static void AddUserToCompanyBucket(SuperAdminUserManagementViewModel viewModel, User user, UserManagementViewModel userVm)

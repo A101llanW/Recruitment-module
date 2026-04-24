@@ -239,6 +239,9 @@
         string currentController = ViewContext.RouteData.Values["controller"] != null ? ViewContext.RouteData.Values["controller"].ToString() : null;
         string currentAction = ViewContext.RouteData.Values["action"] != null ? ViewContext.RouteData.Values["action"].ToString() : null;
         bool isAuthPage = (currentController == "Account" && (currentAction == "Login" || currentAction == "Register" || currentAction == "VerifyMFA" || currentAction == "SetupMFA" || currentAction == "ForgotPassword" || currentAction == "ResetPassword" || currentAction == "VerifyEmail"));
+        var layoutRolePermissionService = new HR.Web.Services.RolePermissionService();
+        string currentModuleKey = HR.Web.Services.RoleModuleCatalog.ResolveModule(currentController, currentAction);
+        bool isModuleReadOnlyAccess = layoutRolePermissionService.IsCurrentUserReadOnlyForModule(currentModuleKey);
     }
 
     @if (ViewBag.HideNavbar != true)
@@ -248,14 +251,30 @@
                 string tenantToken = ViewBag.TenantToken as string;
                 var tenantContext = ViewBag.TenantContext as HR.Web.Models.Company;
                 string brandUrl = Url.Action("Index", "Positions", new { tenant = tenantToken });
+                var rolePermissionService = new HR.Web.Services.RolePermissionService();
+                bool isAuthenticatedUser = User != null && User.Identity != null && User.Identity.IsAuthenticated;
+                bool isSuperAdminUser = isAuthenticatedUser && User.IsInRole("SuperAdmin");
+                bool isAdminUser = isAuthenticatedUser && User.IsInRole("Admin");
+                bool isImpersonating = Session["ImpersonatedCompanyId"] != null;
+                bool canViewPositions = rolePermissionService.CanCurrentUserAccessModule(HR.Web.Services.RoleModuleCatalog.Positions, HR.Web.Services.RoleAccessLevels.View);
+                bool canViewApplications = rolePermissionService.CanCurrentUserAccessModule(HR.Web.Services.RoleModuleCatalog.Applications, HR.Web.Services.RoleAccessLevels.View);
+                bool canViewInterviews = rolePermissionService.CanCurrentUserAccessModule(HR.Web.Services.RoleModuleCatalog.Interviews, HR.Web.Services.RoleAccessLevels.View);
+                bool canViewQuestions = rolePermissionService.CanCurrentUserAccessModule(HR.Web.Services.RoleModuleCatalog.Questions, HR.Web.Services.RoleAccessLevels.View);
+                bool canViewOnboardings = rolePermissionService.CanCurrentUserAccessModule(HR.Web.Services.RoleModuleCatalog.Onboardings, HR.Web.Services.RoleAccessLevels.View);
+                bool canViewApplicants = rolePermissionService.CanCurrentUserAccessModule(HR.Web.Services.RoleModuleCatalog.Applicants, HR.Web.Services.RoleAccessLevels.View);
+                bool canViewUsers = rolePermissionService.CanCurrentUserAccessModule(HR.Web.Services.RoleModuleCatalog.UserManagement, HR.Web.Services.RoleAccessLevels.View);
+                bool canViewSecurityLogs = rolePermissionService.CanCurrentUserAccessModule(HR.Web.Services.RoleModuleCatalog.SecurityLogs, HR.Web.Services.RoleAccessLevels.View);
+                bool canViewReports = rolePermissionService.CanCurrentUserAccessModule(HR.Web.Services.RoleModuleCatalog.Reports, HR.Web.Services.RoleAccessLevels.View);
+                bool canViewDepartments = rolePermissionService.CanCurrentUserAccessModule(HR.Web.Services.RoleModuleCatalog.Departments, HR.Web.Services.RoleAccessLevels.View);
+                bool canManageRoleTemplates = rolePermissionService.CanCurrentUserManageRoleDefinitions();
                 
-                if (User != null && User.Identity != null && User.Identity.IsAuthenticated)
+                if (isAuthenticatedUser)
                 {
-                    if (Session["ImpersonatedCompanyId"] != null) {
+                    if (isImpersonating) {
                         brandUrl = Url.Action("Index", "Dashboard", new { tenant = tenantToken });
-                    } else if (User.IsInRole("SuperAdmin")) {
+                    } else if (isSuperAdminUser) {
                         brandUrl = Url.Action("Index", "Companies", new { tenant = tenantToken });
-                    } else if (User.IsInRole("Admin")) {
+                    } else if (isAdminUser) {
                         brandUrl = Url.Action("Index", "Dashboard", new { tenant = tenantToken });
                     }
                 }
@@ -295,7 +314,7 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 @if (!isAuthPage) {
                 <ul class="navbar-nav">
-                    @if (User != null && User.Identity != null && User.IsInRole("SuperAdmin") && Session["ImpersonatedCompanyId"] == null)
+                    @if (isSuperAdminUser && !isImpersonating)
                     {
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="saSystemMenu" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" style="color: #ff7675; font-weight: 800;">
@@ -306,43 +325,77 @@
                                 <a class="dropdown-item" href="@Url.Action("Index","Licenses", new { tenant = tenantToken })"><i class="fas fa-key"></i> Licenses</a>
                                 <a class="dropdown-item" href="@Url.Action("Index","Positions", new { tenant = tenantToken })"><i class="fas fa-sitemap"></i> System Positions</a>
                                 <a class="dropdown-item" href="@Url.Action("GlobalUserManagement","Admin", new { tenant = tenantToken })"><i class="fas fa-users-cog"></i> System Users</a>
+                                <a class="dropdown-item" href="@Url.Action("RoleManagement","Admin", new { tenant = tenantToken })"><i class="fas fa-user-tag"></i> Role Templates</a>
                             </div>
                         </li>
                     }
-                    else
+                    else if (!isAdminUser || canViewPositions || isImpersonating)
                     {
                         <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Positions" ? "active" : "")">
                             <a class="nav-link" href="@Url.Action("Index","Positions", new { tenant = tenantToken })"><i class="fas fa-sitemap"></i> Positions</a>
                         </li>
                     }
 
-                    @if (User == null || (!User.IsInRole("SuperAdmin") || Session["ImpersonatedCompanyId"] != null))
+                    @if (!isSuperAdminUser || isImpersonating)
                     {
-                        <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Applications" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Applications", new { tenant = tenantToken })"><i class="fas fa-file-alt"></i> Applications</a></li>
-                        <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Interviews" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Interviews", new { tenant = tenantToken })"><i class="fas fa-comments"></i> Interviews</a></li>
+                        if (!isAdminUser || canViewApplications || isImpersonating)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Applications" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Applications", new { tenant = tenantToken })"><i class="fas fa-file-alt"></i> Applications</a></li>
+                        }
+                        if (!isAdminUser || canViewInterviews || isImpersonating)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Interviews" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Interviews", new { tenant = tenantToken })"><i class="fas fa-comments"></i> Interviews</a></li>
+                        }
                     }
 
-                    @if (User != null && User.Identity != null && (User.IsInRole("Admin") || Session["ImpersonatedCompanyId"] != null))
+                    @if (isAdminUser || isImpersonating)
                     {
-                        <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "Questions" ? "active" : "")">
-                            <a class="nav-link" href="@Url.Action("Questions","Admin", new { tenant = tenantToken })"><i class="fas fa-question-circle"></i> Questions</a>
-                        </li>
-                        <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Onboardings" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Onboardings", new { tenant = tenantToken })"><i class="fas fa-user-check"></i> Onboardings</a></li>
-                        <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Applicants" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Applicants", new { tenant = tenantToken })"><i class="fas fa-users"></i> Applicants</a></li>
-                        <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "UserManagement" ? "active" : "")">
-                            <a class="nav-link" href="@Url.Action("UserManagement","Admin", new { tenant = tenantToken })"><i class="fas fa-user-shield"></i> User Management</a>
-                        </li>
-                        <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "SecurityLogs" ? "active" : "")">
-                            <a class="nav-link" href="@Url.Action("SecurityLogs","Admin", new { tenant = tenantToken })"><i class="fas fa-shield-alt"></i> Security Logs</a>
-                        </li>
-                        <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "ReportGenerator" ? "active" : "")">
-                            <a class="nav-link" href="@Url.Action("Index","ReportGenerator", new { tenant = tenantToken })"><i class="fas fa-chart-bar"></i> Reports</a>
-                        </li>
+                        if (canViewQuestions || isImpersonating)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "Questions" ? "active" : "")">
+                                <a class="nav-link" href="@Url.Action("Questions","Admin", new { tenant = tenantToken })"><i class="fas fa-question-circle"></i> Questions</a>
+                            </li>
+                        }
+                        if (canViewOnboardings || isImpersonating)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Onboardings" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Onboardings", new { tenant = tenantToken })"><i class="fas fa-user-check"></i> Onboardings</a></li>
+                        }
+                        if (canViewApplicants || isImpersonating)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Applicants" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Applicants", new { tenant = tenantToken })"><i class="fas fa-users"></i> Applicants</a></li>
+                        }
+                        if (canViewUsers || isImpersonating)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"] != null && (ViewContext.RouteData.Values["action"].ToString() == "UserManagement" || ViewContext.RouteData.Values["action"].ToString() == "GlobalUserManagement") ? "active" : "")">
+                                <a class="nav-link" href="@Url.Action("UserManagement","Admin", new { tenant = tenantToken })"><i class="fas fa-user-shield"></i> User Management</a>
+                            </li>
+                        }
+                        if (canManageRoleTemplates)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "RoleManagement" ? "active" : "")">
+                                <a class="nav-link" href="@Url.Action("RoleManagement","Admin", new { tenant = tenantToken })"><i class="fas fa-user-tag"></i> Role Templates</a>
+                            </li>
+                        }
+                        if (canViewSecurityLogs || isImpersonating)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "SecurityLogs" ? "active" : "")">
+                                <a class="nav-link" href="@Url.Action("SecurityLogs","Admin", new { tenant = tenantToken })"><i class="fas fa-shield-alt"></i> Security Logs</a>
+                            </li>
+                        }
+                        if (canViewReports || isImpersonating)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && (ViewContext.RouteData.Values["controller"].ToString() == "ReportGenerator" || ViewContext.RouteData.Values["controller"].ToString() == "Reports") ? "active" : "")">
+                                <a class="nav-link" href="@Url.Action("Index","ReportGenerator", new { tenant = tenantToken })"><i class="fas fa-chart-bar"></i> Reports</a>
+                            </li>
+                        }
                     }
 
-                    @if (User == null || (!User.IsInRole("SuperAdmin") || Session["ImpersonatedCompanyId"] != null))
+                    @if (!isSuperAdminUser || isImpersonating)
                     {
-                        <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Departments" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Departments", new { tenant = tenantToken })"><i class="fas fa-building"></i> Departments</a></li>
+                        if (!isAdminUser || canViewDepartments || isImpersonating)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Departments" ? "active" : "")"><a class="nav-link" href="@Url.Action("Index","Departments", new { tenant = tenantToken })"><i class="fas fa-building"></i> Departments</a></li>
+                        }
                     }
                 </ul>
                 <ul class="navbar-nav ml-auto">
@@ -643,6 +696,105 @@
         </script>
     }
 
+    @if (isModuleReadOnlyAccess)
+    {
+        <style>
+            .readonly-module-hidden {
+                display: none !important;
+            }
+
+            .readonly-module-disabled {
+                pointer-events: none !important;
+                opacity: 0.65 !important;
+            }
+        </style>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                var root = document.querySelector('body > div.container[style*="padding-bottom"]') || document.querySelector('body > div.container');
+                if (!root) {
+                    return;
+                }
+
+                function getControlText(element) {
+                    var text = (element.innerText || element.textContent || element.value || element.getAttribute('aria-label') || element.getAttribute('title') || '').trim();
+                    return text.toLowerCase();
+                }
+
+                function isSafeNavigationControl(element) {
+                    if (!element) {
+                        return false;
+                    }
+
+                    if ((element.getAttribute('data-dismiss') || '').length > 0) {
+                        return true;
+                    }
+
+                    var text = getControlText(element);
+                    return /\b(back|return|cancel|close)\b/i.test(text);
+                }
+
+                function hideControl(element) {
+                    if (!element || isSafeNavigationControl(element)) {
+                        return;
+                    }
+
+                    element.classList.add('readonly-module-hidden');
+                    element.setAttribute('aria-hidden', 'true');
+                    element.setAttribute('tabindex', '-1');
+                    if ('disabled' in element) {
+                        element.disabled = true;
+                    }
+                }
+
+                var controls = root.querySelectorAll('a[class*="btn"], button, input[type="submit"], input[type="button"]');
+                controls.forEach(function (control) {
+                    if (control.getAttribute('data-readonly-allow') === 'true' || control.closest('[data-readonly-allow="true"]')) {
+                        return;
+                    }
+
+                    if (isSafeNavigationControl(control)) {
+                        return;
+                    }
+
+                    hideControl(control);
+                });
+
+                var postForms = root.querySelectorAll('form');
+                postForms.forEach(function (form) {
+                    var method = (form.getAttribute('method') || 'get').toLowerCase();
+                    if (method !== 'post') {
+                        return;
+                    }
+
+                    var fields = form.querySelectorAll('input, select, textarea, button');
+                    fields.forEach(function (field) {
+                        if ((field.getAttribute('type') || '').toLowerCase() === 'hidden') {
+                            return;
+                        }
+
+                        if (field.getAttribute('data-readonly-allow') === 'true' || field.closest('[data-readonly-allow="true"]')) {
+                            return;
+                        }
+
+                        if (isSafeNavigationControl(field)) {
+                            return;
+                        }
+
+                        if ('readOnly' in field && field.tagName.toLowerCase() !== 'select') {
+                            field.readOnly = true;
+                        }
+
+                        if ('disabled' in field) {
+                            field.disabled = true;
+                        }
+
+                        field.classList.add('readonly-module-disabled');
+                    });
+                });
+            });
+        </script>
+    }
+
     @RenderSection("Scripts", required: false)
 
     <!-- Secure Credential Download Modal -->
@@ -795,8 +947,6 @@
 }
 </body>
 </html>
-
-
 
 
 

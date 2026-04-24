@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Web.Mvc;
 
@@ -60,7 +61,7 @@ namespace HR.Web.Controllers
             }
             catch (Exception ex)
             {
-                // Log error if needed
+                Trace.TraceError("Error loading company logo: {0}", ex);
                 return HttpNotFound("Error loading logo");
             }
         }

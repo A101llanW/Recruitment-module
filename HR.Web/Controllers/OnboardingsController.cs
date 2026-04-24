@@ -10,6 +10,7 @@ namespace HR.Web.Controllers
 {
     [Authorize(Roles = "Admin, SuperAdmin")]
     [RoleBasedAuthorization("Admin")]
+    [ModuleAccess(RoleModuleCatalog.Onboardings)]
     public class OnboardingsController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();

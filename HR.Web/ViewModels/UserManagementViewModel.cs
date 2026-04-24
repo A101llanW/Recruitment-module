@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using HR.Web.Models;
 
@@ -22,6 +23,8 @@ namespace HR.Web.ViewModels
 
         [Required, StringLength(50)]
         public string Role { get; set; }
+
+        public string BaseRole { get; set; }
 
         public string Phone { get; set; }
 
@@ -64,6 +67,11 @@ namespace HR.Web.ViewModels
             get
             {
                 var role = Role != null ? Role.ToLower() : string.Empty;
+                if (!string.IsNullOrWhiteSpace(BaseRole))
+                {
+                    role = BaseRole.ToLower();
+                }
+
                 switch (role)
                 {
                     case "admin":
@@ -96,8 +104,14 @@ namespace HR.Web.ViewModels
         [Required, StringLength(50)]
         public string CurrentRole { get; set; }
 
-        [Required, StringLength(50)]
         public string NewRole { get; set; }
+
+        [Required, Display(Name = "Role")]
+        public string SelectedRoleKey { get; set; }
+
+        public string CurrentRoleDisplay { get; set; }
+        public bool IsCurrentFullAdmin { get; set; }
+        public int? CurrentRoleDefinitionId { get; set; }
 
         public string Reason { get; set; }
 
@@ -110,6 +124,7 @@ namespace HR.Web.ViewModels
         public string Phone { get; set; }
 
         public System.Collections.Generic.List<HR.Web.Models.Company> Companies { get; set; }
+        public List<System.Web.Mvc.SelectListItem> AvailableRoleOptions { get; set; }
     }
 
     public class SuperAdminUserManagementViewModel
@@ -152,9 +167,11 @@ namespace HR.Web.ViewModels
         [Compare("Password", ErrorMessage = "The password and confirmation password do not match.")]
         public string ConfirmPassword { get; set; }
 
+        public string Role { get; set; }
+
         [Required]
         [Display(Name = "Role")]
-        public string Role { get; set; }
+        public string SelectedRoleKey { get; set; }
 
         [Display(Name = "Company")]
         public int? CompanyId { get; set; }
@@ -166,5 +183,61 @@ namespace HR.Web.ViewModels
         public string Phone { get; set; }
 
         public System.Collections.Generic.List<HR.Web.Models.Company> Companies { get; set; }
+        public List<System.Web.Mvc.SelectListItem> AvailableRoleOptions { get; set; }
+    }
+
+    public class RolePermissionInputViewModel
+    {
+        public string ModuleKey { get; set; }
+        public string DisplayName { get; set; }
+        public string Description { get; set; }
+        public string IconClass { get; set; }
+        public bool IsSelected { get; set; }
+        public bool IsReadOnlySelected { get; set; }
+        public string AccessLevel { get; set; }
+    }
+
+    public class RoleDefinitionSummaryViewModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public string ScopeName { get; set; }
+        public bool IsGlobal { get; set; }
+        public DateTime CreatedDate { get; set; }
+        public string CreatedByUserName { get; set; }
+        public bool CanDelete { get; set; }
+        public int AssignedUsersCount { get; set; }
+        public List<RolePermissionInputViewModel> Permissions { get; set; }
+    }
+
+    public class RoleManagementPageViewModel
+    {
+        public RoleManagementPageViewModel()
+        {
+            ModulePermissions = new List<RolePermissionInputViewModel>();
+            ExistingRoles = new List<RoleDefinitionSummaryViewModel>();
+            Companies = new List<Company>();
+        }
+
+        [Required, StringLength(100)]
+        [Display(Name = "Role Name")]
+        public string Name { get; set; }
+
+        [StringLength(500)]
+        [Display(Name = "Description")]
+        public string Description { get; set; }
+
+        [Display(Name = "Role Scope")]
+        public int? CompanyId { get; set; }
+
+        public int? EditingRoleId { get; set; }
+        public bool IsEditMode { get { return EditingRoleId.HasValue; } }
+
+        public bool IsActualSuperAdmin { get; set; }
+        public int? CurrentCompanyId { get; set; }
+        public List<Company> Companies { get; set; }
+        public List<RolePermissionInputViewModel> ModulePermissions { get; set; }
+        public List<RoleDefinitionSummaryViewModel> ExistingRoles { get; set; }
     }
 }

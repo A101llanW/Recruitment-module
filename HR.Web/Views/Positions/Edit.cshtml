@@ -107,6 +107,30 @@
         margin-top: 1.2rem !important;
         justify-content: flex-start !important;
     }
+    .question-weight-row {
+        border: 1px solid #e6e6e6;
+        border-radius: 0.35rem;
+        padding: 0.6rem;
+        margin-bottom: 0.6rem;
+        background: #fff;
+    }
+    .question-weight-value {
+        width: 64px;
+        text-align: right;
+        font-weight: 600;
+    }
+    .question-weight-row.locked {
+        border-color: #ffc107;
+        background: #fffdf4;
+    }
+    .question-weight-lock {
+        width: 34px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
 </style>
 
 <div class="container-fluid" style="margin-top: 1.2rem;">
@@ -118,10 +142,16 @@
 @{
     var questions = ViewBag.QuestionList as IEnumerable<HR.Web.Models.Question>;
     var selectedQuestionIds = ViewBag.SelectedQuestionIds as List<int> ?? new List<int>();
+    var postedQuestionWeights = ViewBag.SelectedQuestionWeights as System.Collections.Generic.Dictionary<int, decimal>;
+    var selectedQuestionWeights = postedQuestionWeights ?? (Model != null && Model.PositionQuestions != null
+        ? Model.PositionQuestions.ToDictionary(pq => pq.QuestionId, pq => pq.Weight ?? 0m)
+        : new System.Collections.Generic.Dictionary<int, decimal>());
     Html.EnableClientValidation(false);
     Html.EnableUnobtrusiveJavaScript(false);
     var currencyProp = typeof(HR.Web.Models.Position).GetProperty("Currency");
     string currencyValue = "KES";
+    var passMarkValue = Model != null ? (int)Math.Round(Model.PassMark, MidpointRounding.AwayFromZero) : 50;
+    passMarkValue = Math.Max(0, Math.Min(100, passMarkValue));
     if (currencyProp != null && Model != null) {
         var currencyValueObj = currencyProp.GetValue(Model);
         currencyValue = currencyValueObj != null ? currencyValueObj.ToString() : "KES";
@@ -131,11 +161,25 @@
                 @Html.AntiForgeryToken()
                 @Html.HiddenFor(m => m.Id)
                 @Html.HiddenFor(m => m.PostedOn)
+                <input type="hidden" id="questionWeightsPayload" name="questionWeightsPayload" value="" />
                 @Html.ValidationSummary(true, "", new { @class = "text-danger" })
                 <div class="form-group mb-3">
                     @Html.LabelFor(m => m.Title, "Position Title", htmlAttributes: new { @class = "font-weight-bold w-100" })
                     @Html.TextBoxFor(m => m.Title, new { @class = "form-control mx-auto", placeholder = "e.g., Senior Software Engineer" })
                     @Html.ValidationMessageFor(m => m.Title, "", new { @class = "text-danger" })
+                </div>
+                <div class="form-group mb-3">
+                    <label class="font-weight-bold w-100">Job Type</label>
+                    @Html.DropDownListFor(
+                        m => m.IsTechnical,
+                        new List<SelectListItem>
+                        {
+                            new SelectListItem { Text = "Technical", Value = "true" },
+                            new SelectListItem { Text = "Non-Technical", Value = "false" }
+                        },
+                        "-- Select Job Type --",
+                        new { @class = "form-control mx-auto", style = "max-width: 350px;" })
+                    @Html.ValidationMessageFor(m => m.IsTechnical, "", new { @class = "text-danger" })
                 </div>
                 <div class="form-group mb-3">
                     @Html.LabelFor(m => m.Description, "Job Description", htmlAttributes: new { @class = "font-weight-bold w-100" })
@@ -208,6 +252,12 @@
                     @Html.LabelFor(m => m.DepartmentId, "Department", htmlAttributes: new { @class = "font-weight-bold w-100" })
                     @Html.DropDownList("DepartmentId", null, "-- Select Department --", new { @class = "form-control mx-auto", style = "max-width: 350px;" })
                 </div>
+                <div class="form-group mb-3">
+                    @Html.LabelFor(m => m.ExpiryDate, "Position Expiry Date", htmlAttributes: new { @class = "font-weight-bold w-100" })
+                    @Html.TextBoxFor(m => m.ExpiryDate, "{0:yyyy-MM-dd}", new { @class = "form-control mx-auto", type = "date", style = "max-width: 350px;" })
+                    <small class="form-text text-muted">This position will be automatically moved to Closed on the selected date.</small>
+                    @Html.ValidationMessageFor(m => m.ExpiryDate, "", new { @class = "text-danger" })
+                </div>
                 <div class="form-check mb-3 text-center">
                     @Html.CheckBoxFor(m => m.IsOpen, new { @class = "form-check-input" })
                     @Html.LabelFor(m => m.IsOpen, new { @class = "form-check-label" })
@@ -244,7 +294,15 @@
                                             bool isChecked = selectedQuestionIds.Contains(q.Id);
                                             <div class="question-item mb-3 p-3 border rounded @(groupId)-item">
                                                 <div class="form-check mb-2">
-                                                    <input class="form-check-input question-checkbox @groupId-checkbox" type="checkbox" name="selectedQuestions" value="@q.Id" id="q_@q.Id" @(isChecked ? "checked" : "") />
+                                                    <input class="form-check-input question-checkbox @groupId-checkbox"
+                                                           type="checkbox"
+                                                           name="selectedQuestions"
+                                                           value="@q.Id"
+                                                           id="q_@q.Id"
+                                                           data-question-id="@q.Id"
+                                                           data-question-text="@q.Text"
+                                                           data-initial-weight="@(selectedQuestionWeights.ContainsKey(q.Id) ? selectedQuestionWeights[q.Id] : 0m)"
+                                                           @(isChecked ? "checked" : "") />
                                                     <label class="form-check-label" for="q_@q.Id">
                                                         <strong>Question:</strong> @q.Text
                                                         <span class="badge bg-secondary ms-2">@q.Type</span>
@@ -275,35 +333,29 @@
                                 </div>
                             }
                         </div>
-                        
-                        <script>
-                            document.addEventListener('DOMContentLoaded', function() {
-                                // Handle "Select All" for groups
-                                var groupSelects = document.querySelectorAll('.group-select-all');
-                                groupSelects.forEach(function(groupSelect) {
-                                    groupSelect.addEventListener('change', function() {
-                                        var targetGroupClass = this.getAttribute('data-target-group') + '-checkbox';
-                                        var checkboxes = document.querySelectorAll('.' + targetGroupClass);
-                                        var isChecked = this.checked;
-                                        checkboxes.forEach(function(box) {
-                                            box.checked = isChecked;
-                                        });
-                                    });
-                                    
-                                    // Optional: Check if all items in group are already checked on load
-                                    // simple check: if any unchecked, group is unchecked. if all checked, group is checked.
-                                    var targetGroupClass = groupSelect.getAttribute('data-target-group') + '-checkbox';
-                                    var checkboxes = document.querySelectorAll('.' + targetGroupClass);
-                                    if (checkboxes.length > 0) {
-                                        var allChecked = true;
-                                        checkboxes.forEach(function(box) {
-                                            if (!box.checked) allChecked = false;
-                                        });
-                                        groupSelect.checked = allChecked;
-                                    }
-                                });
-                            });
-                        </script>
+
+                        <div class="card border mt-3" id="questionWeightPanel">
+                            <div class="card-header bg-light">
+                                <strong>Question Weight Allocation (Real Time)</strong>
+                                <small class="text-muted d-block">As you select questions, distribute 100 points across them.</small>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted">Budget</span>
+                                    <span id="questionWeightBudgetText" class="font-weight-bold">0 / 100 allocated</span>
+                                </div>
+                                <div class="progress mb-3">
+                                    <div id="questionWeightBudgetBar" class="progress-bar bg-info" style="width:0%"></div>
+                                </div>
+                                <div class="d-flex justify-content-end mb-3">
+                                    <button type="button" id="questionWeightRedistributeBtn" class="btn btn-sm btn-outline-primary">Redistribute (Unlocked)</button>
+                                </div>
+                                <div id="questionWeightRows"></div>
+                                <div id="questionWeightEmpty" class="text-muted">
+                                    Select at least one questionnaire question to activate sliders.
+                                </div>
+                            </div>
+                        </div>
                     }
                     else
                     {
@@ -311,6 +363,35 @@
                             No questions available. Please create questions in the Admin section first.
                         </div>
                     }
+                </div>
+
+                <div class="card border mt-3">
+                    <div class="card-header bg-light">
+                        <strong>Applicant Passmark Midpoint</strong>
+                        <small class="text-muted d-block">Applicants scoring at or above this value will appear in the Top Candidates column.</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center flex-wrap">
+                            <input type="range"
+                                   id="passMarkSlider"
+                                   name="PassMark"
+                                   min="0"
+                                   max="100"
+                                   step="1"
+                                   value="@passMarkValue"
+                                   class="flex-grow-1 mr-3" />
+                            <input type="number"
+                                   id="passMarkNumber"
+                                   min="0"
+                                   max="100"
+                                   step="1"
+                                   value="@passMarkValue"
+                                   class="form-control form-control-sm"
+                                   style="max-width: 96px;" />
+                            <span id="passMarkValue" class="badge badge-primary ml-3">@passMarkValue%</span>
+                        </div>
+                        @Html.ValidationMessageFor(m => m.PassMark, "", new { @class = "text-danger d-block mt-2" })
+                    </div>
                 </div>
 
                 <div class="d-flex justify-content-center gap-2 mt-4">
@@ -399,6 +480,553 @@
             formatSalary(min, currency) + ' - ' + formatSalary(max, currency);
     }
 
+    function initPassMarkControl() {
+        var slider = document.getElementById('passMarkSlider');
+        var number = document.getElementById('passMarkNumber');
+        var badge = document.getElementById('passMarkValue');
+        if (!slider || !number || !badge) return;
+
+        function clamp(raw) {
+            var parsed = parseInt(raw, 10);
+            if (isNaN(parsed)) return 50;
+            return Math.max(0, Math.min(100, parsed));
+        }
+
+        function sync(rawValue) {
+            var value = clamp(rawValue);
+            slider.value = value;
+            number.value = value;
+            badge.textContent = value + '%';
+        }
+
+        slider.addEventListener('input', function () {
+            sync(slider.value);
+        });
+
+        number.addEventListener('input', function () {
+            sync(number.value);
+        });
+
+        number.addEventListener('change', function () {
+            sync(number.value);
+        });
+
+        sync(slider.value || number.value);
+    }
+
+    function initQuestionWeightAllocator() {
+        var form = document.getElementById('positionEditForm');
+        if (!form) return;
+
+        var payloadInput = document.getElementById('questionWeightsPayload');
+        var budgetText = document.getElementById('questionWeightBudgetText');
+        var budgetBar = document.getElementById('questionWeightBudgetBar');
+        var redistributeButton = document.getElementById('questionWeightRedistributeBtn');
+        var weightRows = document.getElementById('questionWeightRows');
+        var weightEmpty = document.getElementById('questionWeightEmpty');
+        var questionCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.question-checkbox'));
+        var questionWeights = {};
+        var questionLocks = {};
+
+        function clamp(v, min, max) {
+            return Math.max(min, Math.min(max, v));
+        }
+
+        function parseIntSafe(raw, fallback) {
+            var parsed = parseInt(raw, 10);
+            return isNaN(parsed) ? fallback : parsed;
+        }
+
+        function selectedCheckboxes() {
+            return questionCheckboxes.filter(function (cb) { return cb.checked; });
+        }
+
+        function selectedIds(selected) {
+            return selected.map(function (cb) { return cb.value; });
+        }
+
+        function ensureWeight(questionId) {
+            var current = parseIntSafe(questionWeights[questionId], NaN);
+            if (isNaN(current)) {
+                current = 0;
+            }
+            questionWeights[questionId] = clamp(current, 0, 100);
+        }
+
+        function sumByIds(questionIds) {
+            return questionIds.reduce(function (sum, questionId) {
+                ensureWeight(questionId);
+                return sum + questionWeights[questionId];
+            }, 0);
+        }
+
+        function normalizeIntegerDistribution(questionIds, targetTotal, basisAccessor) {
+            var sanitizedTarget = clamp(parseIntSafe(targetTotal, 0), 0, 100);
+            if (!questionIds.length) {
+                return {};
+            }
+
+            if (questionIds.length === 1) {
+                var single = {};
+                single[questionIds[0]] = sanitizedTarget;
+                return single;
+            }
+
+            var basis = questionIds.map(function (questionId) {
+                var raw = basisAccessor(questionId);
+                var safe = clamp(parseIntSafe(raw, 0), 0, 100);
+                return { id: questionId, weight: safe };
+            });
+
+            var totalBasis = basis.reduce(function (sum, item) { return sum + item.weight; }, 0);
+            if (totalBasis <= 0) {
+                var evenBase = Math.floor(sanitizedTarget / questionIds.length);
+                var evenRemainder = sanitizedTarget - (evenBase * questionIds.length);
+                var evenResult = {};
+                questionIds.forEach(function (questionId, index) {
+                    evenResult[questionId] = evenBase + (index < evenRemainder ? 1 : 0);
+                });
+                return evenResult;
+            }
+
+            var allocation = basis.map(function (item, index) {
+                var exact = (item.weight / totalBasis) * sanitizedTarget;
+                var floored = Math.floor(exact);
+                return {
+                    id: item.id,
+                    index: index,
+                    value: floored,
+                    fraction: exact - floored
+                };
+            });
+
+            var assigned = allocation.reduce(function (sum, item) { return sum + item.value; }, 0);
+            var remainder = sanitizedTarget - assigned;
+            allocation.sort(function (a, b) { return b.fraction - a.fraction; });
+            for (var i = 0; i < remainder; i++) {
+                allocation[i % allocation.length].value += 1;
+            }
+            allocation.sort(function (a, b) { return a.index - b.index; });
+
+            var result = {};
+            allocation.forEach(function (item) {
+                result[item.id] = clamp(item.value, 0, 100);
+            });
+            return result;
+        }
+
+        function rebalanceSelection(selected) {
+            if (!selected.length) {
+                return;
+            }
+
+            var ids = selectedIds(selected);
+            ids.forEach(ensureWeight);
+
+            if (ids.length === 1) {
+                questionWeights[ids[0]] = 100;
+                return;
+            }
+
+            var lockedIds = ids.filter(function (questionId) { return questionLocks[questionId] === true; });
+            var unlockedIds = ids.filter(function (questionId) { return questionLocks[questionId] !== true; });
+
+            if (lockedIds.length === ids.length) {
+                var allLocked = normalizeIntegerDistribution(lockedIds, 100, function (questionId) { return questionWeights[questionId]; });
+                lockedIds.forEach(function (questionId) { questionWeights[questionId] = allLocked[questionId]; });
+                return;
+            }
+
+            var lockedTotal = sumByIds(lockedIds);
+            if (lockedTotal > 100) {
+                var compressedLocked = normalizeIntegerDistribution(lockedIds, 100, function (questionId) { return questionWeights[questionId]; });
+                lockedIds.forEach(function (questionId) { questionWeights[questionId] = compressedLocked[questionId]; });
+                lockedTotal = 100;
+            }
+
+            var unlockedTarget = clamp(100 - lockedTotal, 0, 100);
+            var balancedUnlocked = normalizeIntegerDistribution(unlockedIds, unlockedTarget, function (questionId) { return questionWeights[questionId]; });
+            unlockedIds.forEach(function (questionId) { questionWeights[questionId] = balancedUnlocked[questionId]; });
+        }
+
+        function updatePayload(selected) {
+            var pairs = selected.map(function (cb) {
+                return cb.value + '=' + (questionWeights[cb.value] || 0);
+            });
+            payloadInput.value = pairs.join(';');
+        }
+
+        function updateBudgetUi(selected) {
+            var total = selected.reduce(function (sum, cb) {
+                ensureWeight(cb.value);
+                return sum + questionWeights[cb.value];
+            }, 0);
+            var boundedTotal = clamp(total, 0, 100);
+            budgetText.textContent = total + ' / 100 allocated';
+            budgetBar.style.width = boundedTotal + '%';
+        }
+
+        function updateRedistributeButtonState(selected) {
+            if (!redistributeButton) {
+                return;
+            }
+
+            var unlockedCount = selected.filter(function (cb) {
+                return questionLocks[cb.value] !== true;
+            }).length;
+
+            redistributeButton.disabled = !selected.length || unlockedCount === 0;
+        }
+
+        function redistributeUnlockedEvenly(selected) {
+            if (!selected.length) {
+                return;
+            }
+
+            var ids = selectedIds(selected);
+            ids.forEach(ensureWeight);
+
+            var lockedIds = ids.filter(function (questionId) { return questionLocks[questionId] === true; });
+            var unlockedIds = ids.filter(function (questionId) { return questionLocks[questionId] !== true; });
+            if (!unlockedIds.length) {
+                return;
+            }
+
+            var lockedTotal = sumByIds(lockedIds);
+            if (lockedTotal > 100) {
+                var compressedLocked = normalizeIntegerDistribution(lockedIds, 100, function (questionId) { return questionWeights[questionId]; });
+                lockedIds.forEach(function (questionId) { questionWeights[questionId] = compressedLocked[questionId]; });
+                lockedTotal = 100;
+            }
+
+            var unlockedTarget = clamp(100 - lockedTotal, 0, 100);
+            var base = Math.floor(unlockedTarget / unlockedIds.length);
+            var remainder = unlockedTarget - (base * unlockedIds.length);
+            unlockedIds.forEach(function (questionId, index) {
+                questionWeights[questionId] = base + (index < remainder ? 1 : 0);
+            });
+        }
+
+        function syncWeightUi(selected) {
+            if (!selected.length) {
+                weightEmpty.style.display = '';
+                budgetText.textContent = '0 / 100 allocated';
+                budgetBar.style.width = '0%';
+                payloadInput.value = '';
+                updateRedistributeButtonState(selected);
+                return;
+            }
+
+            weightEmpty.style.display = 'none';
+            selected.forEach(function (cb) {
+                var questionId = cb.value;
+                ensureWeight(questionId);
+                var row = weightRows.querySelector(".question-weight-row[data-question-id='" + questionId + "']");
+                if (!row) {
+                    return;
+                }
+
+                var locked = questionLocks[questionId] === true;
+                row.classList.toggle('locked', locked);
+
+                var slider = row.querySelector('.question-weight-slider');
+                var number = row.querySelector('.question-weight-number');
+                var value = row.querySelector('.question-weight-value');
+                var icon = row.querySelector('.question-weight-lock i');
+                var current = questionWeights[questionId];
+
+                if (slider) {
+                    slider.value = current;
+                    slider.disabled = locked;
+                }
+
+                if (number) {
+                    number.value = current;
+                    number.disabled = locked;
+                }
+
+                if (value) {
+                    value.textContent = current + ' pts';
+                }
+
+                if (icon) {
+                    icon.classList.toggle('fa-lock', locked);
+                    icon.classList.toggle('fa-lock-open', !locked);
+                }
+            });
+
+            updateBudgetUi(selected);
+            updatePayload(selected);
+            updateRedistributeButtonState(selected);
+        }
+
+        function setFocusedWeight(questionId, rawValue) {
+            var selected = selectedCheckboxes();
+            if (!selected.length) {
+                return;
+            }
+
+            if (questionLocks[questionId] === true) {
+                syncWeightUi(selected);
+                return;
+            }
+
+            var ids = selectedIds(selected);
+            ids.forEach(ensureWeight);
+
+            function sumWeightsByIds(questionIds) {
+                return questionIds.reduce(function (sum, id) {
+                    ensureWeight(id);
+                    return sum + (questionWeights[id] || 0);
+                }, 0);
+            }
+
+            function reduceUnlockedPool(poolIds, reductionNeeded) {
+                if (!poolIds.length || reductionNeeded <= 0) {
+                    return;
+                }
+
+                var pool = poolIds
+                    .map(function (id, index) {
+                        ensureWeight(id);
+                        return { id: id, index: index, weight: questionWeights[id] || 0 };
+                    })
+                    .filter(function (item) { return item.weight > 0; });
+
+                if (!pool.length) {
+                    return;
+                }
+
+                var poolTotal = pool.reduce(function (sum, item) { return sum + item.weight; }, 0);
+                if (poolTotal <= 0) {
+                    return;
+                }
+
+                // Distribute reductions proportionally, keeping integer weights and matching the target reduction.
+                var reductions = pool.map(function (item) {
+                    var exact = (item.weight / poolTotal) * reductionNeeded;
+                    var floored = Math.floor(exact);
+                    return {
+                        id: item.id,
+                        index: item.index,
+                        value: Math.min(item.weight, floored),
+                        fraction: exact - floored,
+                        max: item.weight
+                    };
+                });
+
+                var assigned = reductions.reduce(function (sum, item) { return sum + item.value; }, 0);
+                var remainder = reductionNeeded - assigned;
+                reductions.sort(function (a, b) { return b.fraction - a.fraction; });
+
+                for (var i = 0; i < remainder; i++) {
+                    var pick = reductions[i % reductions.length];
+                    if (pick.value < pick.max) {
+                        pick.value += 1;
+                    }
+                }
+
+                reductions.sort(function (a, b) { return a.index - b.index; });
+                reductions.forEach(function (item) {
+                    questionWeights[item.id] = clamp((questionWeights[item.id] || 0) - item.value, 0, 100);
+                });
+            }
+
+            var lockedIds = ids.filter(function (id) { return questionLocks[id] === true; });
+            var lockedTotal = sumWeightsByIds(lockedIds);
+            var maxForThis = clamp(100 - lockedTotal, 0, 100);
+
+            var current = questionWeights[questionId] || 0;
+            var desired = clamp(parseIntSafe(rawValue, 0), 0, maxForThis);
+
+            // Decreasing should not redistribute (total < 100 is allowed).
+            if (desired <= current) {
+                questionWeights[questionId] = desired;
+                syncWeightUi(selected);
+                return;
+            }
+
+            // Increasing: keep total <= 100 by taking points only from other unlocked sliders.
+            questionWeights[questionId] = desired;
+            var otherUnlockedIds = ids.filter(function (id) { return id !== questionId && questionLocks[id] !== true; });
+            var otherUnlockedTotal = sumWeightsByIds(otherUnlockedIds);
+            var totalAfter = lockedTotal + desired + otherUnlockedTotal;
+            var reductionNeeded = Math.max(0, totalAfter - 100);
+            reduceUnlockedPool(otherUnlockedIds, reductionNeeded);
+
+            syncWeightUi(selected);
+        }
+
+        function toggleLock(questionId) {
+            questionLocks[questionId] = !(questionLocks[questionId] === true);
+            var selected = selectedCheckboxes();
+            syncWeightUi(selected);
+        }
+
+        function createWeightRow(cb) {
+            var questionId = cb.value;
+            var questionText = cb.getAttribute('data-question-text') || ('Question ' + questionId);
+            ensureWeight(questionId);
+
+            var row = document.createElement('div');
+            row.className = 'question-weight-row';
+            row.setAttribute('data-question-id', questionId);
+
+            var title = document.createElement('div');
+            title.className = 'small mb-2';
+            title.textContent = questionText;
+
+            var controls = document.createElement('div');
+            controls.className = 'd-flex align-items-center';
+
+            var lockButton = document.createElement('button');
+            lockButton.type = 'button';
+            lockButton.className = 'btn btn-sm btn-outline-secondary question-weight-lock mr-2';
+            lockButton.title = 'Lock weight';
+            lockButton.innerHTML = "<i class='fas fa-lock-open'></i>";
+            lockButton.addEventListener('click', function () {
+                toggleLock(questionId);
+            });
+
+            var slider = document.createElement('input');
+            slider.type = 'range';
+            slider.min = '0';
+            slider.max = '100';
+            slider.step = '1';
+            slider.className = 'flex-grow-1 question-weight-slider';
+            slider.value = questionWeights[questionId];
+            slider.addEventListener('input', function () {
+                setFocusedWeight(questionId, slider.value);
+            });
+            slider.addEventListener('change', function () {
+                setFocusedWeight(questionId, slider.value);
+            });
+
+            var number = document.createElement('input');
+            number.type = 'number';
+            number.min = '0';
+            number.max = '100';
+            number.step = '1';
+            number.className = 'form-control form-control-sm ml-2 question-weight-number';
+            number.style.maxWidth = '72px';
+            number.value = questionWeights[questionId];
+            number.addEventListener('input', function () {
+                setFocusedWeight(questionId, number.value);
+            });
+            number.addEventListener('change', function () {
+                setFocusedWeight(questionId, number.value);
+            });
+
+            var value = document.createElement('span');
+            value.className = 'question-weight-value ml-2';
+            value.textContent = questionWeights[questionId] + ' pts';
+
+            controls.appendChild(lockButton);
+            controls.appendChild(slider);
+            controls.appendChild(number);
+            controls.appendChild(value);
+
+            row.appendChild(title);
+            row.appendChild(controls);
+            return row;
+        }
+
+        function renderRows() {
+            var selected = selectedCheckboxes();
+            weightRows.innerHTML = '';
+
+            if (!selected.length) {
+                syncWeightUi(selected);
+                return;
+            }
+
+            selected.forEach(function (cb) { ensureWeight(cb.value); });
+
+            // If everything is zero, start with an even split so the panel is usable immediately.
+            var ids = selectedIds(selected);
+            var total = ids.reduce(function (sum, id) { return sum + (questionWeights[id] || 0); }, 0);
+            if (total <= 0) {
+                if (ids.length === 1) {
+                    questionWeights[ids[0]] = 100;
+                } else {
+                    var base = Math.floor(100 / ids.length);
+                    var rem = 100 - (base * ids.length);
+                    ids.forEach(function (id, idx) {
+                        questionWeights[id] = base + (idx < rem ? 1 : 0);
+                    });
+                }
+            }
+
+            selected.forEach(function (cb) {
+                weightRows.appendChild(createWeightRow(cb));
+            });
+
+            syncWeightUi(selected);
+        }
+
+        var groupSelects = Array.prototype.slice.call(document.querySelectorAll('.group-select-all'));
+        groupSelects.forEach(function (groupSelect) {
+            groupSelect.addEventListener('change', function () {
+                var targetGroupClass = groupSelect.getAttribute('data-target-group') + '-checkbox';
+                var checkboxes = Array.prototype.slice.call(document.querySelectorAll('.' + targetGroupClass));
+                checkboxes.forEach(function (box) {
+                    box.checked = groupSelect.checked;
+                });
+                renderRows();
+            });
+
+            var targetGroupClass = groupSelect.getAttribute('data-target-group') + '-checkbox';
+            var targetBoxes = Array.prototype.slice.call(document.querySelectorAll('.' + targetGroupClass));
+            if (targetBoxes.length) {
+                groupSelect.checked = targetBoxes.every(function (box) { return box.checked; });
+            }
+        });
+
+        questionCheckboxes.forEach(function (cb) {
+            var initial = parseFloat(cb.getAttribute('data-initial-weight'));
+            if (!isNaN(initial)) {
+                questionWeights[cb.value] = clamp(Math.round(initial), 0, 100);
+            }
+
+            cb.addEventListener('change', function () {
+                var groupClass = Array.prototype.slice.call(cb.classList).filter(function (cls) {
+                    return cls.indexOf('group_') === 0 && cls.indexOf('-checkbox') > -1;
+                })[0];
+
+                if (groupClass) {
+                    var groupId = groupClass.replace('-checkbox', '');
+                    var groupToggle = document.querySelector(".group-select-all[data-target-group='" + groupId + "']");
+                    if (groupToggle) {
+                        var groupBoxes = Array.prototype.slice.call(document.querySelectorAll('.' + groupClass));
+                        groupToggle.checked = groupBoxes.every(function (box) { return box.checked; });
+                    }
+                }
+
+                renderRows();
+            });
+        });
+
+        if (redistributeButton) {
+            redistributeButton.addEventListener('click', function () {
+                var selected = selectedCheckboxes();
+                if (!selected.length) {
+                    return;
+                }
+
+                redistributeUnlockedEvenly(selected);
+                syncWeightUi(selected);
+            });
+        }
+
+        form.addEventListener('submit', function () {
+            var selected = selectedCheckboxes();
+            selected.forEach(function (cb) { ensureWeight(cb.value); });
+            updatePayload(selected);
+        });
+
+        renderRows();
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var minInput = document.getElementById('salaryMin');
         var maxInput = document.getElementById('salaryMax');
@@ -412,6 +1040,9 @@
             }
             updateSalaryRangeDisplay();
         }
+
+        initPassMarkControl();
+        initQuestionWeightAllocator();
     });
 </script>
 }

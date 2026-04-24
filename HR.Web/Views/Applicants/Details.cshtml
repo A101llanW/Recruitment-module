@@ -292,7 +292,12 @@
             </div>
         </div>
         <div class="card-footer bg-white border-0 d-flex justify-content-end gap-2">
-            @Html.ActionLink("Back", "Index", null, new { @class = "btn btn-secondary btn-sm" })
+            @{
+                var returnTo = (Request != null ? Request.QueryString["returnTo"] : null) ?? string.Empty;
+                var backAction = string.Equals(returnTo, "applications", StringComparison.OrdinalIgnoreCase) ? "Index" : "Index";
+                var backController = string.Equals(returnTo, "applications", StringComparison.OrdinalIgnoreCase) ? "Applications" : "Applicants";
+            }
+            @Html.ActionLink("Back", backAction, backController, null, new { @class = "btn btn-secondary btn-sm" })
             @using (Html.BeginForm("Delete", "Applicants", new { id = Model.Id }, FormMethod.Post, new { @class = "d-inline-block", onsubmit = "return confirm('Delete this applicant?');" }))
             {
                 @Html.AntiForgeryToken()

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Web.Mvc;
 using HR.Web.Data;
@@ -9,6 +11,7 @@ using HR.Web.Filters;
 
 namespace HR.Web.Controllers
 {
+    [ModuleAccess(RoleModuleCatalog.Positions)]
     public partial class PositionsController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();
@@ -18,7 +21,9 @@ namespace HR.Web.Controllers
         [AllowAnonymous]
         public ActionResult Index(int? companyId = null)
         {
+            CloseExpiredPositionsForCurrentScope(companyId);
             bool isSuperAdmin = _tenantService.IsSuperAdmin();
+            var rolePermissionService = new RolePermissionService();
             ViewBag.IsSuperAdmin = isSuperAdmin;
             
             if (isSuperAdmin)
@@ -59,14 +64,19 @@ namespace HR.Web.Controllers
             // Apply public-aware tenant filtering
             query = _tenantService.ApplyPublicTenantFilter(query);
             
-            bool isAuthenticated = User.Identity.IsAuthenticated;
-            bool isAdmin = isAuthenticated && User.IsInRole("Admin");
+            bool isAuthenticated = User != null && User.Identity != null && User.Identity.IsAuthenticated;
+            bool isAdminUser = isAuthenticated && User.IsInRole("Admin");
+            bool canManagePositions = isAdminUser &&
+                rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Positions, RoleAccessLevels.Manage);
+            bool canViewPositions = isAdminUser &&
+                rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Positions, RoleAccessLevels.View);
+            bool isReadOnly = isAdminUser && canViewPositions && !canManagePositions;
             
-            ViewBag.IsAdmin = isAdmin;
-            ViewBag.IsReadOnly = false;
+            ViewBag.IsAdmin = canManagePositions;
+            ViewBag.IsReadOnly = isReadOnly;
             
             // For non-admin users (clients/guests), only show open positions
-            if (!isAdmin)
+            if (!canManagePositions && !isReadOnly)
             {
                 query = query.Where(p => p.IsOpen);
             }
@@ -84,12 +94,21 @@ namespace HR.Web.Controllers
             {
                 return HttpNotFound();
             }
+
+            ClosePositionIfExpired(position);
             
             // Prevent non-admin users from accessing closed positions
             if (position != null && !position.IsOpen && (User == null || !User.IsInRole("Admin")))
             {
                 return new HttpStatusCodeResult(403, "This position is not available for application.");
             }
+
+            ViewBag.CanManagePositions = Request.IsAuthenticated &&
+                new RolePermissionService().CanCurrentUserAccessModule(RoleModuleCatalog.Positions, RoleAccessLevels.Manage);
+            ViewBag.IsReadOnly = Request.IsAuthenticated &&
+                User.IsInRole("Admin") &&
+                new RolePermissionService().CanCurrentUserAccessModule(RoleModuleCatalog.Positions, RoleAccessLevels.View) &&
+                !(bool)ViewBag.CanManagePositions;
             
             return View(position);
         }
@@ -116,7 +135,9 @@ namespace HR.Web.Controllers
             return View(new Position
             {
                 IsOpen = true,
-                PostedOn = DateTime.UtcNow
+                PostedOn = DateTime.UtcNow,
+                ExpiryDate = DateTime.UtcNow.Date.AddDays(30),
+                PassMark = 50m
             });
         }
 
@@ -124,9 +145,10 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
-        public ActionResult Create(Position model, int[] selectedQuestions)
+        public ActionResult Create(Position model, int[] selectedQuestions, string questionWeightsPayload)
         {
-            return HandleCreatePosition(model, selectedQuestions);
+            var questionWeights = ParseQuestionWeights(questionWeightsPayload);
+            return HandleCreatePosition(model, selectedQuestions, questionWeights);
         }
 
         [Authorize(Roles = "Admin, SuperAdmin")]
@@ -138,6 +160,8 @@ namespace HR.Web.Controllers
             {
                 return HttpNotFound();
             }
+
+            ClosePositionIfExpired(position);
 
             // Tenant check
             var companyId = _tenantService.GetCurrentUserCompanyId();
@@ -189,9 +213,10 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
-        public ActionResult Edit(Position model, int[] selectedQuestions)
+        public ActionResult Edit(Position model, int[] selectedQuestions, string questionWeightsPayload)
         {
-            return HandleEditPosition(model, selectedQuestions);
+            var questionWeights = ParseQuestionWeights(questionWeightsPayload);
+            return HandleEditPosition(model, selectedQuestions, questionWeights);
         }
 
         [Authorize(Roles = "Admin, SuperAdmin")]
@@ -317,6 +342,94 @@ namespace HR.Web.Controllers
             return Json(result, JsonRequestBehavior.AllowGet);
         }
 
+        private void CloseExpiredPositionsForCurrentScope(int? companyId)
+        {
+            var query = _uow.Positions.GetAll().AsQueryable();
+
+            if (_tenantService.IsSuperAdmin())
+            {
+                if (companyId.HasValue)
+                {
+                    query = query.Where(p => p.CompanyId == companyId.Value);
+                }
+            }
+            else
+            {
+                query = _tenantService.ApplyPublicTenantFilter(query);
+            }
+
+            var expiredOpenPositions = query
+                .Where(p => p.IsOpen && p.ExpiryDate.HasValue)
+                .ToList()
+                .Where(p => HasReachedExpiry(p.ExpiryDate))
+                .ToList();
+
+            if (!expiredOpenPositions.Any())
+            {
+                return;
+            }
+
+            foreach (var expiredPosition in expiredOpenPositions)
+            {
+                expiredPosition.IsOpen = false;
+                _uow.Positions.Update(expiredPosition);
+            }
+
+            _uow.Complete();
+        }
+
+        private void ClosePositionIfExpired(Position position)
+        {
+            if (position == null || !position.IsOpen || !HasReachedExpiry(position.ExpiryDate))
+            {
+                return;
+            }
+
+            position.IsOpen = false;
+            _uow.Positions.Update(position);
+            _uow.Complete();
+        }
+
+        private static bool HasReachedExpiry(DateTime? expiryDate)
+        {
+            return expiryDate.HasValue && expiryDate.Value.Date <= DateTime.UtcNow.Date;
+        }
+
+        private static IDictionary<int, decimal> ParseQuestionWeights(string payload)
+        {
+            var weights = new Dictionary<int, decimal>();
+            if (string.IsNullOrWhiteSpace(payload))
+            {
+                return weights;
+            }
+
+            var entries = payload.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var entry in entries)
+            {
+                var parts = entry.Split('=');
+                if (parts.Length != 2)
+                {
+                    continue;
+                }
+
+                int questionId;
+                if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out questionId) || questionId <= 0)
+                {
+                    continue;
+                }
+
+                decimal weight;
+                if (!decimal.TryParse(parts[1], NumberStyles.Number, CultureInfo.InvariantCulture, out weight))
+                {
+                    continue;
+                }
+
+                weights[questionId] = Math.Max(0m, Math.Min(100m, weight));
+            }
+
+            return weights;
+        }
+
         [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Delete(int id)
@@ -370,12 +483,4 @@ namespace HR.Web.Controllers
         }
     }
 }
-
-
-
-
-
-
-
-
 

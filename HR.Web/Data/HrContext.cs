@@ -1,4 +1,9 @@
+using System;
+using System.Configuration;
 using System.Data.Entity;
+using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 using HR.Web.Models;
 using Oracle.ManagedDataAccess.EntityFramework;
 
@@ -7,7 +12,7 @@ namespace HR.Web.Data
     //[DbConfigurationType(typeof(OracleEFConfiguration))] // Commented for local SQL testing; re-enable for Oracle
     public class HrContext : DbContext
     {
-        public HrContext() : base("name=HrContext")
+        public HrContext() : base(ResolveConnectionString())
         {
         }
 
@@ -16,6 +21,7 @@ namespace HR.Web.Data
         public DbSet<Department> Departments { get; set; }
         public DbSet<Position> Positions { get; set; }
         public DbSet<Applicant> Applicants { get; set; }
+        public DbSet<ApplicantProfile> ApplicantProfiles { get; set; }
         public DbSet<Application> Applications { get; set; }
         public DbSet<Interview> Interviews { get; set; }
         public DbSet<Onboarding> Onboardings { get; set; }
@@ -23,6 +29,8 @@ namespace HR.Web.Data
         public DbSet<Question> Questions { get; set; }
         public DbSet<QuestionOption> QuestionOptions { get; set; }
         public DbSet<PositionQuestion> PositionQuestions { get; set; }
+        public DbSet<RoleDefinition> RoleDefinitions { get; set; }
+        public DbSet<RolePermission> RolePermissions { get; set; }
         public DbSet<ApplicationAnswer> ApplicationAnswers { get; set; }
         public DbSet<LoginAttempt> LoginAttempts { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
@@ -44,6 +52,12 @@ namespace HR.Web.Data
                 .WithMany(ap => ap.Applications)
                 .HasForeignKey(a => a.ApplicantId)
                 .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<ApplicantProfile>()
+                .HasRequired(p => p.Applicant)
+                .WithMany()
+                .HasForeignKey(p => p.ApplicantId)
+                .WillCascadeOnDelete(true);
 
             modelBuilder.Entity<Application>()
                 .HasRequired(a => a.Position)
@@ -107,6 +121,24 @@ namespace HR.Web.Data
                 .HasForeignKey(pqo => pqo.QuestionOptionId)
                 .WillCascadeOnDelete(false);
 
+            modelBuilder.Entity<RoleDefinition>()
+                .HasOptional(r => r.Company)
+                .WithMany(c => c.RoleDefinitions)
+                .HasForeignKey(r => r.CompanyId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<RoleDefinition>()
+                .HasMany(r => r.RolePermissions)
+                .WithRequired(p => p.RoleDefinition)
+                .HasForeignKey(p => p.RoleDefinitionId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<User>()
+                .HasOptional(u => u.RoleDefinition)
+                .WithMany(r => r.Users)
+                .HasForeignKey(u => u.RoleDefinitionId)
+                .WillCascadeOnDelete(false);
+
             // Prevent multiple cascade paths for Position -> Department
             modelBuilder.Entity<Position>()
                 .HasRequired(p => p.Department)
@@ -114,7 +146,77 @@ namespace HR.Web.Data
                 .HasForeignKey(p => p.DepartmentId)
                 .WillCascadeOnDelete(false);
         }
+
+        private static string ResolveConnectionString()
+        {
+            var configuredConnectionString = ConfigurationManager.ConnectionStrings["HrContext"]?.ConnectionString;
+            if (!string.IsNullOrWhiteSpace(configuredConnectionString))
+            {
+                return configuredConnectionString;
+            }
+
+            // EF6 command-line tools do not load a web project's Web.config automatically.
+            var designTimeConnectionString = ResolveConnectionStringFromWebConfig();
+            if (!string.IsNullOrWhiteSpace(designTimeConnectionString))
+            {
+                return designTimeConnectionString;
+            }
+
+            throw new ConfigurationErrorsException("No connection string named 'HrContext' could be found.");
+        }
+
+        private static string ResolveConnectionStringFromWebConfig()
+        {
+            foreach (var searchRoot in GetConnectionSearchRoots())
+            {
+                var current = new DirectoryInfo(searchRoot);
+                for (var depth = 0; current != null && depth < 5; depth++, current = current.Parent)
+                {
+                    var connectionString = ReadConnectionStringFromConfig(Path.Combine(current.FullName, "Web.config"));
+                    if (!string.IsNullOrWhiteSpace(connectionString))
+                    {
+                        return connectionString;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static string[] GetConnectionSearchRoots()
+        {
+            return new[]
+            {
+                AppDomain.CurrentDomain.BaseDirectory,
+                Environment.CurrentDirectory,
+                Path.GetDirectoryName(typeof(HrContext).Assembly.Location)
+            }
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        }
+
+        private static string ReadConnectionStringFromConfig(string configPath)
+        {
+            if (!File.Exists(configPath))
+            {
+                return null;
+            }
+
+            try
+            {
+                var config = XDocument.Load(configPath);
+                return config.Root?
+                    .Element("connectionStrings")?
+                    .Elements("add")
+                    .Where(element => string.Equals((string)element.Attribute("name"), "HrContext", StringComparison.Ordinal))
+                    .Select(element => (string)element.Attribute("connectionString"))
+                    .FirstOrDefault(connectionString => !string.IsNullOrWhiteSpace(connectionString));
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 }
-
-

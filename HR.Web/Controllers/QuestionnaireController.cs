@@ -13,6 +13,7 @@ namespace HR.Web.Controllers
 {
     [Authorize(Roles = "Admin, HR, SuperAdmin")]
     [RoleBasedAuthorization("Admin", "HR")]
+    [ModuleAccess(RoleModuleCatalog.Questions)]
     public class QuestionnaireController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();
@@ -48,6 +49,7 @@ namespace HR.Web.Controllers
                     QuestionId = pq.Question.Id,
                     QuestionText = pq.Question.Text,
                     QuestionType = pq.Question.Type,
+                    AllowMultipleChoices = pq.Question.AllowMultipleChoices,
                     Order = pq.Order,
                     Options = GetQuestionOptions(pq.Question.Id, positionId),
                     IsRequired = true
@@ -344,6 +346,7 @@ namespace HR.Web.Controllers
         public int QuestionId { get; set; }
         public string QuestionText { get; set; }
         public string QuestionType { get; set; }
+        public bool AllowMultipleChoices { get; set; }
         public int Order { get; set; }
         public List<QuestionOptionDisplay> Options { get; set; }
         public bool IsRequired { get; set; }
@@ -367,6 +370,7 @@ namespace HR.Web.Controllers
         public int QuestionId { get; set; }
         public string QuestionText { get; set; }
         public string QuestionType { get; set; }
+        public bool AllowMultipleChoices { get; set; }
         public int Order { get; set; }
         public List<QuestionOptionDisplay> Options { get; set; }
         public string Answer { get; set; }

@@ -67,6 +67,21 @@
                             <div id="budgetProgress" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
                         </div>
                         <small id="budgetHint" class="text-muted">Total is auto-balanced to 100 points.</small>
+                        <div class="text-right mt-2">
+                            <button id="redistributeWeights" type="button" class="btn btn-sm btn-outline-primary">Redistribute (Unlocked)</button>
+                        </div>
+                    </div>
+
+                    <div class="global-weight-panel mb-3">
+                        <label class="small text-muted mb-1" for="weightFocusQuestion">Quick Weight Slider</label>
+                        <select id="weightFocusQuestion" class="form-control form-control-sm mb-2" disabled>
+                            <option value="">Assign a question to start</option>
+                        </select>
+                        <div class="d-flex align-items-center">
+                            <input id="globalWeightSlider" type="range" min="0" max="100" step="1" class="flex-grow-1" value="0" disabled />
+                            <span id="globalWeightValue" class="weight-points ml-2">0 pts</span>
+                        </div>
+                        <small id="globalWeightHint" class="text-muted">Assign at least one question to activate the slider.</small>
                     </div>
 
                     <div id="assignedQuestions" class="question-list sortable">
@@ -79,6 +94,7 @@
                                      data-question-id="@pq.QuestionId"
                                      data-question-text="@pq.Question.Text"
                                      data-question-type="@pq.Question.Type"
+                                     data-locked="false"
                                      data-weight="@initialWeight.ToString(System.Globalization.CultureInfo.InvariantCulture)">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div class="flex-grow-1 pr-2">
@@ -87,7 +103,12 @@
                                             <br />
                                             <small class="text-muted question-meta">Type: @pq.Question.Type | Order: @(pq.Order)</small>
                                         </div>
-                                        <button type="button" class="btn btn-sm btn-danger remove-btn">Remove</button>
+                                        <div class="d-flex align-items-center">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary lock-btn mr-2" title="Lock weight">
+                                                <i class="fas fa-lock-open"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-danger remove-btn">Remove</button>
+                                        </div>
                                     </div>
                                     <div class="weight-editor mt-2">
                                         <label class="small text-muted mb-1">Weight</label>
@@ -103,7 +124,7 @@
                     </div>
 
                     <div id="assignedEmpty" class="text-muted text-center py-4 @(Model.AssignedQuestions.Any() ? "d-none" : "")">
-                        <em>No questions assigned yet.</em>
+                        <em>No questions assigned yet. Assign one from the left to enable sliders.</em>
                     </div>
                 </div>
             </div>
@@ -112,7 +133,7 @@
 
     <div class="mt-4">
         <button id="saveAssignments" class="btn btn-success">Save Assignments</button>
-        <a href="@Url.Action("Details", "Positions", new { id = Model.PositionId })" class="btn btn-link">Back to Position</a>
+        <a href="@Url.Action("Index", "Positions")" class="btn btn-link">Back to Positions</a>
     </div>
 </div>
 
@@ -176,6 +197,26 @@
     padding: 12px;
     background: #fafafa;
 }
+
+.global-weight-panel {
+    border: 1px dashed #d5d5d5;
+    border-radius: 4px;
+    padding: 10px;
+    background: #fff;
+}
+
+.lock-btn {
+    width: 32px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.question-item.locked {
+    border-color: #ffc107;
+    background: #fffdf4;
+}
 </style>
 
 @section Scripts {
@@ -184,17 +225,25 @@
         $(function () {
             var $assignedQuestions = $("#assignedQuestions");
             var $assignedEmpty = $("#assignedEmpty");
+            var $focusSelect = $("#weightFocusQuestion");
+            var $globalSlider = $("#globalWeightSlider");
+            var $globalValue = $("#globalWeightValue");
+            var $globalHint = $("#globalWeightHint");
+            var $redistributeBtn = $("#redistributeWeights");
             var positionId = @Model.PositionId;
 
-            Sortable.create(document.getElementById("assignedQuestions"), {
-                animation: 150,
-                ghostClass: "sortable-ghost",
-                dragClass: "sortable-drag",
-                handle: ".drag-handle",
-                onEnd: function () {
-                    refreshAssignedUi();
-                }
-            });
+            var assignedQuestionsElement = document.getElementById("assignedQuestions");
+            if (window.Sortable && assignedQuestionsElement) {
+                Sortable.create(assignedQuestionsElement, {
+                    animation: 150,
+                    ghostClass: "sortable-ghost",
+                    dragClass: "sortable-drag",
+                    handle: ".drag-handle",
+                    onEnd: function () {
+                        refreshAssignedUi();
+                    }
+                });
+            }
 
             $("#availableQuestions").on("click", ".assign-btn", function () {
                 var $questionItem = $(this).closest(".question-item");
@@ -207,6 +256,11 @@
 
             $assignedQuestions.on("click", ".remove-btn", function () {
                 removeQuestion($(this).closest(".question-item"));
+            });
+
+            $assignedQuestions.on("click", ".lock-btn", function () {
+                var $item = $(this).closest(".question-item");
+                toggleLock($item);
             });
 
             $assignedQuestions.on("input change", ".weight-slider", function () {
@@ -223,8 +277,29 @@
                 onWeightChange($item, parsed);
             });
 
+            $focusSelect.on("change", function () {
+                syncGlobalSliderFromSelected();
+            });
+
+            $globalSlider.on("input change", function () {
+                var targetItem = getFocusedItem();
+                if (!targetItem.length) {
+                    return;
+                }
+                var parsed = parseInt($(this).val(), 10);
+                if (isNaN(parsed)) {
+                    parsed = 0;
+                }
+                onWeightChange(targetItem, parsed);
+                syncGlobalSliderFromSelected();
+            });
+
             $("#saveAssignments").on("click", function () {
                 saveAssignments();
+            });
+
+            $redistributeBtn.on("click", function () {
+                redistributeUnlockedWeights();
             });
 
             initializeAssignedWeights();
@@ -281,6 +356,7 @@
                 $item.attr("data-question-id", questionId);
                 $item.attr("data-question-text", questionText);
                 $item.attr("data-question-type", questionType);
+                $item.attr("data-locked", "false");
 
                 var $header = $("<div class='d-flex justify-content-between align-items-start'></div>");
                 var $content = $("<div class='flex-grow-1 pr-2'></div>");
@@ -290,7 +366,10 @@
 
                 $content.append($handle).append($title).append("<br />").append($meta);
                 $header.append($content);
-                $header.append("<button type='button' class='btn btn-sm btn-danger remove-btn'>Remove</button>");
+                var $actions = $("<div class='d-flex align-items-center'></div>");
+                $actions.append("<button type='button' class='btn btn-sm btn-outline-secondary lock-btn mr-2' title='Lock weight'><i class='fas fa-lock-open'></i></button>");
+                $actions.append("<button type='button' class='btn btn-sm btn-danger remove-btn'>Remove</button>");
+                $header.append($actions);
 
                 var $weightEditor = $("<div class='weight-editor mt-2'></div>");
                 $weightEditor.append("<label class='small text-muted mb-1'>Weight</label>");
@@ -315,6 +394,11 @@
                     return;
                 }
 
+                if (isLocked($item)) {
+                    syncItemControls($item);
+                    return;
+                }
+
                 if ($items.length === 1) {
                     setItemWeight($item, 100);
                     refreshAssignedUi();
@@ -324,15 +408,23 @@
                 desiredWeight = clamp(Math.round(desiredWeight), 0, 100);
                 var currentWeight = getItemWeight($item);
                 var $others = $items.not($item);
-                var othersCurrentTotal = sumWeights($others);
+                var $lockedOthers = getLockedItems($others);
+                var lockedTotal = sumWeights($lockedOthers);
+                var $unlockedOthers = $others.not($lockedOthers);
+                var othersCurrentTotal = sumWeights($unlockedOthers);
+
+                var maxAllowed = clamp(100 - lockedTotal, 0, 100);
+                if (desiredWeight > maxAllowed) {
+                    desiredWeight = maxAllowed;
+                }
 
                 if (desiredWeight > currentWeight && othersCurrentTotal <= 0) {
                     desiredWeight = currentWeight;
                 }
 
                 setItemWeight($item, desiredWeight);
-                var remainingBudget = 100 - desiredWeight;
-                allocateWeights($others, remainingBudget);
+                var remainingBudget = 100 - desiredWeight - lockedTotal;
+                allocateWeights($unlockedOthers, remainingBudget);
                 refreshAssignedUi();
             }
 
@@ -347,7 +439,10 @@
                     return;
                 }
 
-                allocateWeights($items, 100);
+                var $locked = getLockedItems($items);
+                var lockedTotal = sumWeights($locked);
+                var $unlocked = $items.not($locked);
+                allocateWeights($unlocked, 100 - lockedTotal);
             }
 
             function allocateWeights($items, totalTarget) {
@@ -401,6 +496,40 @@
                 });
             }
 
+            function allocateEvenWeights($items, totalTarget) {
+                var count = $items.length;
+                if (!count) {
+                    return;
+                }
+
+                totalTarget = clamp(Math.round(totalTarget), 0, 100);
+                var base = Math.floor(totalTarget / count);
+                var remainder = totalTarget - (base * count);
+
+                $items.each(function (index) {
+                    setItemWeight($(this), base + (index < remainder ? 1 : 0));
+                });
+            }
+
+            function redistributeUnlockedWeights() {
+                var $items = getAssignedItems();
+                if (!$items.length) {
+                    return;
+                }
+
+                var $locked = getLockedItems($items);
+                var $unlocked = $items.not($locked);
+                if (!$unlocked.length) {
+                    refreshAssignedUi();
+                    return;
+                }
+
+                var lockedTotal = sumWeights($locked);
+                var unlockedTarget = clamp(100 - lockedTotal, 0, 100);
+                allocateEvenWeights($unlocked, unlockedTarget);
+                refreshAssignedUi();
+            }
+
             function refreshAssignedUi() {
                 var $items = getAssignedItems();
                 if ($items.length) {
@@ -414,9 +543,16 @@
                     var questionType = ($item.data("question-type") || "").toString();
                     $item.find(".question-meta").text("Type: " + questionType + " | Order: " + (index + 1));
                     setItemWeight($item, getItemWeight($item));
+                    syncItemControls($item);
                 });
 
                 updateBudgetUi();
+                refreshFocusQuestionOptions();
+
+                var unlockedCount = $items.filter(function () {
+                    return !isLocked($(this));
+                }).length;
+                $redistributeBtn.prop("disabled", !$items.length || unlockedCount === 0);
             }
 
             function updateBudgetUi() {
@@ -463,6 +599,91 @@
 
             function getAssignedItems() {
                 return $assignedQuestions.children(".question-item.assigned");
+            }
+
+            function isLocked($item) {
+                return $item.data("locked") === true || $item.data("locked") === "true";
+            }
+
+            function getLockedItems($items) {
+                return $items.filter(function () {
+                    return isLocked($(this));
+                });
+            }
+
+            function toggleLock($item) {
+                var locked = !isLocked($item);
+                $item.data("locked", locked);
+                syncItemControls($item);
+                normalizeAllWeights();
+                refreshAssignedUi();
+            }
+
+            function syncItemControls($item) {
+                var locked = isLocked($item);
+                $item.toggleClass("locked", locked);
+                $item.find(".weight-slider, .weight-input").prop("disabled", locked);
+                var $icon = $item.find(".lock-btn i");
+                if ($icon.length) {
+                    $icon.toggleClass("fa-lock", locked);
+                    $icon.toggleClass("fa-lock-open", !locked);
+                }
+            }
+
+            function refreshFocusQuestionOptions() {
+                var previousSelection = parseInt($focusSelect.val(), 10);
+                var $items = getAssignedItems();
+
+                $focusSelect.empty();
+
+                if (!$items.length) {
+                    $focusSelect.append($("<option></option>").attr("value", "").text("Assign a question to start"));
+                    $focusSelect.prop("disabled", true);
+                    $globalSlider.prop("disabled", true).val(0);
+                    $globalValue.text("0 pts");
+                    $globalHint.text("Assign at least one question to activate the slider.");
+                    return;
+                }
+
+                $items.each(function (index) {
+                    var $item = $(this);
+                    var id = parseInt($item.data("question-id"), 10);
+                    var questionText = ($item.data("question-text") || "").toString();
+                    var label = (index + 1) + ". " + questionText;
+                    if (label.length > 80) {
+                        label = label.substring(0, 77) + "...";
+                    }
+                    $focusSelect.append($("<option></option>").attr("value", id).text(label));
+                });
+
+                var hasPreviousSelection = !isNaN(previousSelection) && $focusSelect.find("option[value='" + previousSelection + "']").length > 0;
+                $focusSelect.val(hasPreviousSelection ? previousSelection : $focusSelect.find("option:first").val());
+                $focusSelect.prop("disabled", false);
+                $globalSlider.prop("disabled", false);
+                $globalHint.text("Pick a question above, then drag the slider to set its points.");
+                syncGlobalSliderFromSelected();
+            }
+
+            function getFocusedItem() {
+                var selectedId = parseInt($focusSelect.val(), 10);
+                if (isNaN(selectedId)) {
+                    return $();
+                }
+                return getAssignedItems().filter(function () {
+                    return parseInt($(this).data("question-id"), 10) === selectedId;
+                }).first();
+            }
+
+            function syncGlobalSliderFromSelected() {
+                var targetItem = getFocusedItem();
+                if (!targetItem.length) {
+                    $globalSlider.val(0);
+                    $globalValue.text("0 pts");
+                    return;
+                }
+                var value = getItemWeight(targetItem);
+                $globalSlider.val(value);
+                $globalValue.text(value + " pts");
             }
 
             function getItemWeight($item) {

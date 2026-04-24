@@ -25,6 +25,9 @@ namespace HR.Web.Models
         [Required, StringLength(50)]
         public string Role { get; set; } // Admin, HR
 
+        public int? RoleDefinitionId { get; set; }
+        public virtual RoleDefinition RoleDefinition { get; set; }
+
         [StringLength(20)]
         public string Phone { get; set; }
 

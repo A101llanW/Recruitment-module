@@ -11,6 +11,7 @@ namespace HR.Web.Controllers
 {
     [Authorize(Roles = "Admin, SuperAdmin")]
     [RoleBasedAuthorization("Admin")]
+    [ModuleAccess(RoleModuleCatalog.Reports)]
     public class ReportGeneratorController : Controller
     {
         private readonly ReportService _reportService = new ReportService();

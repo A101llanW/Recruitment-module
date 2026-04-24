@@ -146,22 +146,24 @@ namespace HR.Web.Controllers
 
         private ActionResult HandleProfileUpdate(ProfileViewModel model)
         {
-            if (!ModelState.IsValid)
-            {
-                return View(model);
-            }
-
             var username = User.Identity.Name;
-            var user = FindUserByUsername(username);
+            var user = ResolveCurrentUserFromIdentity(username);
             if (user == null)
             {
                 return HttpNotFound();
             }
 
+            PopulateProfileDisplayFields(user, model);
+
+            if (!ModelState.IsValid)
+            {
+                return View("Profile", model);
+            }
+
             var oldValues = new { user.FirstName, user.LastName, user.Email, user.Phone };
             var previousEmail = user.Email;
 
-            var emailResult = HandleProfileEmailChange(user, model.Email);
+            var emailResult = HandleProfileEmailChange(user, model);
             if (emailResult != null)
             {
                 return emailResult;
@@ -172,7 +174,7 @@ namespace HR.Web.Controllers
             _uow.Complete();
 
             RenewAuthenticationCookie(username, user);
-            SyncApplicantProfile(previousEmail, model);
+            SyncApplicantProfile(user, previousEmail, model);
             AuditSvc.LogUpdate(
                 username,
                 "Account",
@@ -184,8 +186,9 @@ namespace HR.Web.Controllers
             return RedirectToAction("Profile");
         }
 
-        private ActionResult HandleProfileEmailChange(User user, string newEmail)
+        private ActionResult HandleProfileEmailChange(User user, ProfileViewModel model)
         {
+            var newEmail = model.Email;
             if (user.Email == newEmail)
             {
                 return null;
@@ -195,7 +198,8 @@ namespace HR.Web.Controllers
             if (existingUser != null)
             {
                 ModelState.AddModelError("Email", "This email address is already in use by another account.");
-                return View("Profile");
+                PopulateProfileDisplayFields(user, model);
+                return View("Profile", model);
             }
 
             user.AccessToken = SecuritySvc.GenerateSecureToken();
@@ -235,24 +239,208 @@ namespace HR.Web.Controllers
             Response.Cookies.Add(cookie);
         }
 
-        private void SyncApplicantProfile(string previousEmail, ProfileViewModel model)
+        private ProfileViewModel BuildProfileViewModel(User user)
         {
-            var applicant = _uow.Context.Applicants.FirstOrDefault(a => a.Email == previousEmail);
-            if (applicant == null && !string.Equals(previousEmail, model.Email, StringComparison.OrdinalIgnoreCase))
+            var model = new ProfileViewModel
             {
-                applicant = _uow.Context.Applicants.FirstOrDefault(a => a.Email == model.Email);
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Email = user.Email,
+                Phone = user.Phone
+            };
+
+            PopulateProfileDisplayFields(user, model);
+            LoadTenantClientCvProfile(user, model);
+            return model;
+        }
+
+        private void PopulateProfileDisplayFields(User user, ProfileViewModel model)
+        {
+            model.UserName = user.UserName;
+            model.Role = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
+            model.CompanyName = user.Company != null ? user.Company.Name : "System Global";
+            model.IsEmailVerified = user.IsEmailVerified;
+            model.IsTenantClientUser = CanEditCvProfile(user);
+        }
+
+        private void LoadTenantClientCvProfile(User user, ProfileViewModel model)
+        {
+            if (!CanEditCvProfile(user))
+            {
+                return;
             }
 
+            var applicant = FindApplicantForTenantClient(user, user.Email, null);
             if (applicant == null)
             {
                 return;
             }
 
-            applicant.FullName = string.Format("{0} {1}", model.FirstName, model.LastName);
+            var applicantProfile = _uow.Context.Set<ApplicantProfile>().FirstOrDefault(p => p.ApplicantId == applicant.Id);
+            if (applicantProfile == null)
+            {
+                return;
+            }
+
+            model.Location = applicantProfile.Location;
+            model.TotalYearsExperience = applicantProfile.TotalYearsExperience;
+            model.RelevantYearsExperience = applicantProfile.RelevantYearsExperience;
+            model.MostRecentCompany = applicantProfile.MostRecentCompany;
+            model.MostRecentTitle = applicantProfile.MostRecentTitle;
+            model.MostRecentStartDate = applicantProfile.MostRecentStartDate;
+            model.MostRecentEndDate = applicantProfile.MostRecentEndDate;
+            model.SecondMostRecentCompany = applicantProfile.SecondMostRecentCompany;
+            model.SecondMostRecentTitle = applicantProfile.SecondMostRecentTitle;
+            model.SecondMostRecentStartDate = applicantProfile.SecondMostRecentStartDate;
+            model.SecondMostRecentEndDate = applicantProfile.SecondMostRecentEndDate;
+            model.EmploymentType = applicantProfile.EmploymentType;
+            model.Skills = applicantProfile.Skills;
+            model.Competencies = applicantProfile.Competencies;
+            model.EducationDegree = applicantProfile.EducationDegree;
+            model.EducationInstitution = applicantProfile.EducationInstitution;
+            model.KeyAchievement = applicantProfile.KeyAchievement;
+            model.Certifications = applicantProfile.Certifications;
+            model.PortfolioUrl = applicantProfile.PortfolioUrl;
+            model.WorkAuthorization = applicantProfile.WorkAuthorization;
+            model.NoticePeriod = applicantProfile.NoticePeriod;
+        }
+
+        private void SyncApplicantProfile(User user, string previousEmail, ProfileViewModel model)
+        {
+            if (!CanEditCvProfile(user))
+            {
+                return;
+            }
+
+            var applicant = FindApplicantForTenantClient(user, model.Email, previousEmail);
+            if (applicant == null)
+            {
+                applicant = new Applicant
+                {
+                    CompanyId = user.CompanyId,
+                    IsEmailVerified = user.IsEmailVerified
+                };
+                _uow.Context.Applicants.Add(applicant);
+            }
+
+            applicant.FullName = string.Format("{0} {1}", model.FirstName, model.LastName).Trim();
             applicant.Email = model.Email;
             applicant.Phone = model.Phone;
-            _uow.Applicants.Update(applicant);
+            applicant.IsEmailVerified = user.IsEmailVerified;
+
+            var applicantProfile = _uow.Context.Set<ApplicantProfile>().FirstOrDefault(p => p.ApplicantId == applicant.Id);
+            if (applicantProfile == null && HasCvProfileValues(model))
+            {
+                applicantProfile = new ApplicantProfile
+                {
+                    Applicant = applicant,
+                    CreatedOn = DateTime.UtcNow
+                };
+                _uow.Context.Set<ApplicantProfile>().Add(applicantProfile);
+            }
+
+            if (applicantProfile != null)
+            {
+                applicantProfile.Location = TrimToNull(model.Location);
+                applicantProfile.TotalYearsExperience = model.TotalYearsExperience;
+                applicantProfile.RelevantYearsExperience = model.RelevantYearsExperience;
+                applicantProfile.MostRecentCompany = TrimToNull(model.MostRecentCompany);
+                applicantProfile.MostRecentTitle = TrimToNull(model.MostRecentTitle);
+                applicantProfile.MostRecentStartDate = model.MostRecentStartDate;
+                applicantProfile.MostRecentEndDate = model.MostRecentEndDate;
+                applicantProfile.SecondMostRecentCompany = TrimToNull(model.SecondMostRecentCompany);
+                applicantProfile.SecondMostRecentTitle = TrimToNull(model.SecondMostRecentTitle);
+                applicantProfile.SecondMostRecentStartDate = model.SecondMostRecentStartDate;
+                applicantProfile.SecondMostRecentEndDate = model.SecondMostRecentEndDate;
+                applicantProfile.EmploymentType = TrimToNull(model.EmploymentType);
+                applicantProfile.Skills = TrimToNull(model.Skills);
+                applicantProfile.Competencies = TrimToNull(model.Competencies);
+                applicantProfile.EducationDegree = TrimToNull(model.EducationDegree);
+                applicantProfile.EducationInstitution = TrimToNull(model.EducationInstitution);
+                applicantProfile.KeyAchievement = TrimToNull(model.KeyAchievement);
+                applicantProfile.Certifications = TrimToNull(model.Certifications);
+                applicantProfile.PortfolioUrl = TrimToNull(model.PortfolioUrl);
+                applicantProfile.WorkAuthorization = model.WorkAuthorization;
+                applicantProfile.NoticePeriod = TrimToNull(model.NoticePeriod);
+                applicantProfile.UpdatedOn = DateTime.UtcNow;
+            }
+
             _uow.Complete();
+        }
+
+        private Applicant FindApplicantForTenantClient(User user, string currentEmail, string previousEmail)
+        {
+            if (!user.CompanyId.HasValue)
+            {
+                return null;
+            }
+
+            var applicants = _uow.Context.Applicants.Where(a => a.CompanyId == user.CompanyId.Value);
+            var normalizedCurrentEmail = TrimToNull(currentEmail);
+            var normalizedPreviousEmail = TrimToNull(previousEmail);
+
+            if (!string.IsNullOrWhiteSpace(normalizedPreviousEmail))
+            {
+                var applicant = applicants.FirstOrDefault(a => a.Email == normalizedPreviousEmail);
+                if (applicant != null)
+                {
+                    return applicant;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(normalizedCurrentEmail))
+            {
+                return applicants.FirstOrDefault(a => a.Email == normalizedCurrentEmail);
+            }
+
+            return null;
+        }
+
+        private static bool CanEditCvProfile(User user)
+        {
+            if (user == null || !user.CompanyId.HasValue)
+            {
+                return false;
+            }
+
+            var role = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
+            return !string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) &&
+                   !string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasCvProfileValues(ProfileViewModel model)
+        {
+            return !string.IsNullOrWhiteSpace(model.Location) ||
+                   model.TotalYearsExperience.HasValue ||
+                   model.RelevantYearsExperience.HasValue ||
+                   !string.IsNullOrWhiteSpace(model.MostRecentCompany) ||
+                   !string.IsNullOrWhiteSpace(model.MostRecentTitle) ||
+                   model.MostRecentStartDate.HasValue ||
+                   model.MostRecentEndDate.HasValue ||
+                   !string.IsNullOrWhiteSpace(model.SecondMostRecentCompany) ||
+                   !string.IsNullOrWhiteSpace(model.SecondMostRecentTitle) ||
+                   model.SecondMostRecentStartDate.HasValue ||
+                   model.SecondMostRecentEndDate.HasValue ||
+                   !string.IsNullOrWhiteSpace(model.EmploymentType) ||
+                   !string.IsNullOrWhiteSpace(model.Skills) ||
+                   !string.IsNullOrWhiteSpace(model.Competencies) ||
+                   !string.IsNullOrWhiteSpace(model.EducationDegree) ||
+                   !string.IsNullOrWhiteSpace(model.EducationInstitution) ||
+                   !string.IsNullOrWhiteSpace(model.KeyAchievement) ||
+                   !string.IsNullOrWhiteSpace(model.Certifications) ||
+                   !string.IsNullOrWhiteSpace(model.PortfolioUrl) ||
+                   model.WorkAuthorization ||
+                   !string.IsNullOrWhiteSpace(model.NoticePeriod);
+        }
+
+        private static string TrimToNull(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return value.Trim();
         }
 
         private User ResolveCurrentUserFromIdentity(string username)

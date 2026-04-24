@@ -11,9 +11,12 @@
             <p class="text-muted mb-0">Manage and organize your recruitment questionnaire pool.</p>
         </div>
         <div class="d-flex gap-2">
-            <a class="btn btn-magic btn-primary shadow-sm" href="@Url.Action("GenerateQuestions", "Admin")">
-                <i class="fas fa-magic mr-1"></i> Generate with AI
-            </a>
+            @if (false)
+            {
+                <a class="btn btn-magic btn-primary shadow-sm" href="@Url.Action("GenerateQuestions", "Admin")">
+                    <i class="fas fa-magic mr-1"></i> Generate with AI
+                </a>
+            }
             <a class="btn btn-success shadow-sm" href="@Url.Action("EditQuestion", "Admin")">
                 <i class="fas fa-plus mr-1"></i> Add New Question
             </a>

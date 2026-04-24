@@ -12,6 +12,7 @@ namespace HR.Web.Controllers
 {
     [Authorize(Roles = "Admin, SuperAdmin")]
     [RoleBasedAuthorization("Admin")]
+    [ModuleAccess(RoleModuleCatalog.Applicants)]
     public class ApplicantsController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();
@@ -435,7 +436,6 @@ namespace HR.Web.Controllers
         }
     }
 }
-
 
 
 

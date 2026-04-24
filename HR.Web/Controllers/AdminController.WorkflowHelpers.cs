@@ -117,7 +117,9 @@ namespace HR.Web.Controllers
                     return prepareResult;
                 }
 
-                var options = SaveQuestionOptions(question.Id, model.Options);
+                var options = string.Equals(model.Type, "Choice", StringComparison.OrdinalIgnoreCase)
+                    ? SaveQuestionOptions(question.Id, model.Options)
+                    : SaveQuestionOptions(question.Id, Enumerable.Empty<QuestionOptionVM>());
                 LogQuestionSaved(question, oldValues, options, isUpdate);
                 TempData["Message"] = "Question saved.";
             }
@@ -146,10 +148,11 @@ namespace HR.Web.Controllers
                     return HttpNotFound();
                 }
 
-                oldValues = new { Text = question.Text, Type = question.Type, IsActive = question.IsActive };
+                oldValues = new { Text = question.Text, Type = question.Type, IsActive = question.IsActive, AllowMultipleChoices = question.AllowMultipleChoices };
                 question.Text = model.Text;
                 question.Type = model.Type;
                 question.IsActive = model.IsActive;
+                question.AllowMultipleChoices = string.Equals(model.Type, "Choice", StringComparison.OrdinalIgnoreCase) && model.AllowMultipleChoices;
                 _uow.Questions.Update(question);
 
                 var questionId = question.Id;
@@ -162,7 +165,8 @@ namespace HR.Web.Controllers
                 {
                     Text = model.Text,
                     Type = model.Type,
-                    IsActive = model.IsActive
+                    IsActive = model.IsActive,
+                    AllowMultipleChoices = string.Equals(model.Type, "Choice", StringComparison.OrdinalIgnoreCase) && model.AllowMultipleChoices
                 };
 
                 var companyId = _tenantService.GetCurrentUserCompanyId();
@@ -346,6 +350,14 @@ namespace HR.Web.Controllers
                 return ReturnCreateUserView(model);
             }
 
+            var roleSelection = ResolveRoleSelection(model.SelectedRoleKey, true, null, model.CompanyId);
+            if (!roleSelection.IsValid)
+            {
+                ModelState.AddModelError("SelectedRoleKey", roleSelection.ErrorMessage);
+                return ReturnCreateUserView(model);
+            }
+
+            model.Role = roleSelection.BaseRole;
             if (!ValidateCreateUserUniqueness(model))
             {
                 return ReturnCreateUserView(model);
@@ -353,7 +365,7 @@ namespace HR.Web.Controllers
 
             try
             {
-                var user = BuildUserFromCreateModel(model);
+                var user = BuildUserFromCreateModel(model, roleSelection);
                 _uow.Users.Add(user);
                 _uow.Complete();
 
@@ -373,6 +385,7 @@ namespace HR.Web.Controllers
         private ActionResult ReturnCreateUserView(CreateUserViewModel model)
         {
             model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
+            model.AvailableRoleOptions = BuildAvailableRoleOptions(true, null, model.CompanyId, false, model.SelectedRoleKey);
             return View("CreateUser", model);
         }
 
@@ -396,7 +409,7 @@ namespace HR.Web.Controllers
             return ModelState.IsValid;
         }
 
-        private static User BuildUserFromCreateModel(CreateUserViewModel model)
+        private static User BuildUserFromCreateModel(CreateUserViewModel model, RoleSelectionResolution roleSelection)
         {
             return new User
             {
@@ -404,7 +417,8 @@ namespace HR.Web.Controllers
                 LastName = model.LastName,
                 UserName = model.UserName,
                 Email = model.Email,
-                Role = model.Role,
+                Role = roleSelection.BaseRole,
+                RoleDefinitionId = roleSelection.RoleDefinitionId,
                 PasswordHash = PasswordHelper.HashPassword(model.Password),
                 CompanyId = model.CompanyId,
                 RequirePasswordChange = model.RequirePasswordChange
@@ -431,13 +445,14 @@ namespace HR.Web.Controllers
 
         private void LogCreatedUser(User user)
         {
+            var displayRole = _rolePermissionService.GetDisplayRole(user);
             _auditService.LogAction(
                 User.Identity.Name,
                 "USER_CREATED",
                 "UserManagement",
                 user.Id.ToString(),
                 true,
-                string.Format("Created user {0} ({1}) with role {2}", user.UserName, user.Email, user.Role)
+                string.Format("Created user {0} ({1}) with role {2}", user.UserName, user.Email, displayRole)
             );
         }
 

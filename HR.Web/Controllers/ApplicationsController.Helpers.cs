@@ -18,9 +18,10 @@ namespace HR.Web.Controllers
 
         private ActionResult RedirectToApplicationRegistration()
         {
-            TempData["ReturnUrl"] = Request.Url != null ? Request.Url.ToString() : null;
+            var returnUrl = Request.Url != null ? Request.Url.PathAndQuery : null;
+            TempData["ReturnUrl"] = returnUrl;
             TempData["ApplicationMessage"] = "Please register or login to apply for this position.";
-            return RedirectToAction("Register", "Account");
+            return RedirectToAction("Register", "Account", new { returnUrl = returnUrl });
         }
 
         private Position GetPositionWithQuestions(int positionId)
@@ -196,8 +197,8 @@ namespace HR.Web.Controllers
 
             if (resume == null || resume.ContentLength <= 0)
             {
-                errorMessage = "Please upload your CV/Resume to continue.";
-                return false;
+                // Resume/CV upload is optional.
+                return true;
             }
 
             if (resume.ContentLength > 5 * 1024 * 1024)
@@ -275,6 +276,64 @@ namespace HR.Web.Controllers
             _uow.Applicants.Add(applicant);
             _uow.Complete();
             return applicant;
+        }
+
+        private ApplicantProfile GetApplicantProfile(int applicantId)
+        {
+            return _uow.Context.Set<ApplicantProfile>()
+                .FirstOrDefault(p => p.ApplicantId == applicantId);
+        }
+
+        private bool IsApplicantProfileComplete(ApplicantProfile profile, bool isTechnical)
+        {
+            if (profile == null)
+            {
+                return false;
+            }
+
+            if (!HasBaseProfileFields(profile))
+            {
+                return false;
+            }
+
+            return isTechnical
+                ? HasTechnicalProfileFields(profile)
+                : HasNonTechnicalProfileFields(profile);
+        }
+
+        private static bool HasBaseProfileFields(ApplicantProfile profile)
+        {
+            var checks = new[]
+            {
+                !string.IsNullOrWhiteSpace(profile.Location),
+                profile.TotalYearsExperience.HasValue,
+                !string.IsNullOrWhiteSpace(profile.MostRecentCompany),
+                !string.IsNullOrWhiteSpace(profile.MostRecentTitle),
+                profile.MostRecentStartDate.HasValue,
+                !string.IsNullOrWhiteSpace(profile.EmploymentType),
+                !string.IsNullOrWhiteSpace(profile.EducationDegree),
+                !string.IsNullOrWhiteSpace(profile.EducationInstitution),
+                !string.IsNullOrWhiteSpace(profile.KeyAchievement),
+                !string.IsNullOrWhiteSpace(profile.NoticePeriod)
+            };
+
+            return checks.All(isValid => isValid);
+        }
+
+        private static bool HasTechnicalProfileFields(ApplicantProfile profile)
+        {
+            var checks = new[]
+            {
+                profile.RelevantYearsExperience.HasValue,
+                !string.IsNullOrWhiteSpace(profile.Skills)
+            };
+
+            return checks.All(isValid => isValid);
+        }
+
+        private static bool HasNonTechnicalProfileFields(ApplicantProfile profile)
+        {
+            return true;
         }
 
         private bool HasExistingApplication(int applicantId, int positionId)
@@ -477,6 +536,146 @@ namespace HR.Web.Controllers
 
             var companyId = _tenantService.GetCurrentUserCompanyId();
             return !companyId.HasValue || model.CompanyId == companyId.Value || _tenantService.IsSuperAdmin();
+        }
+
+        private ActionResult ValidateApplicationTenantAccess(Application app, string accessDeniedMessage)
+        {
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            if (companyId.HasValue && app.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            {
+                return new HttpStatusCodeResult(403, accessDeniedMessage);
+            }
+
+            return null;
+        }
+
+        private string ValidateCustomEmailSubject(string subject)
+        {
+            if (string.IsNullOrWhiteSpace(subject))
+            {
+                return "Please enter an email subject before sending.";
+            }
+
+            var trimmed = subject.Trim();
+            if (trimmed.Length > 255)
+            {
+                return "Subject is too long. Maximum length is 255 characters.";
+            }
+
+            return null;
+        }
+
+        private string ValidateCustomEmailMessage(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return "Please enter an email body before sending.";
+            }
+
+            var trimmed = message.Trim();
+            if (trimmed.Length > 4000)
+            {
+                return "Message is too long. Maximum length is 4000 characters.";
+            }
+
+            return null;
+        }
+
+        private void NormalizeSelectableProfileFields(ApplicantProfileViewModel model)
+        {
+            if (model == null)
+            {
+                return;
+            }
+
+            NormalizeSelectableRequiredTextField(
+                model,
+                "EmploymentType",
+                "employmentTypeSelect",
+                "employmentTypeCustom",
+                "Please specify your employment type.");
+            NormalizeSelectableRequiredTextField(
+                model,
+                "NoticePeriod",
+                "noticePeriodSelect",
+                "noticePeriodCustom",
+                "Please specify your notice period / availability.");
+            NormalizeSelectableRequiredTextField(
+                model,
+                "EducationDegree",
+                "educationDegreeSelect",
+                "educationDegreeCustom",
+                "Please specify your education degree.");
+        }
+
+        private void NormalizeSelectableRequiredTextField(
+            ApplicantProfileViewModel model,
+            string modelPropertyName,
+            string selectFieldName,
+            string customFieldName,
+            string requiredMessage)
+        {
+            var selectedValue = (Request[selectFieldName] ?? string.Empty).Trim();
+            var customValue = (Request[customFieldName] ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(selectedValue))
+            {
+                return;
+            }
+
+            ModelState.Remove(modelPropertyName);
+
+            var resolvedValue = string.Equals(selectedValue, "__custom__", StringComparison.OrdinalIgnoreCase)
+                ? customValue
+                : selectedValue;
+
+            if (string.IsNullOrWhiteSpace(resolvedValue))
+            {
+                ModelState.AddModelError(modelPropertyName, requiredMessage);
+                return;
+            }
+
+            switch (modelPropertyName)
+            {
+                case "EmploymentType":
+                    model.EmploymentType = resolvedValue;
+                    break;
+                case "NoticePeriod":
+                    model.NoticePeriod = resolvedValue;
+                    break;
+                case "EducationDegree":
+                    model.EducationDegree = resolvedValue;
+                    break;
+            }
+        }
+
+        private static bool IsApplicationBelowPassMark(Application application, Position position)
+        {
+            if (application == null || position == null)
+            {
+                return false;
+            }
+
+            return (application.Score ?? 0m) < position.PassMark;
+        }
+
+        private static string BuildCustomCandidateEmailBody(string emailSubject, string customMessage)
+        {
+            var safeSubject = HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(emailSubject) ? "Application Update" : emailSubject.Trim());
+            var safeMessage = HttpUtility.HtmlEncode((customMessage ?? string.Empty).Trim())
+                .Replace("\r\n", "<br/>")
+                .Replace("\n", "<br/>");
+
+            return string.Format(@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <title>{0}</title>
+</head>
+<body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
+    <div>{1}</div>
+</body>
+</html>", safeSubject, safeMessage);
         }
     }
 }

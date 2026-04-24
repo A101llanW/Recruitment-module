@@ -2,6 +2,12 @@
 @{
     ViewBag.Title = "Company Profile - " + Model.Company.Name;
     Layout = "~/Views/Shared/_Layout.cshtml";
+    var previewRowCount = 5;
+    var authorizedStaff = Model.Users.OrderBy(u => u.UserName).ToList();
+    var auditFeed = Model.RecentAuditLogs.OrderByDescending(a => a.Timestamp).ToList();
+    var licenseHistory = (Model.LicenseTransactions ?? new System.Collections.Generic.List<HR.Web.Models.LicenseTransaction>())
+        .OrderByDescending(t => t.TransactionDate)
+        .ToList();
 }
 
 <style>
@@ -361,6 +367,16 @@
                 <div class="section-card">
                     <div class="section-header">
                         <h4>Authorized Staff</h4>
+                        @if (authorizedStaff.Count > previewRowCount)
+                        {
+                            <button type="button"
+                                    id="authorizedStaffToggleButton"
+                                    class="btn btn-sm btn-link p-0 text-primary"
+                                    onclick="toggleAuthorizedStaffRows()">
+                                <span id="authorizedStaffToggleLabel">Show All (@authorizedStaff.Count)</span>
+                                <i id="authorizedStaffToggleIcon" class="fas fa-chevron-down ml-1"></i>
+                            </button>
+                        }
                     </div>
                     <div class="table-responsive">
                         <table class="table table-details">
@@ -373,12 +389,18 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var user in Model.Users.OrderBy(u => u.UserName))
+                                @for (var i = 0; i < authorizedStaff.Count; i++)
                                 {
-                                    <tr>
+                                    var user = authorizedStaff[i];
+                                    var roleLabel = Model.UserRoleDisplayNames != null && Model.UserRoleDisplayNames.ContainsKey(user.Id)
+                                        ? Model.UserRoleDisplayNames[user.Id]
+                                        : (string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role);
+                                    var hideRow = i >= previewRowCount;
+                                    var rowClass = hideRow ? "authorized-staff-extra d-none" : string.Empty;
+                                    <tr class="@rowClass">
                                         <td><strong>@user.UserName</strong></td>
                                         <td>@user.Email</td>
-                                        <td><span class="badge badge-light border">@user.Role</span></td>
+                                        <td><span class="badge badge-light border">@roleLabel</span></td>
                                         <td>@(user.LastPasswordChange.HasValue ? user.LastPasswordChange.Value.ToString("dd MMM yyyy") : "Initial Setup")</td>
                                     </tr>
                                 }
@@ -389,7 +411,17 @@
 
                 <div class="section-card">
                     <div class="section-header">
-                        <h4>Security Audit Feed (Last 15)</h4>
+                        <h4>Security Audit Feed</h4>
+                        @if (auditFeed.Count > previewRowCount)
+                        {
+                            <button type="button"
+                                    id="auditFeedToggleButton"
+                                    class="btn btn-sm btn-link p-0 text-primary"
+                                    onclick="toggleAuditFeedRows()">
+                                <span id="auditFeedToggleLabel">Show All (@auditFeed.Count)</span>
+                                <i id="auditFeedToggleIcon" class="fas fa-chevron-down ml-1"></i>
+                            </button>
+                        }
                     </div>
                     <div class="table-responsive">
                         <table class="table table-details">
@@ -402,9 +434,12 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var log in Model.RecentAuditLogs.Take(15))
+                                @for (var i = 0; i < auditFeed.Count; i++)
                                 {
-                                    <tr>
+                                    var log = auditFeed[i];
+                                    var hideRow = i >= previewRowCount;
+                                    var rowClass = hideRow ? "audit-feed-extra d-none" : string.Empty;
+                                    <tr class="@rowClass">
                                         <td><span class="text-muted">@log.Timestamp.ToString("HH:mm:ss dd/MM")</span></td>
                                         <td>@log.Username</td>
                                         <td><code>@log.Action</code></td>
@@ -424,6 +459,16 @@
                 <div class="section-card">
                     <div class="section-header">
                         <h4>Licensing History</h4>
+                        @if (licenseHistory.Count > previewRowCount)
+                        {
+                            <button type="button"
+                                    id="licenseHistoryToggleButton"
+                                    class="btn btn-sm btn-link p-0 text-primary"
+                                    onclick="toggleLicenseRows()">
+                                <span id="licenseHistoryToggleLabel">Show All (@licenseHistory.Count)</span>
+                                <i id="licenseHistoryToggleIcon" class="fas fa-chevron-down ml-1"></i>
+                            </button>
+                        }
                     </div>
                     <div class="table-responsive">
                         <table class="table table-details">
@@ -438,11 +483,13 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @if (Model.LicenseTransactions.Any())
+                                @if (licenseHistory.Any())
                                 {
-                                    foreach (var trans in Model.LicenseTransactions)
+                                    for (var i = 0; i < licenseHistory.Count; i++)
                                     {
-                                        <tr>
+                                        var trans = licenseHistory[i];
+                                        var rowClass = i >= previewRowCount ? "license-history-extra d-none" : string.Empty;
+                                        <tr class="@rowClass">
                                             <td><span class="text-muted">@trans.TransactionDate.ToString("dd MMM yyyy")</span></td>
                                             <td><strong>@trans.ExecutedBy</strong></td>
                                             <td><span class="badge badge-info">+@trans.ExtendedByValue @trans.ExtendedByUnit</span></td>
@@ -539,4 +586,39 @@
             } );
         </script>
     }
+    <script>
+        function toggleRows(extraRowSelector, labelElementId, iconElementId, totalRows, previewRows) {
+            var rows = document.querySelectorAll(extraRowSelector);
+            if (!rows.length) return;
+
+            var shouldShowAll = rows[0].classList.contains('d-none');
+            for (var i = 0; i < rows.length; i++) {
+                rows[i].classList.toggle('d-none', !shouldShowAll);
+            }
+
+            var label = document.getElementById(labelElementId);
+            var icon = document.getElementById(iconElementId);
+            if (label) {
+                label.textContent = shouldShowAll
+                    ? 'Show Top ' + previewRows
+                    : 'Show All (' + totalRows + ')';
+            }
+            if (icon) {
+                icon.classList.toggle('fa-chevron-down', !shouldShowAll);
+                icon.classList.toggle('fa-chevron-up', shouldShowAll);
+            }
+        }
+
+        function toggleAuthorizedStaffRows() {
+            toggleRows('.authorized-staff-extra', 'authorizedStaffToggleLabel', 'authorizedStaffToggleIcon', @authorizedStaff.Count, @previewRowCount);
+        }
+
+        function toggleAuditFeedRows() {
+            toggleRows('.audit-feed-extra', 'auditFeedToggleLabel', 'auditFeedToggleIcon', @auditFeed.Count, @previewRowCount);
+        }
+
+        function toggleLicenseRows() {
+            toggleRows('.license-history-extra', 'licenseHistoryToggleLabel', 'licenseHistoryToggleIcon', @licenseHistory.Count, @previewRowCount);
+        }
+    </script>
 }

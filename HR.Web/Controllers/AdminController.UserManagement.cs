@@ -1,7 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Security.Principal;
+using System.Text;
+using System.Web;
 using System.Web.Mvc;
+using System.Web.Security;
 using HR.Web.Models;
 using HR.Web.ViewModels;
 
@@ -17,39 +22,6 @@ namespace HR.Web.Controllers
         public ActionResult GlobalUserManagement()
         {
             return BuildGlobalUserManagementView();
-        }
-
-        /// <summary>
-        /// Allows Admins and SuperAdmins to elevate any user to SuperAdmin role.
-        /// </summary>
-        [HttpPost]
-        [Authorize(Roles = "SuperAdmin")]
-        [ValidateAntiForgeryToken]
-        public ActionResult ElevateToSuperAdmin(int id)
-        {
-            var user = _uow.Users.Get(id);
-            if (user == null)
-            {
-                return HttpNotFound();
-            }
-
-            var oldRole = user.Role;
-            user.Role = "SuperAdmin";
-            _uow.Users.Update(user);
-            _uow.Complete();
-
-            // Log the elevation
-            _auditService.LogAction(
-                User.Identity.Name, 
-                "ELEVATE_TO_SUPERADMIN", 
-                "UserManagement", 
-                user.Id.ToString(), 
-                true, 
-                string.Format("Elevated user {0} from {1} to SuperAdmin", user.UserName, oldRole)
-            );
-
-            TempData["Message"] = string.Format("User {0} has been elevated to SuperAdmin.", user.UserName);
-            return RedirectToAction("GlobalUserManagement");
         }
 
         /// <summary>
@@ -107,8 +79,14 @@ namespace HR.Web.Controllers
                 return persistenceResult;
             }
 
-            SetUserRoleUpdateSuccess(user, snapshot.OldRole, isActualSuperAdmin);
-            return RedirectAfterUserRoleUpdate(isActualSuperAdmin);
+            var updatedCurrentUser = IsCurrentRequestUser(user, snapshot);
+            if (updatedCurrentUser)
+            {
+                RefreshCurrentUserAuthenticationContext(user);
+            }
+
+            SetUserRoleUpdateSuccess(user, snapshot.OldRoleDisplay, updatedCurrentUser);
+            return RedirectAfterUserRoleUpdate(user, updatedCurrentUser, isActualSuperAdmin);
         }
 
         private ActionResult ReturnUserRoleView(UserRoleUpdateViewModel model, bool isActualSuperAdmin)
@@ -117,6 +95,13 @@ namespace HR.Web.Controllers
             {
                 model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
             }
+
+            model.AvailableRoleOptions = BuildAvailableRoleOptions(
+                isActualSuperAdmin,
+                _tenantService.GetCurrentUserCompanyId(),
+                model.CompanyId,
+                false,
+                model.SelectedRoleKey);
 
             return View("UpdateUserRole", model);
         }
@@ -166,7 +151,7 @@ namespace HR.Web.Controllers
                 return RedirectToAction("UserManagement");
             }
 
-            if (model.NewRole == "SuperAdmin")
+            if (string.Equals(model.SelectedRoleKey, "builtin:SuperAdmin", StringComparison.OrdinalIgnoreCase))
             {
                 TempData["ErrorMessage"] = "Admin users cannot assign SuperAdmin role to any user.";
                 return RedirectToAction("UserManagement");
@@ -180,6 +165,8 @@ namespace HR.Web.Controllers
             return new UserRoleSnapshot
             {
                 OldRole = user.Role,
+                OldRoleDefinitionId = user.RoleDefinitionId,
+                OldRoleDisplay = _rolePermissionService.GetDisplayRole(user),
                 OldCompanyId = user.CompanyId,
                 OldFirstName = user.FirstName,
                 OldLastName = user.LastName,
@@ -207,7 +194,6 @@ namespace HR.Web.Controllers
             user.UserName = model.UserName;
             user.Email = model.Email;
             user.Phone = model.Phone;
-            user.Role = model.NewRole;
 
             if (snapshot.OldUserName != user.UserName || snapshot.OldRole != user.Role)
             {
@@ -218,6 +204,28 @@ namespace HR.Web.Controllers
             {
                 user.CompanyId = model.CompanyId;
                 user.RequirePasswordChange = model.RequirePasswordChange;
+            }
+
+            var roleSelection = ResolveRoleSelection(
+                model.SelectedRoleKey,
+                isActualSuperAdmin,
+                _tenantService.GetCurrentUserCompanyId(),
+                user.CompanyId);
+            if (!roleSelection.IsValid)
+            {
+                ModelState.AddModelError("SelectedRoleKey", roleSelection.ErrorMessage);
+                return false;
+            }
+
+            user.Role = roleSelection.BaseRole;
+            user.RoleDefinitionId = roleSelection.RoleDefinitionId;
+            model.NewRole = roleSelection.BaseRole;
+
+            if (snapshot.OldUserName != user.UserName ||
+                snapshot.OldRole != user.Role ||
+                snapshot.OldRoleDefinitionId != user.RoleDefinitionId)
+            {
+                user.AccessToken = _securityService.GenerateSecureToken();
             }
 
             return true;
@@ -241,6 +249,7 @@ namespace HR.Web.Controllers
                         UserName = snapshot.OldUserName,
                         Email = snapshot.OldEmail,
                         Role = snapshot.OldRole,
+                        RoleDefinitionId = snapshot.OldRoleDefinitionId,
                         CompanyId = snapshot.OldCompanyId
                     },
                     new
@@ -250,6 +259,7 @@ namespace HR.Web.Controllers
                         UserName = user.UserName,
                         Email = user.Email,
                         Role = model.NewRole,
+                        RoleDefinitionId = user.RoleDefinitionId,
                         CompanyId = user.CompanyId
                     });
 
@@ -310,24 +320,40 @@ namespace HR.Web.Controllers
             return string.Join("; ", errorMessages);
         }
 
-        private void SetUserRoleUpdateSuccess(User user, string oldRole, bool isActualSuperAdmin)
+        private void SetUserRoleUpdateSuccess(User user, string oldRole, bool updatedCurrentUser)
         {
             var successMessage = string.Format("User {0} updated successfully.", user.UserName);
-            if (oldRole != user.Role)
+            var newDisplayRole = _rolePermissionService.GetDisplayRole(user);
+            if (!string.Equals(oldRole, newDisplayRole, StringComparison.OrdinalIgnoreCase))
             {
-                successMessage += string.Format(" Role changed from {0} to {1}.", oldRole, user.Role);
+                successMessage += string.Format(" Role changed from {0} to {1}.", oldRole, newDisplayRole);
             }
 
             TempData["SuccessMessage"] = successMessage;
 
-            if (user.UserName == User.Identity.Name)
+            if (updatedCurrentUser)
             {
-                Session["IsActualSuperAdmin"] = isActualSuperAdmin;
+                Session["IsActualSuperAdmin"] = IsUserEffectiveSuperAdmin(user);
             }
         }
 
-        private ActionResult RedirectAfterUserRoleUpdate(bool isActualSuperAdmin)
+        private ActionResult RedirectAfterUserRoleUpdate(User user, bool updatedCurrentUser, bool isActualSuperAdmin)
         {
+            if (updatedCurrentUser)
+            {
+                if (IsUserEffectiveSuperAdmin(user))
+                {
+                    return RedirectToAction("GlobalUserManagement");
+                }
+
+                if (string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+                {
+                    return RedirectToAction("Index", "Dashboard");
+                }
+
+                return RedirectToAction("Index", "Positions");
+            }
+
             if (isActualSuperAdmin || User.IsInRole("SuperAdmin"))
             {
                 return RedirectToAction("GlobalUserManagement");
@@ -336,9 +362,122 @@ namespace HR.Web.Controllers
             return RedirectToAction("UserManagement");
         }
 
+        private bool IsCurrentRequestUser(User user, UserRoleSnapshot snapshot)
+        {
+            var currentIdentityName = User != null && User.Identity != null ? User.Identity.Name : null;
+            if (string.IsNullOrWhiteSpace(currentIdentityName))
+            {
+                return false;
+            }
+
+            var currentCompanyId = _tenantService.GetCurrentUserCompanyId();
+            var matchesOldIdentity = string.Equals(currentIdentityName, snapshot.OldUserName, StringComparison.OrdinalIgnoreCase) &&
+                                     currentCompanyId == snapshot.OldCompanyId;
+            var matchesNewIdentity = string.Equals(currentIdentityName, user.UserName, StringComparison.OrdinalIgnoreCase) &&
+                                     currentCompanyId == user.CompanyId;
+
+            return matchesOldIdentity || matchesNewIdentity;
+        }
+
+        private void RefreshCurrentUserAuthenticationContext(User user)
+        {
+            if (user == null)
+            {
+                return;
+            }
+
+            var effectiveRole = ResolveAuthTicketRole(user);
+            var uaHash = ComputeUserAgentFingerprint(Request != null ? Request.UserAgent : null);
+            var userData = string.Format("{0}|{1}|{2}|{3}", effectiveRole, user.CompanyId, user.AccessToken, uaHash);
+
+            var ticket = new FormsAuthenticationTicket(
+                1,
+                user.UserName,
+                DateTime.Now,
+                DateTime.Now.AddHours(8),
+                false,
+                userData);
+
+            var cookie = new HttpCookie(FormsAuthentication.FormsCookieName, FormsAuthentication.Encrypt(ticket))
+            {
+                HttpOnly = true,
+                Secure = Request != null && Request.IsSecureConnection
+            };
+            Response.Cookies.Add(cookie);
+
+            if (user.CompanyId.HasValue)
+            {
+                HttpContext.Items["AuthenticatedCompanyId"] = user.CompanyId.Value;
+            }
+            else if (HttpContext.Items.Contains("AuthenticatedCompanyId"))
+            {
+                HttpContext.Items.Remove("AuthenticatedCompanyId");
+            }
+
+            if (!IsUserEffectiveSuperAdmin(user) && Session != null)
+            {
+                Session.Remove("ImpersonatedRequestId");
+                Session.Remove("ImpersonatedCompanyId");
+                Session.Remove("ImpersonationReason");
+                Session.Remove("ImpersonatedCompanyName");
+                Session.Remove("ImpersonationExpiry");
+            }
+
+            var identity = new GenericIdentity(user.UserName, "Forms");
+            var principal = new GenericPrincipal(identity, new[] { effectiveRole });
+            HttpContext.User = principal;
+            System.Threading.Thread.CurrentPrincipal = principal;
+        }
+
+        private static string ResolveAuthTicketRole(User user)
+        {
+            if (user == null)
+            {
+                return "Client";
+            }
+
+            var role = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
+            if (!user.CompanyId.HasValue &&
+                (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase)))
+            {
+                return "SuperAdmin";
+            }
+
+            return role;
+        }
+
+        private static bool IsUserEffectiveSuperAdmin(User user)
+        {
+            if (user == null)
+            {
+                return false;
+            }
+
+            return !user.CompanyId.HasValue &&
+                   (string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(user.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string ComputeUserAgentFingerprint(string userAgent)
+        {
+            if (string.IsNullOrEmpty(userAgent))
+            {
+                return "unknown";
+            }
+
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(userAgent));
+                return Convert.ToBase64String(hash).Substring(0, 16);
+            }
+        }
+
         private class UserRoleSnapshot
         {
             public string OldRole { get; set; }
+            public int? OldRoleDefinitionId { get; set; }
+            public string OldRoleDisplay { get; set; }
             public int? OldCompanyId { get; set; }
             public string OldFirstName { get; set; }
             public string OldLastName { get; set; }

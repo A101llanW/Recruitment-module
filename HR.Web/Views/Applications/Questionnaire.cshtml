@@ -55,13 +55,14 @@
                             var options = question.QuestionOptions != null ? question.QuestionOptions.ToList() : new List<HR.Web.Models.QuestionOption>();
                             if (options.Any())
                             {
+                                var inputType = question.AllowMultipleChoices ? "checkbox" : "radio";
                                 <div class="form-check">
                                     @foreach (var option in options)
                                     {
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" 
+                                            <input class="form-check-input" type="@inputType" 
                                                 name="question_@question.Id" value="@option.Text" 
-                                                @(pq.IsRequired ? "required" : "") id="option_@option.Id">
+                                                @(pq.IsRequired && !question.AllowMultipleChoices ? "required" : "") id="option_@option.Id">
                                             <label class="form-check-label" for="option_@option.Id">
                                                 @option.Text
                                             </label>
@@ -116,107 +117,7 @@
             
             <input type="hidden" name="positionId" value="@(position != null ? position.Id.ToString() : "")" />
             
-            <!-- CV Upload Section -->
-            <div class="form-group mb-4">
-                <label class="font-weight-bold">Upload CV/Resume <span class="text-danger">*</span></label>
-                <div id="drop-zone" class="border border-primary rounded p-4 text-center bg-light" style="border-width: 2px !important; border-style: dashed !important; cursor: pointer; transition: background-color 0.2s ease;">
-                    <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
-                    <p class="mb-1" style="font-weight: 500; font-size: 1.1rem;">Drag and drop your CV here, or click to browse</p>
-                    <small class="text-muted">Accepted formats: PDF, DOC, DOCX (Max 5MB) - Required</small>
-                    <input type="file" name="resume" id="resume-upload" class="form-control-file" style="opacity: 0; position: absolute; z-index: -1; width: 1px; height: 1px;" accept=".pdf,.doc,.docx" required />
-                </div>
-                <div id="file-name-display" class="mt-2 text-success font-weight-bold p-2 bg-white border rounded" style="display: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <i class="fas fa-file-alt mr-2"></i> <span id="file-name-text"></span>
-                    <button type="button" class="close text-danger" aria-label="Close" id="clear-file" style="float: right; font-size: 1rem; padding: 2px 5px;">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-            </div>
-            
             <button type="submit" class="btn btn-success btn-lg">Submit Application</button>
         }
     </div>
 </div>
-
-@section Scripts {
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            var dropZone = document.getElementById('drop-zone');
-            var fileInput = document.getElementById('resume-upload');
-            var fileNameDisplay = document.getElementById('file-name-display');
-            var fileNameText = document.getElementById('file-name-text');
-            var clearFileBtn = document.getElementById('clear-file');
-
-            // Click to open file dialog
-            dropZone.addEventListener('click', function () {
-                fileInput.click();
-            });
-
-            // Prevent default drag behaviors
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(eventName) {
-                dropZone.addEventListener(eventName, preventDefaults, false);
-                document.body.addEventListener(eventName, preventDefaults, false);
-            });
-
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-
-            // Highlight drop zone when item is dragged over it
-            ['dragenter', 'dragover'].forEach(function(eventName) {
-                dropZone.addEventListener(eventName, highlight, false);
-            });
-
-            ['dragleave', 'drop'].forEach(function(eventName) {
-                dropZone.addEventListener(eventName, unhighlight, false);
-            });
-
-            function highlight(e) {
-                dropZone.classList.remove('bg-light');
-                dropZone.style.backgroundColor = '#e8f4fd'; // Light blue highlight
-                dropZone.style.borderColor = '#0056b3';
-            }
-
-            function unhighlight(e) {
-                dropZone.classList.add('bg-light');
-                dropZone.style.backgroundColor = '';
-                dropZone.style.borderColor = '';
-            }
-
-            // Handle dropped files
-            dropZone.addEventListener('drop', handleDrop, false);
-
-            function handleDrop(e) {
-                var dt = e.dataTransfer;
-                var files = dt.files;
-
-                if (files.length > 0) {
-                    fileInput.files = files; // Assign files to the file input
-                    updateFileName(files[0].name);
-                }
-            }
-
-            // Handle selected files via click
-            fileInput.addEventListener('change', function () {
-                if (fileInput.files.length > 0) {
-                    updateFileName(fileInput.files[0].name);
-                } else {
-                    fileNameDisplay.style.display = 'none';
-                }
-            });
-
-            function updateFileName(name) {
-                fileNameText.textContent = name;
-                fileNameDisplay.style.display = 'block';
-            }
-            
-            // Clear selected file
-            clearFileBtn.addEventListener('click', function(e) {
-                e.stopPropagation(); // prevent clicking dropzone
-                fileInput.value = ''; // clear the input
-                fileNameDisplay.style.display = 'none';
-            });
-        });
-    </script>
-}

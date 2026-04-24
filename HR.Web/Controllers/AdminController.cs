@@ -18,12 +18,14 @@ namespace HR.Web.Controllers
     /// </summary>
     [Authorize(Roles = "Admin, SuperAdmin")]
     [RoleBasedAuthorization("Admin", "SuperAdmin")]
+    [ModuleAccess]
     public partial class AdminController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();
         private readonly SecurityService _securityService = new SecurityService();
         private readonly AuditService _auditService = new AuditService();
         private readonly TenantService _tenantService = new TenantService();
+        private readonly RolePermissionService _rolePermissionService = new RolePermissionService();
 
         // GET: Admin/Index - Default admin dashboard
         public ActionResult Index()
@@ -31,6 +33,11 @@ namespace HR.Web.Controllers
             if (_tenantService.IsActualSuperAdmin() || User.IsInRole("SuperAdmin"))
             {
                 return RedirectToAction("GlobalUserManagement");
+            }
+
+            if (_rolePermissionService.HasCurrentUserCustomAdminRole())
+            {
+                return RedirectToAction("Index", "Dashboard");
             }
 
             // Redirect to user management as the default admin page
@@ -138,6 +145,7 @@ namespace HR.Web.Controllers
                     Text = q.Text,
                     Type = q.Type,
                     IsActive = q.IsActive,
+                    AllowMultipleChoices = q.AllowMultipleChoices,
                     Options = q.QuestionOptions.Select(o => new QuestionOptionVM
                     {
                         Id = o.Id,
@@ -167,6 +175,7 @@ namespace HR.Web.Controllers
                 Text = question.Text,
                 Type = question.Type,
                 IsActive = question.IsActive,
+                AllowMultipleChoices = question.AllowMultipleChoices,
                 Options = question.QuestionOptions.Select(o => new QuestionOptionVM
                 {
                     Id = o.Id,
@@ -403,7 +412,7 @@ namespace HR.Web.Controllers
         [Authorize(Roles = "Admin, SuperAdmin")]
         public ActionResult UserManagement()
         {
-            var usersQuery = _uow.Users.GetAll().AsQueryable();
+            var usersQuery = _uow.Users.GetAll(u => u.RoleDefinition, u => u.Company).AsQueryable();
             usersQuery = _tenantService.ApplyTenantFilter(usersQuery);
             var users = usersQuery.ToList();
             var userViewModels = new List<UserManagementViewModel>();
@@ -428,12 +437,14 @@ namespace HR.Web.Controllers
                     LastName = user.LastName,
                     UserName = user.UserName,
                     Email = user.Email,
-                    Role = user.Role,
+                    Role = _rolePermissionService.GetDisplayRole(user),
+                    BaseRole = user.Role,
 
                     Phone = _uow.Applicants.GetAll() // Applicants are already tenant filtered if TenantService is applied, but here we query by email
                         .Where(a => a.Email == user.Email)
                         .Select(a => a.Phone)
                         .FirstOrDefault(),
+                    CompanyName = user.Company != null ? user.Company.Name : "System",
                     LastLoginDate = lastLogin != null ? (DateTime?)lastLogin.Timestamp : null,
                     LastLoginIP = lastLogin != null ? lastLogin.IPAddress : null,
                     IsLocked = isLocked,
@@ -461,7 +472,9 @@ namespace HR.Web.Controllers
             var viewModel = new CreateUserViewModel
             {
                 Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList(),
-                RequirePasswordChange = true
+                RequirePasswordChange = true,
+                AvailableRoleOptions = BuildAvailableRoleOptions(true, null, null, false, null),
+                SelectedRoleKey = "builtin:Client"
             };
 
             return View(viewModel);
@@ -487,7 +500,7 @@ namespace HR.Web.Controllers
         [Authorize(Roles = "Admin, SuperAdmin")]
         public ActionResult UpdateUserRole(int id)
         {
-            var user = _uow.Users.Get(id);
+            var user = _uow.Users.GetAll(u => u.RoleDefinition).FirstOrDefault(u => u.Id == id);
             if (user == null)
             {
                 return HttpNotFound();
@@ -512,12 +525,22 @@ namespace HR.Web.Controllers
                     .Select(a => a.Phone)
                     .FirstOrDefault(),
                 CurrentRole = user.Role,
+                CurrentRoleDisplay = _rolePermissionService.GetDisplayRole(user),
                 NewRole = user.Role,
+                SelectedRoleKey = BuildRoleSelectionKey(user),
                 CompanyId = user.CompanyId,
                 CurrentCompanyId = user.CompanyId,
+                CurrentRoleDefinitionId = user.RoleDefinitionId,
+                IsCurrentFullAdmin = _rolePermissionService.IsFullCompanyAdmin(user),
                 RequirePasswordChange = user.RequirePasswordChange,
                 CurrentRequirePasswordChange = user.RequirePasswordChange,
-                Companies = _tenantService.IsActualSuperAdmin() ? _uow.Companies.GetAll().OrderBy(c => c.Name).ToList() : null
+                Companies = _tenantService.IsActualSuperAdmin() ? _uow.Companies.GetAll().OrderBy(c => c.Name).ToList() : null,
+                AvailableRoleOptions = BuildAvailableRoleOptions(
+                    _tenantService.IsActualSuperAdmin(),
+                    _tenantService.GetCurrentUserCompanyId(),
+                    user.CompanyId,
+                    false,
+                    BuildRoleSelectionKey(user))
             };
 
             return View(viewModel);

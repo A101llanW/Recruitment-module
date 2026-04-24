@@ -335,10 +335,23 @@ namespace HR.Web.Controllers
 
         private CompanyDetailsViewModel BuildCompanyDetailsViewModel(Company company, int companyId)
         {
+            var users = _uow.Users.GetAll(u => u.RoleDefinition)
+                .Where(u => u.CompanyId == companyId)
+                .ToList();
+
+            var roleNameById = _uow.RoleDefinitions.GetAll()
+                .Where(r => r.IsActive)
+                .ToDictionary(r => r.Id, r => r.Name);
+
+            var userRoleDisplayNames = users.ToDictionary(
+                user => user.Id,
+                user => ResolveUserDisplayRole(user, roleNameById));
+
             return new CompanyDetailsViewModel
             {
                 Company = company,
-                Users = _uow.Users.GetAll().Where(u => u.CompanyId == companyId).ToList(),
+                Users = users,
+                UserRoleDisplayNames = userRoleDisplayNames,
                 Positions = _uow.Positions.GetAll().Where(p => p.CompanyId == companyId).ToList(),
                 Applications = _uow.Applications.GetAll().Where(a => a.CompanyId == companyId).ToList(),
                 Departments = _uow.Departments.GetAll().Where(d => d.CompanyId == companyId).ToList(),
@@ -349,7 +362,6 @@ namespace HR.Web.Controllers
                 RecentAuditLogs = _uow.AuditLogs.GetAll()
                     .Where(a => a.CompanyId == companyId)
                     .OrderByDescending(a => a.Timestamp)
-                    .Take(20)
                     .ToList(),
                 PendingImpersonationRequests = _uow.ImpersonationRequests.GetAll()
                     .Where(r => r.CompanyId == companyId && r.Status == ImpersonationRequestStatus.Pending && r.RequestedBy == User.Identity.Name)
@@ -366,6 +378,32 @@ namespace HR.Web.Controllers
                     .Where(u => u.CompanyId == companyId && u.Role == "Admin")
                     .ToList()
             };
+        }
+
+        private static string ResolveUserDisplayRole(User user, IDictionary<int, string> roleNameById)
+        {
+            if (user == null)
+            {
+                return "Client";
+            }
+
+            if (string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                if (user.RoleDefinition != null && !string.IsNullOrWhiteSpace(user.RoleDefinition.Name))
+                {
+                    return user.RoleDefinition.Name;
+                }
+
+                if (user.RoleDefinitionId.HasValue &&
+                    roleNameById != null &&
+                    roleNameById.TryGetValue(user.RoleDefinitionId.Value, out var customRoleName) &&
+                    !string.IsNullOrWhiteSpace(customRoleName))
+                {
+                    return customRoleName;
+                }
+            }
+
+            return string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
         }
 
         private ActionResult HandleElevate(int requestId)

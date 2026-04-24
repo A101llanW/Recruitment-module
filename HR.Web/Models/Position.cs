@@ -39,6 +39,9 @@ namespace HR.Web.Models
         public DateTime PostedOn { get; set; }
         public bool IsOpen { get; set; }
 
+        [DataType(DataType.Date)]
+        public DateTime? ExpiryDate { get; set; }
+
         [ForeignKey("Department")]
         public int DepartmentId { get; set; }
         public virtual Department Department { get; set; }
@@ -46,12 +49,15 @@ namespace HR.Web.Models
         [StringLength(200)]
         public string Location { get; set; }
 
+        public bool? IsTechnical { get; set; }
+
+        [Range(0, 100)]
+        public decimal PassMark { get; set; }
+
         public virtual ICollection<Application> Applications { get; set; }
         public virtual ICollection<PositionQuestion> PositionQuestions { get; set; }
     }
 }
-
-
 
 
 

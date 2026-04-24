@@ -592,6 +592,7 @@ namespace HR.Web.Controllers
     {
         public Company Company { get; set; }
         public System.Collections.Generic.List<User> Users { get; set; }
+        public System.Collections.Generic.IDictionary<int, string> UserRoleDisplayNames { get; set; }
         public System.Collections.Generic.List<Position> Positions { get; set; }
         public System.Collections.Generic.List<Application> Applications { get; set; }
         public System.Collections.Generic.List<Department> Departments { get; set; }
