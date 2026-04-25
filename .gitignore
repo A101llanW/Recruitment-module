@@ -32,3 +32,9 @@ Web.config
 .cursor/
 .vscode/
 .history/
+
+# Generated artifacts
+.codacy/codacy-report*.sarif
+HR.Web/App_Data/Resumes/
+HR.Web/Reports/
+backups/
