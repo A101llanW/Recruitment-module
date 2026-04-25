@@ -34,11 +34,15 @@ namespace HR.Web.Filters
                 }
 
                 // Redirect to clean URL without fresh parameter
-                var url = filterContext.HttpContext.Request.Url.ToString();
-                var cleanUrl = url.Replace("?fresh=1", "").Replace("&fresh=1", "");
-                if (cleanUrl.EndsWith("?") || cleanUrl.EndsWith("&"))
+                var request = filterContext.HttpContext.Request;
+                var query = HttpUtility.ParseQueryString(request.QueryString.ToString());
+                query.Remove("fresh");
+
+                var cleanUrl = request.Url != null ? request.Url.AbsolutePath : "/";
+                var queryString = query.ToString();
+                if (!string.IsNullOrEmpty(queryString))
                 {
-                    cleanUrl = cleanUrl.Substring(0, cleanUrl.Length - 1);
+                    cleanUrl = cleanUrl + "?" + queryString;
                 }
                 
                 filterContext.Result = new RedirectResult(cleanUrl);

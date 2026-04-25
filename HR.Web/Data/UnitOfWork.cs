@@ -12,6 +12,7 @@ namespace HR.Web.Data
         public Repository<Department> Departments { get { return new Repository<Department>(_context); } }
         public Repository<Position> Positions { get { return new Repository<Position>(_context); } }
         public Repository<Applicant> Applicants { get { return new Repository<Applicant>(_context); } }
+        public Repository<ApplicantProfile> ApplicantProfiles { get { return new Repository<ApplicantProfile>(_context); } }
         public Repository<Application> Applications { get { return new Repository<Application>(_context); } }
         public Repository<Interview> Interviews { get { return new Repository<Interview>(_context); } }
         public Repository<Onboarding> Onboardings { get { return new Repository<Onboarding>(_context); } }
@@ -19,6 +20,8 @@ namespace HR.Web.Data
         public Repository<Question> Questions { get { return new Repository<Question>(_context); } }
         public Repository<PositionQuestion> PositionQuestions { get { return new Repository<PositionQuestion>(_context); } }
         public Repository<PositionQuestionOption> PositionQuestionOptions { get { return new Repository<PositionQuestionOption>(_context); } }
+        public Repository<RoleDefinition> RoleDefinitions { get { return new Repository<RoleDefinition>(_context); } }
+        public Repository<RolePermission> RolePermissions { get { return new Repository<RolePermission>(_context); } }
         public Repository<ApplicationAnswer> ApplicationAnswers { get { return new Repository<ApplicationAnswer>(_context); } }
         public Repository<LoginAttempt> LoginAttempts { get { return new Repository<LoginAttempt>(_context); } }
         public Repository<AuditLog> AuditLogs { get { return new Repository<AuditLog>(_context); } }
@@ -37,11 +40,17 @@ namespace HR.Web.Data
         }
 
         /// <summary>
-        /// Execute raw SQL command
+        /// Execute SQL command with parameter placeholders and values.
+        /// Example: ExecuteSql("UPDATE Users SET IsActive = @p0 WHERE Id = @p1", isActive, userId);
         /// </summary>
-        public void ExecuteSql(string sql)
+        public void ExecuteSql(string sql, params object[] parameters)
         {
-            _context.Database.ExecuteSqlCommand(sql);
+            if (string.IsNullOrWhiteSpace(sql))
+            {
+                throw new ArgumentException("SQL command cannot be null or empty.", "sql");
+            }
+
+            _context.Database.ExecuteSqlCommand(sql, parameters ?? new object[0]);
         }
 
         public void Dispose()

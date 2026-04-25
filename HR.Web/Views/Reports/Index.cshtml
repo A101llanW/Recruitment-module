@@ -4,6 +4,9 @@
 }
 
 <div class="container mt-4">
+    <div style="display:none;">
+        @Html.AntiForgeryToken()
+    </div>
     <div class="row">
         <div class="col-md-12">
             <div class="card">
@@ -201,6 +204,12 @@
         var currentPage = 1;
         var totalPages = 1;
 
+        function withAntiForgeryToken(data) {
+            data = data || {};
+            data.__RequestVerificationToken = $('input[name="__RequestVerificationToken"]').first().val();
+            return data;
+        }
+
         function previewReport(reportType) {
             $('#currentReportType').val(reportType);
             $('#loadingModal').modal('show');
@@ -209,7 +218,7 @@
             $.ajax({
                 url: '@Url.Action("Preview", "ReportGenerator")',
                 type: 'POST',
-                data: { reportType: reportType },
+                data: withAntiForgeryToken({ reportType: reportType }),
                 success: function(response) {
                     $('#loadingModal').modal('hide');
                     if (response.success) {
@@ -317,7 +326,7 @@
             $.ajax({
                 url: '@Url.Action("GenerateDirect", "ReportGenerator")',
                 type: 'POST',
-                data: { reportType: reportType, format: format },
+                data: withAntiForgeryToken({ reportType: reportType, format: format }),
                 success: function(response) {
                     // Force hide modal immediately
                     $('#loadingModal').modal('hide');

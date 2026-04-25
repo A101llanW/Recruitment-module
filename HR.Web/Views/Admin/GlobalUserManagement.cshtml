@@ -121,9 +121,14 @@
                         <h2 style="color: var(--system-dark); font-weight: 700; margin: 0;">Global User <span style="font-weight: 300;">Management</span></h2>
                         <p class="text-muted m-0">System-wide user orchestration and security monitoring</p>
                     </div>
-                    <a href="@Url.Action("CreateUser")" class="btn btn-primary shadow-sm" style="background: var(--system-blue); border: none; padding: 10px 25px; font-weight: 600; border-radius: 6px;">
-                        <i class="fas fa-user-plus mr-2"></i> New User
-                    </a>
+                    <div class="d-flex gap-2">
+                        <a href="@Url.Action("RoleManagement")" class="btn btn-outline-primary shadow-sm" style="padding: 10px 20px; font-weight: 600; border-radius: 6px;">
+                            <i class="fas fa-user-tag mr-2"></i> Role Templates
+                        </a>
+                        <a href="@Url.Action("CreateUser")" class="btn btn-primary shadow-sm" style="background: var(--system-blue); border: none; padding: 10px 25px; font-weight: 600; border-radius: 6px;">
+                            <i class="fas fa-user-plus mr-2"></i> New User
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

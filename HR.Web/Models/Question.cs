@@ -17,6 +17,8 @@ namespace HR.Web.Models
         [StringLength(50)]
         public string Type { get; set; }
 
+        public bool AllowMultipleChoices { get; set; }
+
         public bool IsActive { get; set; }
 
         public virtual ICollection<PositionQuestion> PositionQuestions { get; set; }

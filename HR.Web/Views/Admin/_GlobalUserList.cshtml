@@ -24,7 +24,7 @@
                             <div>
                                 <div style="font-weight: 600; color: #0d2c4a;">@user.FirstName @user.LastName</div>
                                 <div class="text-muted small">@user.UserName &bull; @user.Email</div>
-                                @if (user.Role == "SuperAdmin")
+                                @if (user.BaseRole == "SuperAdmin")
                                 {
                                     <span class="badge badge-danger" style="font-size: 0.65rem; padding: 2px 5px;">
                                         <i class="fas fa-crown mr-1"></i>SYSTEM MASTER
@@ -35,6 +35,10 @@
                     </td>
                     <td>
                         <span class="role-text" style="font-weight: 600;">@user.Role</span>
+                        @if (!string.IsNullOrWhiteSpace(user.BaseRole) && !string.Equals(user.Role, user.BaseRole, System.StringComparison.OrdinalIgnoreCase))
+                        {
+                            <div class="text-muted small mt-1">Base sign-in role: @user.BaseRole</div>
+                        }
                     </td>
                     <td>
                         <span class="text-secondary"><i class="fas @(user.CompanyName == "System" ? "fa-server" : "fa-building") mr-2"></i>@user.CompanyName</span>
@@ -64,16 +68,6 @@
                                     @Html.AntiForgeryToken()
                                     <button type="submit" class="btn btn-sm btn-outline-success" title="Unlock" onclick="return confirm('Unlock user?');">
                                         <i class="fas fa-unlock"></i>
-                                    </button>
-                                }
-                            }
-                            @if (user.Role != "SuperAdmin" && User.IsInRole("SuperAdmin") && ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "GlobalUserManagement")
-                            {
-                                using (Html.BeginForm("ElevateToSuperAdmin", "Admin", new { id = user.Id }, FormMethod.Post, new { @class = "d-inline" }))
-                                {
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Elevate" onclick="return confirm('Promote to SuperAdmin?');">
-                                        <i class="fas fa-crown"></i>
                                     </button>
                                 }
                             }

@@ -9,10 +9,12 @@ using HR.Web.Data;
 using HR.Web.Models;
 using HR.Web.Services;
 using HR.Web.Filters;
+using HR.Web.ViewModels;
 
 namespace HR.Web.Controllers
 {
-    public class ApplicationsController : Controller
+    [ModuleAccess(RoleModuleCatalog.Applications)]
+    public partial class ApplicationsController : Controller
 {
     private readonly UnitOfWork _uow = new UnitOfWork();
     private readonly IStorageService _storage = new StorageService();
@@ -89,64 +91,41 @@ namespace HR.Web.Controllers
     // Questionnaire for position application
     public ActionResult Questionnaire(int positionId)
     {
-        // Check if user is authenticated
-        if (User == null || !User.Identity.IsAuthenticated)
+        if (!IsCurrentUserAuthenticated())
         {
-            // Store the position they want to apply for
-            TempData["ReturnUrl"] = Request.Url != null ? Request.Url.ToString() : null;
-            TempData["ApplicationMessage"] = "Please register or login to apply for this position.";
-            return RedirectToAction("Register", "Account");
+            return RedirectToApplicationRegistration();
         }
 
-        var position = _uow.Positions.GetAll(p => p.PositionQuestions.Select(pq => pq.Question).Select(q => q.QuestionOptions))
-            .FirstOrDefault(p => p.Id == positionId);
+        var position = GetPositionWithQuestions(positionId);
         if (position == null)
-            return HttpNotFound();
-        
-        // Prevent non-admin users from accessing closed positions
-        if (!position.IsOpen && (User == null || !User.IsInRole("Admin")))
         {
-            TempData["ErrorMessage"] = "This position is no longer open for applications.";
+            return HttpNotFound();
+        }
+
+        var closedPositionRedirect = GetClosedPositionRedirect(position);
+        if (closedPositionRedirect != null)
+        {
+            return closedPositionRedirect;
+        }
+
+        var applicant = FindOrCreateApplicantForPosition(position.CompanyId);
+        if (applicant == null)
+        {
+            TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
             return RedirectToAction("Index", "Positions");
         }
-        
-        // Debug: Log questions and their options
-        System.Diagnostics.Debug.WriteLine(string.Format("=== Position {0} Questions ===", position.Title));
-        foreach (var pq in position.PositionQuestions)
+
+        var profile = GetApplicantProfile(applicant.Id);
+        if (!IsApplicantProfileComplete(profile, position.IsTechnical == true))
         {
-            System.Diagnostics.Debug.WriteLine(string.Format("Question: {0} (Type: {1})", pq.Question.Text, pq.Question.Type));
-            System.Diagnostics.Debug.WriteLine(string.Format("Options count: {0}", pq.Question.QuestionOptions != null ? pq.Question.QuestionOptions.Count() : 0));
-            if (pq.Question.QuestionOptions != null)
-            {
-                foreach (var option in pq.Question.QuestionOptions)
-                {
-                    System.Diagnostics.Debug.WriteLine(string.Format("  - Option: {0} (Points: {1})", option.Text, option.Points));
-                }
-            }
+            TempData["ErrorMessage"] = "Please complete your profile before taking the questionnaire.";
+            return RedirectToAction("ProfileDetails", new { positionId = position.Id });
         }
-        System.Diagnostics.Debug.WriteLine("=== End Questions ===");
-        
+
+        LogPositionQuestions(position);
+
         ViewBag.Position = position;
-        // Autofill applicant info from logged-in user
-        if (User != null && User.Identity != null && User.Identity.IsAuthenticated)
-        {
-            var companyId = position.CompanyId;
-            var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            
-            // Find user in the position's company context
-            var user = _uow.Users.GetAll().FirstOrDefault(u => u.UserName.ToLower() == lowerUsername && u.CompanyId == companyId);
-            
-            if (user != null)
-            {
-                // Find applicant record ONLY for THIS company
-                var applicant = _uow.Applicants.GetAll().FirstOrDefault(a => a.Email == user.Email && a.CompanyId == companyId);
-                if (applicant != null)
-                {
-                    ViewBag.Applicant = applicant;
-                }
-            }
-        }
+        PopulateApplicantViewBag(position.CompanyId);
         ViewBag.PositionQuestions = position.PositionQuestions
             .OrderBy(pq => pq.Order)
             .ToList();
@@ -166,120 +145,42 @@ namespace HR.Web.Controllers
 
         var position = _uow.Positions.Get(positionId);
         if (position == null)
+        {
             return HttpNotFound();
-
-        // Check if position belongs to user's company (if logged in)
-        var companyId = _tenantService.GetCurrentUserCompanyId();
-        if (companyId.HasValue && position.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
-        {
-            return new HttpStatusCodeResult(403, "Access Denied: Position belongs to another company.");
         }
 
-        // Get position questions
-        var positionQuestions = _uow.Context.Set<PositionQuestion>()
-            .Where(pq => pq.PositionId == positionId)
-            .Include(pq => pq.Question)
-            .Include(pq => pq.Question.QuestionOptions)
-            .OrderBy(pq => pq.Order)
-            .ToList();
-
-        // Determine applicant info for display
-        string applicantName = null;
-        string applicantEmail = null;
-        if (User != null && User.Identity != null && User.Identity.IsAuthenticated)
+        var tenantValidationResult = ValidatePositionTenantAccess(position, "Access Denied: Position belongs to another company.");
+        if (tenantValidationResult != null)
         {
-            var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            var user = _uow.Users.GetAll().FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
-            if (user != null)
-            {
-                var applicant = _uow.Applicants.GetAll().FirstOrDefault(a => a.Email == user.Email);
-                if (applicant != null)
-                {
-                    applicantName = applicant.FullName;
-                    applicantEmail = applicant.Email;
-                }
-            }
+            return tenantValidationResult;
         }
 
-        // Create application review model
-        var review = new ApplicationReviewViewModel
+        var applicant = FindOrCreateApplicantForPosition(position.CompanyId);
+        if (applicant == null)
         {
-            PositionId = positionId,
-            PositionTitle = position.Title,
-            ApplicantName = applicantName,
-            ApplicantEmail = applicantEmail,
-            QuestionAnswers = new List<QuestionAnswerViewModel>()
-        };
-
-        // Process dynamic question answers
-        foreach (var pq in positionQuestions)
-        {
-            var questionFieldName = "question_" + pq.Question.Id;
-            var answer = form[questionFieldName];
-            
-            review.QuestionAnswers.Add(new QuestionAnswerViewModel
-            {
-                QuestionId = pq.Question.Id,
-                QuestionText = pq.Question.Text,
-                QuestionType = pq.Question.Type,
-                Answer = answer ?? ""
-            });
+            TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
+            return RedirectToAction("Index", "Positions");
         }
 
-        // Handle resume upload
-        string resumePath = null;
-        System.Diagnostics.Debug.WriteLine("=== DEBUG: Resume Upload ===");
-        System.Diagnostics.Debug.WriteLine(string.Format("Resume is null: {0}", resume == null));
-        if (resume != null)
+        var profile = GetApplicantProfile(applicant.Id);
+        if (!IsApplicantProfileComplete(profile, position.IsTechnical == true))
         {
-            System.Diagnostics.Debug.WriteLine(string.Format("Resume ContentLength: {0}", resume.ContentLength));
-            System.Diagnostics.Debug.WriteLine(string.Format("Resume FileName: {0}", resume.FileName));
+            TempData["ErrorMessage"] = "Please complete your profile before taking the questionnaire.";
+            return RedirectToAction("ProfileDetails", new { positionId = position.Id });
         }
-        System.Diagnostics.Debug.WriteLine("=== END DEBUG ===");
-        
-        if (resume != null && resume.ContentLength > 0)
-        {
-            // Validate file size (5MB max)
-            if (resume.ContentLength > 5 * 1024 * 1024)
-            {
-                TempData["ErrorMessage"] = "Resume file size must be less than 5MB.";
-                return RedirectToAction("Questionnaire", new { positionId = positionId });
-            }
 
-            // Validate file type
-            var allowedExtensions = new[] { ".pdf", ".doc", ".docx" };
-            var fileExtension = System.IO.Path.GetExtension(resume.FileName).ToLower();
-            if (!allowedExtensions.Contains(fileExtension))
-            {
-                TempData["ErrorMessage"] = "Only PDF, DOC, and DOCX files are allowed.";
-                return RedirectToAction("Questionnaire", new { positionId = positionId });
-            }
+        var positionQuestions = GetPositionQuestions(positionId, true);
+        var review = BuildQuestionnaireReviewModel(position, positionQuestions, form);
 
-            try
-            {
-                resumePath = _storage.SaveResume(resume);
-                System.Diagnostics.Debug.WriteLine("Resume saved to: " + resumePath);
-            }
-            catch (Exception ex)
-            {
-                TempData["ErrorMessage"] = "Error uploading resume: " + ex.Message;
-                return RedirectToAction("Questionnaire", new { positionId = positionId });
-            }
-        }
-        else
+        string resumePath;
+        string resumeError;
+        if (!TrySaveResumeForQuestionnaire(resume, out resumePath, out resumeError))
         {
-            // CV required
-            TempData["ErrorMessage"] = "Please upload your CV/Resume to continue.";
+            TempData["ErrorMessage"] = resumeError;
             return RedirectToAction("Questionnaire", new { positionId = positionId });
         }
 
-        // Store answers in session for processing
-        Session["QuestionnaireAnswers"] = review.QuestionAnswers;
-        Session["PositionId"] = positionId;
-        Session["ResumePath"] = resumePath;
-
-        // Update review model with resume path
+        StoreQuestionnaireSession(positionId, review.QuestionAnswers, resumePath);
         review.ResumePath = resumePath;
 
         return View("QuestionnaireReview", review);
@@ -295,7 +196,6 @@ namespace HR.Web.Controllers
             return RedirectToAction("Index", "Positions");
         }
 
-        // Validate that position is still open
         var position = _uow.Positions.Get(model.PositionId);
         if (position == null)
         {
@@ -303,220 +203,209 @@ namespace HR.Web.Controllers
             return RedirectToAction("Index", "Positions");
         }
 
-        // Check if position belongs to user's company (if logged in)
-        var companyId = _tenantService.GetCurrentUserCompanyId();
-        if (companyId.HasValue && position.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+        var submissionAccessResult = ValidateQuestionnaireSubmissionAccess(position);
+        if (submissionAccessResult != null)
         {
-            return new HttpStatusCodeResult(403, "Access Denied");
-        }
-        
-        // Prevent non-admin users from applying to closed positions
-        if (!position.IsOpen && (User == null || !User.IsInRole("Admin")))
-        {
-            TempData["ErrorMessage"] = "This position is no longer open for applications.";
-            return RedirectToAction("Index", "Positions");
+            return submissionAccessResult;
         }
 
-        // Find or create applicant from logged-in user
-        Applicant applicant = null;
-        if (User != null && User.Identity != null && User.Identity.IsAuthenticated)
-        {
-            var targetCompanyId = position.CompanyId;
-            var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            
-            // Find user in the position's company context
-            var user = _uow.Users.GetAll().FirstOrDefault(u => u.UserName.ToLower() == lowerUsername && u.CompanyId == targetCompanyId);
-            
-            if (user != null)
-            {
-                // Find/Create applicant record ONLY for THIS company (tenant isolation)
-                applicant = _uow.Applicants.GetAll().FirstOrDefault(a => a.Email == user.Email && a.CompanyId == targetCompanyId);
-                if (applicant == null)
-                {
-                    // Create new applicant from user info for this company
-                    applicant = new Applicant
-                    {
-                        FullName = string.Format("{0} {1}", user.FirstName, user.LastName),
-                        Email = user.Email,
-                        Phone = user.Phone ?? "",
-                        CompanyId = targetCompanyId // Assign to position's company
-                    };
-                    _uow.Applicants.Add(applicant);
-                    _uow.Complete();
-                }
-            }
-        }
-
+        var applicant = FindOrCreateApplicantForPosition(position.CompanyId);
         if (applicant != null)
         {
-            // Check if applicant has already applied for this position
-            var existingApplication = _uow.Applications.GetAll()
-                .FirstOrDefault(a => a.ApplicantId == applicant.Id && a.PositionId == model.PositionId);
-            if (existingApplication != null)
+            if (HasExistingApplication(applicant.Id, model.PositionId))
             {
                 TempData["ErrorMessage"] = "You have already applied for this position.";
                 return RedirectToAction("Index", "Positions");
             }
-            
-            // Get resume path from session
-        var resumePath = Session["ResumePath"] as string;
-        
-            var application = new Application
-            {
-                ApplicantId = applicant.Id,
-                PositionId = model.PositionId,
-                CompanyId = position.CompanyId, // Assign to tenant
-                Status = "Interviewing",
-                AppliedOn = DateTime.UtcNow,
-                WorkExperienceLevel = model.YearsInRole ?? "Not specified",
-                ResumePath = resumePath ?? model.ResumePath
-            };
-            _uow.Applications.Add(application);
-            _uow.Complete();
 
-            // Process dynamic answers from session OR form
-            var applicationAnswers = new List<ApplicationAnswer>();
-            var questionAnswers = Session["QuestionnaireAnswers"] as List<QuestionAnswerViewModel>;
-            
-            // If session is empty, try to get from form directly
-            if (questionAnswers == null)
-            {
-                // Get position questions to process form
-                var positionQuestions = _uow.Context.Set<PositionQuestion>()
-                    .Where(pq => pq.PositionId == model.PositionId)
-                    .Include(pq => pq.Question)
-                    .OrderBy(pq => pq.Order)
-                    .ToList();
-
-                questionAnswers = new List<QuestionAnswerViewModel>();
-                foreach (var pq in positionQuestions)
-                {
-                    var questionFieldName = "question_" + pq.Question.Id;
-                    var answer = form[questionFieldName];
-                    
-                    questionAnswers.Add(new QuestionAnswerViewModel
-                    {
-                        QuestionId = pq.Question.Id,
-                        QuestionText = pq.Question.Text,
-                        QuestionType = pq.Question.Type,
-                        Answer = answer ?? ""
-                    });
-                }
-            }
-            
-            if (questionAnswers != null)
-            {
-                foreach (var qa in questionAnswers)
-                {
-                    if (!string.IsNullOrWhiteSpace(qa.Answer))
-                    {
-                        var appAns = new ApplicationAnswer
-                        {
-                            ApplicationId = application.Id,
-                            QuestionId = qa.QuestionId,
-                            AnswerText = qa.Answer
-                        };
-                        _uow.ApplicationAnswers.Add(appAns);
-                        applicationAnswers.Add(appAns);
-                    }
-                }
-            }
-            _uow.Complete();
-
-            // Evaluate candidate using questionnaire scoring
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("=== STARTING QUESTIONNAIRE SCORING ===");
-                System.Diagnostics.Debug.WriteLine("Application ID: " + application.Id);
-
-                var score = _scoringService.CalculateApplicationScore(application);
-
-                System.Diagnostics.Debug.WriteLine("QUESTIONNAIRE SCORE: " + score);
-                System.Diagnostics.Debug.WriteLine("SETTING APPLICATION SCORE TO: " + score);
-
-                application.Score = score;
-                application.ScoreReason = "Questionnaire score calculated from responses.";
-                _uow.Applications.Update(application);
-                _uow.Complete();
-                
-                System.Diagnostics.Debug.WriteLine("QUESTIONNAIRE SCORE SAVED TO DATABASE");
-                System.Diagnostics.Debug.WriteLine("===============================");
-            }
-            catch (Exception ex)
-            {
-                // Log error but don't fail the application submission
-                System.Diagnostics.Debug.WriteLine("Error scoring application: " + ex.Message);
-            }
+            var application = CreateApplicationFromQuestionnaire(model, position, applicant.Id);
+            var questionAnswers = ResolveQuestionnaireAnswers(model.PositionId, form);
+            SaveApplicationAnswers(application.Id, questionAnswers);
+            ScoreQuestionnaireApplication(application);
         }
 
-        // Clean up session
-        Session.Remove("QuestionnaireAnswers");
-        Session.Remove("PositionId");
-        Session.Remove("ResumePath");
-
+        ClearQuestionnaireSession();
         TempData["QuestionnaireSuccess"] = "Your application and questionnaire have been submitted.";
         return RedirectToAction("Index", "Positions");
     }
 
+    [Authorize]
+    public ActionResult ProfileDetails(int positionId)
+    {
+        if (!IsCurrentUserAuthenticated())
+        {
+            return RedirectToApplicationRegistration();
+        }
+
+        var position = _uow.Positions.Get(positionId);
+        if (position == null)
+        {
+            return HttpNotFound();
+        }
+
+        var closedPositionRedirect = GetClosedPositionRedirect(position);
+        if (closedPositionRedirect != null)
+        {
+            return closedPositionRedirect;
+        }
+
+        var applicant = FindOrCreateApplicantForPosition(position.CompanyId);
+        if (applicant == null)
+        {
+            TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
+            return RedirectToAction("Index", "Positions");
+        }
+
+        var profile = GetApplicantProfile(applicant.Id);
+        var model = new ApplicantProfileViewModel
+        {
+            PositionId = position.Id,
+            PositionTitle = position.Title,
+            ApplicantId = applicant.Id,
+            IsTechnical = position.IsTechnical == true,
+            FullName = applicant.FullName,
+            Email = applicant.Email,
+            Phone = applicant.Phone,
+            Location = profile != null ? profile.Location : null,
+            TotalYearsExperience = profile != null ? profile.TotalYearsExperience : null,
+            RelevantYearsExperience = profile != null ? profile.RelevantYearsExperience : null,
+            MostRecentCompany = profile != null ? profile.MostRecentCompany : null,
+            MostRecentTitle = profile != null ? profile.MostRecentTitle : null,
+            MostRecentStartDate = profile != null ? profile.MostRecentStartDate : null,
+            MostRecentEndDate = profile != null ? profile.MostRecentEndDate : null,
+            SecondMostRecentCompany = profile != null ? profile.SecondMostRecentCompany : null,
+            SecondMostRecentTitle = profile != null ? profile.SecondMostRecentTitle : null,
+            SecondMostRecentStartDate = profile != null ? profile.SecondMostRecentStartDate : null,
+            SecondMostRecentEndDate = profile != null ? profile.SecondMostRecentEndDate : null,
+            EmploymentType = profile != null ? profile.EmploymentType : null,
+            Skills = profile != null ? profile.Skills : null,
+            Competencies = profile != null ? profile.Competencies : null,
+            EducationDegree = profile != null ? profile.EducationDegree : null,
+            EducationInstitution = profile != null ? profile.EducationInstitution : null,
+            KeyAchievement = profile != null ? profile.KeyAchievement : null,
+            Certifications = profile != null ? profile.Certifications : null,
+            PortfolioUrl = profile != null ? profile.PortfolioUrl : null,
+            WorkAuthorization = profile != null && profile.WorkAuthorization,
+            NoticePeriod = profile != null ? profile.NoticePeriod : null
+        };
+
+        ApplyPendingLinkedInImport(model);
+        PopulateLinkedInImportViewBag();
+        return View("ProfileDetails", model);
+    }
+
+    [HttpPost]
+    [Authorize]
+    [ValidateAntiForgeryToken]
+    public ActionResult ProfileDetails(ApplicantProfileViewModel model)
+    {
+        var position = _uow.Positions.Get(model.PositionId);
+        if (position == null)
+        {
+            return HttpNotFound();
+        }
+
+        var applicant = FindOrCreateApplicantForPosition(position.CompanyId);
+        if (applicant == null)
+        {
+            TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
+            return RedirectToAction("Index", "Positions");
+        }
+
+        model.PositionTitle = position.Title;
+        model.IsTechnical = position.IsTechnical == true;
+        model.ApplicantId = applicant.Id;
+        NormalizeSelectableProfileFields(model);
+
+        if (model.IsTechnical)
+        {
+            if (!model.RelevantYearsExperience.HasValue)
+            {
+                ModelState.AddModelError("RelevantYearsExperience", "Relevant years of experience is required for technical roles.");
+            }
+
+            if (string.IsNullOrWhiteSpace(model.Skills))
+            {
+                ModelState.AddModelError("Skills", "Please list your core technical skills.");
+            }
+        }
+        
+
+        if (!ModelState.IsValid)
+        {
+            PopulateLinkedInImportViewBag();
+            return View("ProfileDetails", model);
+        }
+
+        applicant.FullName = model.FullName != null ? model.FullName.Trim() : applicant.FullName;
+        applicant.Email = model.Email != null ? model.Email.Trim() : applicant.Email;
+        applicant.Phone = model.Phone != null ? model.Phone.Trim() : applicant.Phone;
+
+        var profile = GetApplicantProfile(applicant.Id);
+        if (profile == null)
+        {
+            profile = new ApplicantProfile
+            {
+                ApplicantId = applicant.Id,
+                CreatedOn = DateTime.UtcNow
+            };
+            _uow.Context.Set<ApplicantProfile>().Add(profile);
+        }
+
+        profile.Location = model.Location != null ? model.Location.Trim() : null;
+        profile.TotalYearsExperience = model.TotalYearsExperience;
+        profile.RelevantYearsExperience = model.RelevantYearsExperience;
+        profile.MostRecentCompany = model.MostRecentCompany != null ? model.MostRecentCompany.Trim() : null;
+        profile.MostRecentTitle = model.MostRecentTitle != null ? model.MostRecentTitle.Trim() : null;
+        profile.MostRecentStartDate = model.MostRecentStartDate;
+        profile.MostRecentEndDate = model.MostRecentEndDate;
+        profile.SecondMostRecentCompany = model.SecondMostRecentCompany != null ? model.SecondMostRecentCompany.Trim() : null;
+        profile.SecondMostRecentTitle = model.SecondMostRecentTitle != null ? model.SecondMostRecentTitle.Trim() : null;
+        profile.SecondMostRecentStartDate = model.SecondMostRecentStartDate;
+        profile.SecondMostRecentEndDate = model.SecondMostRecentEndDate;
+        profile.EmploymentType = model.EmploymentType != null ? model.EmploymentType.Trim() : null;
+        profile.Skills = model.Skills != null ? model.Skills.Trim() : null;
+        profile.Competencies = model.Competencies != null ? model.Competencies.Trim() : null;
+        profile.EducationDegree = model.EducationDegree != null ? model.EducationDegree.Trim() : null;
+        profile.EducationInstitution = model.EducationInstitution != null ? model.EducationInstitution.Trim() : null;
+        profile.KeyAchievement = model.KeyAchievement != null ? model.KeyAchievement.Trim() : null;
+        profile.Certifications = model.Certifications != null ? model.Certifications.Trim() : null;
+        profile.PortfolioUrl = model.PortfolioUrl != null ? model.PortfolioUrl.Trim() : null;
+        profile.WorkAuthorization = model.WorkAuthorization;
+        profile.NoticePeriod = model.NoticePeriod != null ? model.NoticePeriod.Trim() : null;
+        profile.UpdatedOn = DateTime.UtcNow;
+
+        _uow.Complete();
+        ClearPendingLinkedInImport();
+
+        TempData["SuccessMessage"] = "Profile details saved. Continue to the questionnaire.";
+        return RedirectToAction("Questionnaire", new { positionId = position.Id });
+    }
+
         public ActionResult Index()
         {
-            // If the user is unauthenticated, show the guest redirect message
-            if (User == null || !User.Identity.IsAuthenticated)
+            var rolePermissionService = new RolePermissionService();
+            ViewBag.CanManageApplications = false;
+
+            if (!IsCurrentUserAuthenticated())
             {
                 ViewBag.Message = "Please sign in or create account first to view your applications.";
                 return View("GuestAccess");
             }
 
-            var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
-            if (user == null) return View(Enumerable.Empty<Application>());
-
-            // Consolidated check for management roles (Admin or SuperAdmin)
-            bool isManagement = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || user.Role == "Admin" || user.Role == "SuperAdmin";
-
-            // If the user is Admin or SuperAdmin, show all applications for their context
-            if (isManagement)
+            var user = GetCurrentUser();
+            if (user == null)
             {
-                var appsQuery = _uow.Context.Applications
-                    .Include("Applicant")
-                    .Include("Position")
-                    .AsQueryable();
-
-                appsQuery = _tenantService.ApplyTenantFilter(appsQuery);
-                var apps = appsQuery
-                    .OrderByDescending(a => a.Score ?? 0)
-                    .ThenByDescending(a => a.AppliedOn)
-                    .ToList();
-                
-                // Get interviewers for booking (filtered by tenant)
-                var interviewersQuery = _uow.Context.Users.Where(u => u.Role == "Admin").AsQueryable();
-                interviewersQuery = _tenantService.ApplyTenantFilter(interviewersQuery);
-                ViewBag.Interviewers = interviewersQuery.ToList();
-                
-                // Get existing interview application IDs
-                var interviewedAppIds = _uow.Context.Interviews.Select(i => i.ApplicationId).ToList();
-                ViewBag.InterviewedAppIds = interviewedAppIds;
-                
-                return View(apps);
+                return View(Enumerable.Empty<Application>());
             }
 
-            // Otherwise, show only applications for the logged-in applicant (Client role) for the CURRENT tenant
-            var applicant = _uow.Context.Applicants.FirstOrDefault(a => a.Email == user.Email && a.CompanyId == user.CompanyId);
-            if (applicant != null)
+            if (IsManagementUser(user))
             {
-                var apps = _uow.Context.Applications
-                    .Include("Applicant")
-                    .Include("Position")
-                    .Where(a => a.ApplicantId == applicant.Id)
-                    .OrderByDescending(a => a.AppliedOn)
-                    .ToList();
-                return View(apps);
+                ViewBag.CanManageApplications = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Applications, RoleAccessLevels.Manage);
+                return View(BuildManagementApplicationsView());
             }
 
-            // If not matched, show empty list
-            return View(Enumerable.Empty<Application>());
+            return View(GetApplicantApplications(user));
         }
 
         [Authorize]
@@ -529,31 +418,16 @@ namespace HR.Web.Controllers
                 return HttpNotFound();
             }
 
-            // Security check: Who can view this application?
-            var username = User.Identity.Name;
-            var lowerUsername = username.ToLower();
-            var user = _uow.Users.GetAll().FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
-            if (user == null) return new HttpStatusCodeResult(403, "Access Denied");
-
-            bool isManagement = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || user.Role == "Admin" || user.Role == "SuperAdmin";
-            
-            if (isManagement)
+            var user = GetCurrentUser();
+            if (user == null)
             {
-                // SuperAdmin sees all, Admin sees their company
-                var companyId = _tenantService.GetCurrentUserCompanyId();
-                if (companyId.HasValue && app.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
-                {
-                    return new HttpStatusCodeResult(403, "Access Denied: Application belongs to another company context.");
-                }
+                return new HttpStatusCodeResult(403, "Access Denied");
             }
-            else
+
+            var accessCheck = ValidateDetailsAccess(user, app);
+            if (accessCheck != null)
             {
-                // Client can only see their own application
-                var applicant = _uow.Applicants.GetAll().FirstOrDefault(a => a.Email == user.Email);
-                if (applicant == null || app.ApplicantId != applicant.Id)
-                {
-                    return new HttpStatusCodeResult(403, "Access Denied: You may only view your own applications.");
-                }
+                return accessCheck;
             }
 
             return View(app);
@@ -565,9 +439,10 @@ namespace HR.Web.Controllers
             if (User == null || !User.Identity.IsAuthenticated)
             {
                 // Store the position they want to apply for
-                TempData["ReturnUrl"] = Request.Url != null ? Request.Url.ToString() : null;
+                var returnUrl = Request.Url != null ? Request.Url.PathAndQuery : null;
+                TempData["ReturnUrl"] = returnUrl;
                 TempData["ApplicationMessage"] = "Please register or login to apply for this position.";
-                return RedirectToAction("Register", "Account");
+                return RedirectToAction("Register", "Account", new { returnUrl = returnUrl });
             }
 
             // If the user is authenticated and not Admin/HR, attempt to preselect their Applicant record
@@ -604,31 +479,11 @@ namespace HR.Web.Controllers
             {
                 model.ResumePath = _storage.SaveResume(resume);
             }
-            // Server-side checks: if user is regular (not Admin/HR), ensure they are applying as themselves
-            if (User != null && User.Identity != null && User.Identity.IsAuthenticated && !User.IsInRole("Admin"))
+
+            var ownershipError = ValidateApplicationOwnership(model);
+            if (!string.IsNullOrWhiteSpace(ownershipError))
             {
-                var username = User.Identity.Name;
-                var lowerUsername = username.ToLower();
-                var user = _uow.Users.GetAll().FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
-                if (user == null)
-                {
-                    ModelState.AddModelError("", "User record not found.");
-                    LoadLookups(model);
-                    return View(model);
-                }
-                var applicant = _uow.Applicants.GetAll().FirstOrDefault(a => a.Email == user.Email);
-                if (applicant == null)
-                {
-                    ModelState.AddModelError("", "No applicant profile matched to your account.");
-                    LoadLookups(model);
-                    return View(model);
-                }
-                if (model.ApplicantId != applicant.Id)
-                {
-                    ModelState.AddModelError("", "You may only apply using your own applicant profile.");
-                    LoadLookups(model);
-                    return View(model);
-                }
+                ModelState.AddModelError("", ownershipError);
             }
 
             if (!ModelState.IsValid)
@@ -638,20 +493,12 @@ namespace HR.Web.Controllers
             }
 
             model.AppliedOn = DateTime.UtcNow;
-            
-            // Assign company from position
-            var position = _uow.Positions.Get(model.PositionId);
-            if (position != null)
+
+            if (!TryAssignAndValidateApplicationCompany(model))
             {
-                model.CompanyId = position.CompanyId;
-            }
-            // If logged in as admin, verify tenant match
-            var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && model.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
-            {
-                 ModelState.AddModelError("", "You cannot apply for a position in another company.");
-                 LoadLookups(model);
-                 return View(model);
+                ModelState.AddModelError("", "You cannot apply for a position in another company.");
+                LoadLookups(model);
+                return View(model);
             }
 
             _uow.Applications.Add(model);
@@ -773,6 +620,178 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
+        public async Task<ActionResult> SendFailedCandidateEmail(int applicationId, string subject, string body)
+        {
+            var app = _uow.Applications.GetAll(a => a.Applicant, a => a.Position)
+                .FirstOrDefault(a => a.Id == applicationId);
+            if (app == null)
+            {
+                return HttpNotFound();
+            }
+
+            var tenantValidationResult = ValidateApplicationTenantAccess(app, "Access Denied");
+            if (tenantValidationResult != null)
+            {
+                return tenantValidationResult;
+            }
+
+            var subjectValidationError = ValidateCustomEmailSubject(subject);
+            if (!string.IsNullOrWhiteSpace(subjectValidationError))
+            {
+                TempData["ApplicationEmailError"] = subjectValidationError;
+                return RedirectToAction("Index");
+            }
+
+            var messageValidationError = ValidateCustomEmailMessage(body);
+            if (!string.IsNullOrWhiteSpace(messageValidationError))
+            {
+                TempData["ApplicationEmailError"] = messageValidationError;
+                return RedirectToAction("Index");
+            }
+
+            var position = app.Position ?? _uow.Positions.Get(app.PositionId);
+            if (position == null)
+            {
+                TempData["ApplicationEmailError"] = "Position could not be found for this application.";
+                return RedirectToAction("Index");
+            }
+
+            if (!IsApplicationBelowPassMark(app, position))
+            {
+                TempData["ApplicationEmailError"] = "Email can only be sent from the failed-candidates list.";
+                return RedirectToAction("Index");
+            }
+
+            var recipientEmail = app.Applicant != null ? app.Applicant.Email : null;
+            if (string.IsNullOrWhiteSpace(recipientEmail))
+            {
+                TempData["ApplicationEmailError"] = "Candidate has no email address on file.";
+                return RedirectToAction("Index");
+            }
+
+            await _email.SendAsync(recipientEmail.Trim(), subject.Trim(), BuildCustomCandidateEmailBody(subject, body));
+
+            TempData["ApplicationEmailSuccess"] = string.Format("Email sent to {0}.", app.Applicant != null ? app.Applicant.FullName : recipientEmail.Trim());
+            return RedirectToAction("Index");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin, SuperAdmin")]
+        [RoleBasedAuthorization("Admin")]
+        public async Task<ActionResult> SendFailedCandidatesBulkEmail(int positionId, string subject, string body)
+        {
+            if (positionId <= 0)
+            {
+                TempData["ApplicationEmailError"] = "Invalid position selected.";
+                return RedirectToAction("Index");
+            }
+
+            var position = _uow.Positions.Get(positionId);
+            if (position == null)
+            {
+                return HttpNotFound();
+            }
+
+            var tenantValidationResult = ValidatePositionTenantAccess(position, "Access Denied");
+            if (tenantValidationResult != null)
+            {
+                return tenantValidationResult;
+            }
+
+            var subjectValidationError = ValidateCustomEmailSubject(subject);
+            if (!string.IsNullOrWhiteSpace(subjectValidationError))
+            {
+                TempData["ApplicationEmailError"] = subjectValidationError;
+                return RedirectToAction("Index");
+            }
+
+            var messageValidationError = ValidateCustomEmailMessage(body);
+            if (!string.IsNullOrWhiteSpace(messageValidationError))
+            {
+                TempData["ApplicationEmailError"] = messageValidationError;
+                return RedirectToAction("Index");
+            }
+
+            var failedApplications = _uow.Applications.GetAll(a => a.Applicant)
+                .Where(a => a.PositionId == positionId && (a.Score ?? 0m) < position.PassMark)
+                .ToList();
+
+            if (!failedApplications.Any())
+            {
+                TempData["ApplicationEmailError"] = "No failed candidates found for this position.";
+                return RedirectToAction("Index");
+            }
+
+            var recipients = failedApplications
+                .Where(a => a.Applicant != null && !string.IsNullOrWhiteSpace(a.Applicant.Email))
+                .GroupBy(a => a.Applicant.Email.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+
+            if (!recipients.Any())
+            {
+                TempData["ApplicationEmailError"] = "No valid candidate emails found among failed candidates.";
+                return RedirectToAction("Index");
+            }
+
+            var emailTasks = recipients.Select(r =>
+                _email.SendAsync(
+                    r.Applicant.Email.Trim(),
+                    subject.Trim(),
+                    BuildCustomCandidateEmailBody(subject, body)))
+                .ToList();
+
+            await Task.WhenAll(emailTasks);
+
+            TempData["ApplicationEmailSuccess"] = string.Format(
+                "Bulk email sent to {0} failed candidate{1} for {2}.",
+                recipients.Count,
+                recipients.Count == 1 ? string.Empty : "s",
+                string.IsNullOrWhiteSpace(position.Title) ? "the selected position" : position.Title);
+
+            return RedirectToAction("Index");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin, SuperAdmin")]
+        [RoleBasedAuthorization("Admin")]
+        public ActionResult UpdatePositionPassMark(int positionId, decimal passMark)
+        {
+            if (positionId <= 0)
+            {
+                return Json(new { success = false, message = "Invalid position selected." });
+            }
+
+            var position = _uow.Positions.Get(positionId);
+            if (position == null)
+            {
+                return Json(new { success = false, message = "Position not found." });
+            }
+
+            var tenantValidationResult = ValidatePositionTenantAccess(position, "Access Denied");
+            if (tenantValidationResult != null)
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            var normalizedPassMark = Math.Max(0m, Math.Min(100m, Math.Round(passMark, 0, MidpointRounding.AwayFromZero)));
+            position.PassMark = normalizedPassMark;
+            _uow.Positions.Update(position);
+            _uow.Complete();
+
+            return Json(new
+            {
+                success = true,
+                passMark = normalizedPassMark
+            });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin, SuperAdmin")]
+        [RoleBasedAuthorization("Admin")]
         public ActionResult UpdateStatus(int id, string status)
         {
             var app = _uow.Applications.Get(id);
@@ -851,9 +870,3 @@ namespace HR.Web.Controllers
         }
     }
 }
-
-
-
-
-
-

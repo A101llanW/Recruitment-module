@@ -149,6 +149,7 @@
     </Reference>
     <Reference Include="System.Drawing" />
     <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Web" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
@@ -175,6 +176,7 @@
     <Compile Include="Models\PasswordReset.cs" />
     <Compile Include="Models\ImpersonationRequest.cs" />
     <Compile Include="Models\Applicant.cs" />
+    <Compile Include="Models\ApplicantProfile.cs" />
     <Compile Include="Models\LoginAttempt.cs" />
     <Compile Include="Models\AuditLog.cs" />
     <Compile Include="Models\Report.cs" />
@@ -186,6 +188,12 @@
     <Compile Include="Migrations\202401290000000_AddReportEntity.cs" />
     <Compile Include="Migrations\202401300000000_AddLocationToPosition.cs" />
     <Compile Include="Migrations\202502020000000_AddPasswordChangeFields.cs" />
+    <Compile Include="Migrations\202604220000000_AddWeightToPositionQuestion.cs" />
+    <Compile Include="Migrations\202604220000001_AddRoleDefinitionsAndPermissions.cs" />
+    <Compile Include="Migrations\202604230000001_AddPositionTypeAndApplicantProfile.cs" />
+    <Compile Include="Migrations\202604230000002_AddMultipleChoiceToQuestions.cs" />
+    <Compile Include="Migrations\202604230000003_AddPassMarkToPosition.cs" />
+    <Compile Include="Migrations\202604230000004_AddPositionExpiryDate.cs" />
     <Compile Include="Migrations\AddPasswordResetTable.cs" />
     <Compile Include="Migrations\Configuration.cs" />
     <Compile Include="Models\Application.cs" />
@@ -194,6 +202,8 @@
     <Compile Include="Models\Question.cs" />
     <Compile Include="Models\QuestionAdminViewModel.cs" />
     <Compile Include="Models\QuestionOption.cs" />
+    <Compile Include="Models\RoleDefinition.cs" />
+    <Compile Include="Models\RolePermission.cs" />
     <Compile Include="Models\PositionQuestion.cs" />
     <Compile Include="Models\PositionQuestionOption.cs" />
     <Compile Include="Models\ApplicationAnswer.cs" />
@@ -201,6 +211,7 @@
     <Compile Include="Models\PositionQuestionOptionVM.cs" />
     <Compile Include="ViewModels\CandidateRankingsViewModel.cs" />
     <Compile Include="ViewModels\GenerateQuestionsViewModel.cs" />
+    <Compile Include="ViewModels\ApplicantProfileViewModel.cs" />
     <Compile Include="ViewModels\PositionQuestionViewModel.cs" />
     <Compile Include="ViewModels\ProfileViewModel.cs" />
     <Compile Include="ViewModels\UserManagementViewModel.cs" />
@@ -210,6 +221,8 @@
     <Compile Include="Data\UnitOfWork.cs" />
     <Compile Include="Services\StorageService.cs" />
     <Compile Include="Services\TenantService.cs" />
+    <Compile Include="Services\RoleModuleCatalog.cs" />
+    <Compile Include="Services\RolePermissionService.cs" />
     <Compile Include="Services\EmailService.cs" />
     <Compile Include="Services\CandidateEvaluationService.cs" />
     <Compile Include="Services\DynamicQuestionService.cs" />
@@ -221,6 +234,7 @@
     <Compile Include="Services\ReportService.cs" />
     <Compile Include="Services\SettingsService.cs" />
     <Compile Include="Services\RealisticCaptchaService.cs" />
+    <Compile Include="Services\LinkedInProfileImportService.cs" />
     <Compile Include="Helpers\PasswordHelper.cs" />
     <Compile Include="Helpers\TenantRouteConstraint.cs" />
     <Compile Include="Helpers\TenantFilterAttribute.cs" />
@@ -228,26 +242,44 @@
     <Compile Include="Helpers\ExternalUrlHelper.cs" />
     <Compile Include="Helpers\EncryptionHelper.cs" />
     <Compile Include="Filters\RoleBasedAuthorizationAttribute.cs" />
+    <Compile Include="Filters\ModuleAccessAttribute.cs" />
     <Compile Include="Filters\FreshSessionAttribute.cs" />
     <Compile Include="Filters\FreshPortalSecurityAttribute.cs" />
+    <Compile Include="Filters\AntiForgeryExceptionFilterAttribute.cs" />
     <Compile Include="Filters\AuditLogAttribute.cs" />
     <Compile Include="Controllers\AdminController.cs" />
     <Compile Include="Controllers\AdminController.MCP.cs" />
+    <Compile Include="Controllers\AdminController.MCP.Helpers.cs" />
     <Compile Include="Controllers\AdminController.Scoring.cs" />
+    <Compile Include="Controllers\AdminController.SecurityLogs.cs" />
+    <Compile Include="Controllers\AdminController.WorkflowHelpers.cs" />
+    <Compile Include="Controllers\AdminController.RoleManagement.cs" />
+    <Compile Include="Controllers\AdminController.UserManagementOperations.cs" />
     <Compile Include="Controllers\CompaniesController.cs" />
+    <Compile Include="Controllers\CompaniesController.CredentialContent.cs" />
+    <Compile Include="Controllers\CompaniesController.Operations.cs" />
     <Compile Include="Controllers\LicensesController.cs" />
     <Compile Include="Controllers\QuestionnaireController.cs" />
     <Compile Include="Controllers\DashboardController.cs" />
     <Compile Include="Controllers\HomeController.cs" />
     <Compile Include="Controllers\PositionsController.cs" />
+    <Compile Include="Controllers\PositionsController.Operations.cs" />
     <Compile Include="Controllers\ApplicationsController.cs" />
+    <Compile Include="Controllers\ApplicationsController.Helpers.cs" />
+    <Compile Include="Controllers\ApplicationsController.LinkedInImport.cs" />
     <Compile Include="Controllers\InterviewsController.cs" />
     <Compile Include="Controllers\OnboardingsController.cs" />
     <Compile Include="Controllers\ApplicantsController.cs" />
     <Compile Include="Controllers\DepartmentsController.cs" />
     <Compile Include="Controllers\AccountController.cs" />
+    <Compile Include="Controllers\AccountController.LoginFlows.cs" />
+    <Compile Include="Controllers\AccountController.PasswordResetFlows.cs" />
+    <Compile Include="Controllers\AccountController.RegistrationFlows.cs" />
+    <Compile Include="Controllers\AccountController.SafeRedirects.cs" />
+    <Compile Include="Controllers\AccountController.SecurityFlows.cs" />
     <Compile Include="Controllers\ReportGeneratorController.cs" />
     <Compile Include="Controllers\AdminController.UserManagement.cs" />
+    <Compile Include="Controllers\AdminController.Questionnaire.cs" />
     <Compile Include="Controllers\ReportsController.cs" />
     <Compile Include="Controllers\DebugController.cs" />
     <Compile Include="Controllers\CaptchaController.cs" />
@@ -339,6 +371,7 @@
     <Content Include="Views\Admin\ApplicationScoreDetails.cshtml" />
     <Content Include="Views\Admin\ScoringStatistics.cshtml" />
     <Content Include="Views\Admin\CreateUser.cshtml" />
+    <Content Include="Views\Admin\RoleManagement.cshtml" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Content\css\bootstrap.min.css" />

@@ -15,6 +15,9 @@ namespace HR.Web.Models
 
         public int Order { get; set; }
 
+        [Range(0, 100)]
+        public decimal? Weight { get; set; }
+
         public PositionQuestion()
         {
             IsRequired = true;

@@ -6,8 +6,9 @@ namespace HR.Web.Migrations
     {
         public Configuration()
         {
-            AutomaticMigrationsEnabled = true;
-            AutomaticMigrationDataLossAllowed = true;
+            // Safety: use explicit reviewed migrations only.
+            AutomaticMigrationsEnabled = false;
+            AutomaticMigrationDataLossAllowed = false;
         }
 
         protected override void Seed(HR.Web.Data.HrContext context)

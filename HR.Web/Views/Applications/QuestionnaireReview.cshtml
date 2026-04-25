@@ -18,17 +18,6 @@
             <dt class="col-sm-4">Applicant</dt>
             <dd class="col-sm-8">@Model.ApplicantName (@Model.ApplicantEmail)</dd>
 
-            <dt class="col-sm-4">CV uploaded</dt>
-            <dd class="col-sm-8">
-                @if (!string.IsNullOrEmpty(Model.ResumePath))
-                {
-                    @System.IO.Path.GetFileName(Model.ResumePath)
-                }
-                else
-                {
-                    <span class="text-muted">No file</span>
-                }
-            </dd>
         </dl>
 
         <!-- Dynamic Question Answers -->

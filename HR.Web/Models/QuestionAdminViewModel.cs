@@ -13,6 +13,7 @@ namespace HR.Web.Models
         // Question type/category: use one of the allowed values (e.g. "Text", "Choice", "Number", "Rating")
         public string Type { get; set; }
         public bool IsActive { get; set; }
+        public bool AllowMultipleChoices { get; set; }
 
         public QuestionAdminViewModel()
         {

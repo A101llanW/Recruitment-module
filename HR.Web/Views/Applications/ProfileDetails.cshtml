@@ -1,0 +1,493 @@
+@model HR.Web.ViewModels.ApplicantProfileViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Profile Details";
+    var tenantToken = ViewContext.RouteData.Values["tenant"] as string;
+    var linkedInImportAvailable = ViewBag.LinkedInImportAvailable is bool && (bool)ViewBag.LinkedInImportAvailable;
+    var linkedInImportHelpText = ViewBag.LinkedInImportHelpText as string;
+    var linkedInImportUnavailableReason = ViewBag.LinkedInImportUnavailableReason as string;
+    var linkedInImportedProfile = ViewBag.LinkedInImportedProfile as HR.Web.Services.LinkedInBasicProfileResult;
+    var employmentTypeOptions = new[]
+    {
+        "Full-time",
+        "Part-time",
+        "Contract",
+        "Internship",
+        "Temporary",
+        "Freelance"
+    };
+    var noticePeriodOptions = new[]
+    {
+        "Immediate",
+        "1 Week",
+        "2 Weeks",
+        "1 Month",
+        "2 Months",
+        "3 Months"
+    };
+    var educationDegreeOptions = new[]
+    {
+        "KCSE Certificate",
+        "KCSE Certificate + Diploma",
+        "Certificate",
+        "Diploma",
+        "Associate Degree",
+        "Bachelor's Degree",
+        "Master's Degree",
+        "PhD",
+        "Professional Qualification"
+    };
+
+    var isCustomEmploymentType = !string.IsNullOrWhiteSpace(Model.EmploymentType);
+    if (isCustomEmploymentType)
+    {
+        foreach (var employmentOption in employmentTypeOptions)
+        {
+            if (string.Equals(employmentOption, Model.EmploymentType, StringComparison.OrdinalIgnoreCase))
+            {
+                isCustomEmploymentType = false;
+                break;
+            }
+        }
+    }
+
+    var selectedEmploymentType = isCustomEmploymentType
+        ? "__custom__"
+        : (string.IsNullOrWhiteSpace(Model.EmploymentType) ? string.Empty : Model.EmploymentType);
+    var customEmploymentType = isCustomEmploymentType ? Model.EmploymentType : string.Empty;
+
+    var isCustomNoticePeriod = !string.IsNullOrWhiteSpace(Model.NoticePeriod);
+    if (isCustomNoticePeriod)
+    {
+        foreach (var noticeOption in noticePeriodOptions)
+        {
+            if (string.Equals(noticeOption, Model.NoticePeriod, StringComparison.OrdinalIgnoreCase))
+            {
+                isCustomNoticePeriod = false;
+                break;
+            }
+        }
+    }
+
+    var selectedNoticePeriod = isCustomNoticePeriod
+        ? "__custom__"
+        : (string.IsNullOrWhiteSpace(Model.NoticePeriod) ? string.Empty : Model.NoticePeriod);
+    var customNoticePeriod = isCustomNoticePeriod ? Model.NoticePeriod : string.Empty;
+
+    var isCustomEducationDegree = !string.IsNullOrWhiteSpace(Model.EducationDegree);
+    if (isCustomEducationDegree)
+    {
+        foreach (var degreeOption in educationDegreeOptions)
+        {
+            if (string.Equals(degreeOption, Model.EducationDegree, StringComparison.OrdinalIgnoreCase))
+            {
+                isCustomEducationDegree = false;
+                break;
+            }
+        }
+    }
+
+    var selectedEducationDegree = isCustomEducationDegree
+        ? "__custom__"
+        : (string.IsNullOrWhiteSpace(Model.EducationDegree) ? string.Empty : Model.EducationDegree);
+    var customEducationDegree = isCustomEducationDegree ? Model.EducationDegree : string.Empty;
+
+    Func<string, string> textOrDash = value => string.IsNullOrWhiteSpace(value) ? "-" : value;
+    Func<DateTime?, string> dateOrDash = value => value.HasValue ? value.Value.ToString("yyyy-MM-dd") : "-";
+}
+
+<style>
+    .required-field::after {
+        content: " *";
+        color: #dc3545;
+        font-weight: 700;
+    }
+</style>
+
+<div class="container mt-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">Applicant Profile</h4>
+        </div>
+        <div class="card-body">
+            @if (TempData["ErrorMessage"] != null)
+            {
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle mr-2"></i>@TempData["ErrorMessage"]
+                </div>
+            }
+
+            @if (TempData["SuccessMessage"] != null)
+            {
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle mr-2"></i>@TempData["SuccessMessage"]
+                </div>
+            }
+
+            <div class="alert alert-info">
+                Complete your profile for <strong>@Model.PositionTitle</strong> before continuing to the questionnaire.
+            </div>
+
+            <div class="card border-info mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap">
+                        <div class="pr-3">
+                            <h5 class="mb-1">
+                                <i class="fab fa-linkedin text-primary mr-2"></i>Import from LinkedIn
+                            </h5>
+                            <p class="text-muted mb-2">
+                                @(linkedInImportHelpText ?? "Import the free LinkedIn profile fields available to this application.")
+                            </p>
+
+                            @if (linkedInImportedProfile != null && linkedInImportedProfile.HasData)
+                            {
+                                <div class="small text-muted">
+                                    @if (!string.IsNullOrWhiteSpace(linkedInImportedProfile.FullName))
+                                    {
+                                        <div><strong>Name:</strong> @linkedInImportedProfile.FullName</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(linkedInImportedProfile.Email))
+                                    {
+                                        <div><strong>LinkedIn Email:</strong> @linkedInImportedProfile.Email</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(linkedInImportedProfile.ProfileUrl))
+                                    {
+                                        <div>
+                                            <strong>LinkedIn Profile:</strong>
+                                            <a href="@linkedInImportedProfile.ProfileUrl" target="_blank" rel="noopener noreferrer">@linkedInImportedProfile.ProfileUrl</a>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else if (!linkedInImportAvailable)
+                            {
+                                <div class="small text-muted">
+                                    @(string.IsNullOrWhiteSpace(linkedInImportUnavailableReason)
+                                        ? "LinkedIn import is not available right now."
+                                        : linkedInImportUnavailableReason)
+                                </div>
+                            }
+                        </div>
+
+                        @if (linkedInImportAvailable)
+                        {
+                            <a href="@Url.Action("StartLinkedInImport", "Applications", new { tenant = tenantToken, positionId = Model.PositionId })" class="btn btn-outline-primary mt-2 mt-md-0">
+                                <i class="fab fa-linkedin mr-2"></i>@(linkedInImportedProfile != null && linkedInImportedProfile.HasData ? "Re-import LinkedIn Data" : "Import LinkedIn Data")
+                            </a>
+                        }
+                    </div>
+
+                    <div class="small text-muted mt-3">
+                        LinkedIn's free profile APIs only return basic identity fields. Recent roles, education, skills, achievements, and availability still need to be completed manually before you can continue.
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-secondary mb-4">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">Current Profile Snapshot</h6>
+                    <small class="text-muted">Saved profile values are shown below. You can edit any field in the form.</small>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <tbody>
+                            <tr><th style="width: 35%;">Full Name</th><td>@textOrDash(Model.FullName)</td></tr>
+                            <tr><th>Email</th><td>@textOrDash(Model.Email)</td></tr>
+                            <tr><th>Phone</th><td>@textOrDash(Model.Phone)</td></tr>
+                            <tr><th>Location</th><td>@textOrDash(Model.Location)</td></tr>
+                            <tr><th>Total Years Experience</th><td>@(Model.TotalYearsExperience.HasValue ? Model.TotalYearsExperience.Value.ToString("0.##") : "-")</td></tr>
+                            @if (Model.IsTechnical)
+                            {
+                                <tr><th>Relevant Years Experience</th><td>@(Model.RelevantYearsExperience.HasValue ? Model.RelevantYearsExperience.Value.ToString("0.##") : "-")</td></tr>
+                            }
+                            <tr><th>Employment Type</th><td>@textOrDash(Model.EmploymentType)</td></tr>
+                            <tr><th>Notice Period / Availability</th><td>@textOrDash(Model.NoticePeriod)</td></tr>
+                            @if (Model.IsTechnical)
+                            {
+                                <tr><th>Core Technical Skills</th><td>@textOrDash(Model.Skills)</td></tr>
+                            }
+                            else
+                            {
+                                <tr><th>Core Competencies</th><td>@textOrDash(Model.Competencies)</td></tr>
+                            }
+                            <tr><th>Most Recent Company</th><td>@textOrDash(Model.MostRecentCompany)</td></tr>
+                            <tr><th>Most Recent Job Title</th><td>@textOrDash(Model.MostRecentTitle)</td></tr>
+                            <tr><th>Most Recent Start Date</th><td>@dateOrDash(Model.MostRecentStartDate)</td></tr>
+                            <tr><th>Most Recent End Date</th><td>@dateOrDash(Model.MostRecentEndDate)</td></tr>
+                            <tr><th>Highest Education</th><td>@textOrDash(Model.EducationDegree)</td></tr>
+                            <tr><th>Education Institution</th><td>@textOrDash(Model.EducationInstitution)</td></tr>
+                            <tr><th>Key Achievement</th><td>@textOrDash(Model.KeyAchievement)</td></tr>
+                            <tr><th>Certifications</th><td>@textOrDash(Model.Certifications)</td></tr>
+                            <tr><th>Portfolio / LinkedIn URL</th><td>@textOrDash(Model.PortfolioUrl)</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @using (Html.BeginForm("ProfileDetails", "Applications", FormMethod.Post))
+            {
+                @Html.AntiForgeryToken()
+                @Html.HiddenFor(m => m.PositionId)
+                @Html.HiddenFor(m => m.ApplicantId)
+                @Html.HiddenFor(m => m.IsTechnical)
+                @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+                <div class="small text-muted mb-3"><span class="text-danger">*</span> indicates required fields.</div>
+
+                <h5 class="mt-3">Contact</h5>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.FullName, new { @class = "required-field" })
+                        @Html.TextBoxFor(m => m.FullName, new { @class = "form-control", placeholder = "Full name" })
+                        @Html.ValidationMessageFor(m => m.FullName, "", new { @class = "text-danger" })
+                    </div>
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.Email, new { @class = "required-field" })
+                        @Html.TextBoxFor(m => m.Email, new { @class = "form-control", placeholder = "Email" })
+                        @Html.ValidationMessageFor(m => m.Email, "", new { @class = "text-danger" })
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.Phone, new { @class = "required-field" })
+                        @Html.TextBoxFor(m => m.Phone, new { @class = "form-control", placeholder = "Phone number" })
+                        @Html.ValidationMessageFor(m => m.Phone, "", new { @class = "text-danger" })
+                    </div>
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.Location, new { @class = "required-field" })
+                        @Html.TextBoxFor(m => m.Location, new { @class = "form-control", placeholder = "City, Country" })
+                        @Html.ValidationMessageFor(m => m.Location, "", new { @class = "text-danger" })
+                    </div>
+                </div>
+
+                <h5 class="mt-3">Experience</h5>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.TotalYearsExperience, new { @class = "required-field" })
+                        @Html.TextBoxFor(m => m.TotalYearsExperience, new { @class = "form-control", type = "number", step = "0.5", min = "0" })
+                        @Html.ValidationMessageFor(m => m.TotalYearsExperience, "", new { @class = "text-danger" })
+                    </div>
+                    @if (Model.IsTechnical)
+                    {
+                        <div class="form-group col-md-6">
+                            @Html.LabelFor(m => m.RelevantYearsExperience, new { @class = "required-field" })
+                            @Html.TextBoxFor(m => m.RelevantYearsExperience, new { @class = "form-control", type = "number", step = "0.5", min = "0" })
+                            @Html.ValidationMessageFor(m => m.RelevantYearsExperience, "", new { @class = "text-danger" })
+                        </div>
+                    }
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label class="required-field" for="employmentTypeSelect">Employment Type</label>
+                        <select id="employmentTypeSelect" name="employmentTypeSelect" class="form-control">
+                            <option value="">-- Select Employment Type --</option>
+                            @foreach (var employmentOption in employmentTypeOptions)
+                            {
+                                <option value="@employmentOption" @(string.Equals(selectedEmploymentType, employmentOption, StringComparison.OrdinalIgnoreCase) ? "selected" : "")>@employmentOption</option>
+                            }
+                            <option value="__custom__" @(selectedEmploymentType == "__custom__" ? "selected" : "")>Other (Custom)</option>
+                        </select>
+                        @Html.HiddenFor(m => m.EmploymentType, new { id = "EmploymentType" })
+                        <input type="text"
+                               id="employmentTypeCustom"
+                               name="employmentTypeCustom"
+                               class="form-control mt-2 @(selectedEmploymentType == "__custom__" ? "" : "d-none")"
+                               placeholder="Enter custom employment type"
+                               maxlength="50"
+                               value="@customEmploymentType" />
+                        @Html.ValidationMessageFor(m => m.EmploymentType, "", new { @class = "text-danger" })
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label class="required-field" for="noticePeriodSelect">Notice Period / Availability</label>
+                        <select id="noticePeriodSelect" name="noticePeriodSelect" class="form-control">
+                            <option value="">-- Select Notice Period --</option>
+                            @foreach (var noticeOption in noticePeriodOptions)
+                            {
+                                <option value="@noticeOption" @(string.Equals(selectedNoticePeriod, noticeOption, StringComparison.OrdinalIgnoreCase) ? "selected" : "")>@noticeOption</option>
+                            }
+                            <option value="__custom__" @(selectedNoticePeriod == "__custom__" ? "selected" : "")>Other (Custom)</option>
+                        </select>
+                        @Html.HiddenFor(m => m.NoticePeriod, new { id = "NoticePeriod" })
+                        <input type="text"
+                               id="noticePeriodCustom"
+                               name="noticePeriodCustom"
+                               class="form-control mt-2 @(selectedNoticePeriod == "__custom__" ? "" : "d-none")"
+                               placeholder="Enter custom notice period"
+                               maxlength="100"
+                               value="@customNoticePeriod" />
+                        @Html.ValidationMessageFor(m => m.NoticePeriod, "", new { @class = "text-danger" })
+                    </div>
+                </div>
+
+                <h5 class="mt-3">Most Recent Role</h5>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.MostRecentCompany, new { @class = "required-field" })
+                        @Html.TextBoxFor(m => m.MostRecentCompany, new { @class = "form-control", placeholder = "Company name" })
+                        @Html.ValidationMessageFor(m => m.MostRecentCompany, "", new { @class = "text-danger" })
+                    </div>
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.MostRecentTitle, new { @class = "required-field" })
+                        @Html.TextBoxFor(m => m.MostRecentTitle, new { @class = "form-control", placeholder = "Job title" })
+                        @Html.ValidationMessageFor(m => m.MostRecentTitle, "", new { @class = "text-danger" })
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.MostRecentStartDate, new { @class = "required-field" })
+                        @Html.TextBoxFor(m => m.MostRecentStartDate, new { @class = "form-control", type = "date" })
+                        @Html.ValidationMessageFor(m => m.MostRecentStartDate, "", new { @class = "text-danger" })
+                    </div>
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.MostRecentEndDate)
+                        @Html.TextBoxFor(m => m.MostRecentEndDate, new { @class = "form-control", type = "date" })
+                        @Html.ValidationMessageFor(m => m.MostRecentEndDate, "", new { @class = "text-danger" })
+                    </div>
+                </div>
+
+                <h5 class="mt-3">Second Most Recent Role (Optional)</h5>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.SecondMostRecentCompany)
+                        @Html.TextBoxFor(m => m.SecondMostRecentCompany, new { @class = "form-control", placeholder = "Company name" })
+                    </div>
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.SecondMostRecentTitle)
+                        @Html.TextBoxFor(m => m.SecondMostRecentTitle, new { @class = "form-control", placeholder = "Job title" })
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.SecondMostRecentStartDate)
+                        @Html.TextBoxFor(m => m.SecondMostRecentStartDate, new { @class = "form-control", type = "date" })
+                    </div>
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.SecondMostRecentEndDate)
+                        @Html.TextBoxFor(m => m.SecondMostRecentEndDate, new { @class = "form-control", type = "date" })
+                    </div>
+                </div>
+
+                <h5 class="mt-3">Skills & Education</h5>
+                if (Model.IsTechnical)
+                {
+                    <div class="form-group">
+                        @Html.LabelFor(m => m.Skills, new { @class = "required-field" })
+                        @Html.TextAreaFor(m => m.Skills, new { @class = "form-control", rows = 2, placeholder = "List your core technical skills" })
+                        @Html.ValidationMessageFor(m => m.Skills, "", new { @class = "text-danger" })
+                    </div>
+                }
+                else
+                {
+                    <div class="form-group">
+                        @Html.LabelFor(m => m.Competencies)
+                        @Html.TextAreaFor(m => m.Competencies, new { @class = "form-control", rows = 2, placeholder = "List your core competencies" })
+                        @Html.ValidationMessageFor(m => m.Competencies, "", new { @class = "text-danger" })
+                    </div>
+                }
+
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label class="required-field" for="educationDegreeSelect">Highest Education</label>
+                        <select id="educationDegreeSelect" name="educationDegreeSelect" class="form-control">
+                            <option value="">-- Select Education Degree --</option>
+                            @foreach (var degreeOption in educationDegreeOptions)
+                            {
+                                <option value="@degreeOption" @(string.Equals(selectedEducationDegree, degreeOption, StringComparison.OrdinalIgnoreCase) ? "selected" : "")>@degreeOption</option>
+                            }
+                            <option value="__custom__" @(selectedEducationDegree == "__custom__" ? "selected" : "")>Other (Custom)</option>
+                        </select>
+                        @Html.HiddenFor(m => m.EducationDegree, new { id = "EducationDegree" })
+                        <input type="text"
+                               id="educationDegreeCustom"
+                               name="educationDegreeCustom"
+                               class="form-control mt-2 @(selectedEducationDegree == "__custom__" ? "" : "d-none")"
+                               placeholder="Enter custom highest education"
+                               maxlength="200"
+                               value="@customEducationDegree" />
+                        @Html.ValidationMessageFor(m => m.EducationDegree, "", new { @class = "text-danger" })
+                    </div>
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.EducationInstitution, new { @class = "required-field" })
+                        @Html.TextBoxFor(m => m.EducationInstitution, new { @class = "form-control", placeholder = "Institution" })
+                        @Html.ValidationMessageFor(m => m.EducationInstitution, "", new { @class = "text-danger" })
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    @Html.LabelFor(m => m.KeyAchievement, new { @class = "required-field" })
+                    @Html.TextAreaFor(m => m.KeyAchievement, new { @class = "form-control", rows = 2, placeholder = "One or two major achievements" })
+                    @Html.ValidationMessageFor(m => m.KeyAchievement, "", new { @class = "text-danger" })
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.Certifications)
+                        @Html.TextBoxFor(m => m.Certifications, new { @class = "form-control", placeholder = "Certifications (optional)" })
+                    </div>
+                    <div class="form-group col-md-6">
+                        @Html.LabelFor(m => m.PortfolioUrl)
+                        @Html.TextBoxFor(m => m.PortfolioUrl, new { @class = "form-control", placeholder = "LinkedIn or portfolio URL (optional)" })
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="custom-control custom-checkbox">
+                        @Html.CheckBoxFor(m => m.WorkAuthorization, new { @class = "custom-control-input", id = "WorkAuthorization" })
+                        <label class="custom-control-label" for="WorkAuthorization">I am authorized to work in this location.</label>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="@Url.Action("Index", "Positions")" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Save Profile & Continue</button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            function initSelectableTextControl(selectId, hiddenId, customId) {
+                var select = document.getElementById(selectId);
+                var hidden = document.getElementById(hiddenId);
+                var custom = document.getElementById(customId);
+                if (!select || !hidden || !custom) {
+                    return;
+                }
+
+                function syncControl() {
+                    if (select.value === '__custom__') {
+                        custom.classList.remove('d-none');
+                        hidden.value = (custom.value || '').trim();
+                        return;
+                    }
+
+                    custom.classList.add('d-none');
+                    hidden.value = select.value || '';
+                }
+
+                select.addEventListener('change', syncControl);
+                custom.addEventListener('input', syncControl);
+                if (select.form) {
+                    select.form.addEventListener('submit', syncControl);
+                }
+
+                syncControl();
+            }
+
+            function initProfileSelectControls() {
+                initSelectableTextControl('employmentTypeSelect', 'EmploymentType', 'employmentTypeCustom');
+                initSelectableTextControl('noticePeriodSelect', 'NoticePeriod', 'noticePeriodCustom');
+                initSelectableTextControl('educationDegreeSelect', 'EducationDegree', 'educationDegreeCustom');
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initProfileSelectControls);
+                return;
+            }
+
+            initProfileSelectControls();
+        })();
+    </script>
+}

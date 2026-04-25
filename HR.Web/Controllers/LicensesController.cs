@@ -36,46 +36,15 @@ namespace HR.Web.Controllers
             {
                 var company = _uow.Companies.Get(id);
                 if (company == null)
+                {
                     return Json(new { success = false, message = "Company not found." });
+                }
 
                 var oldExpiry = company.LicenseExpiryDate;
-                var baseDate = company.LicenseExpiryDate ?? DateTime.Now;
-                DateTime newExpiry;
-
-                if (unit.ToLower() == "days")
-                {
-                    newExpiry = baseDate.AddDays(value);
-                }
-                else
-                {
-                    newExpiry = baseDate.AddMonths(value);
-                }
-                
+                var newExpiry = CalculateNewExpiry(oldExpiry, value, unit);
                 _tenantService.UpdateCompanyLicense(id, newExpiry, null);
-
-                // Create a permanent transaction record
-                var transaction = new LicenseTransaction
-                {
-                    CompanyId = id,
-                    ExecutedBy = User.Identity.Name,
-                    TransactionDate = DateTime.Now,
-                    PreviousExpiry = oldExpiry,
-                    NewExpiry = newExpiry,
-                    ExtendedByValue = value,
-                    ExtendedByUnit = unit,
-                    Notes = "License manually extended via Companies panel."
-                };
-                _uow.LicenseTransactions.Add(transaction);
-                _uow.Complete();
-
-                _auditService.LogAction(
-                    User.Identity.Name,
-                    "LICENSE_EXTENDED",
-                    "Company",
-                    id.ToString(),
-                    new { OldExpiry = oldExpiry },
-                    new { NewExpiry = newExpiry, ExtendedBy = value, Unit = unit }
-                );
+                RecordLicenseExtension(id, oldExpiry, newExpiry, value, unit);
+                LogLicenseExtension(id, oldExpiry, newExpiry, value, unit);
 
                 return Json(new { 
                     success = true, 
@@ -87,6 +56,46 @@ namespace HR.Web.Controllers
             {
                 return Json(new { success = false, message = ex.Message });
             }
+        }
+
+        private static DateTime CalculateNewExpiry(DateTime? currentExpiry, int value, string unit)
+        {
+            var baseDate = currentExpiry ?? DateTime.Now;
+            if (string.Equals(unit, "days", StringComparison.OrdinalIgnoreCase))
+            {
+                return baseDate.AddDays(value);
+            }
+
+            return baseDate.AddMonths(value);
+        }
+
+        private void RecordLicenseExtension(int companyId, DateTime? oldExpiry, DateTime newExpiry, int value, string unit)
+        {
+            var transaction = new LicenseTransaction
+            {
+                CompanyId = companyId,
+                ExecutedBy = User.Identity.Name,
+                TransactionDate = DateTime.Now,
+                PreviousExpiry = oldExpiry,
+                NewExpiry = newExpiry,
+                ExtendedByValue = value,
+                ExtendedByUnit = unit,
+                Notes = "License manually extended via Companies panel."
+            };
+
+            _uow.LicenseTransactions.Add(transaction);
+            _uow.Complete();
+        }
+
+        private void LogLicenseExtension(int companyId, DateTime? oldExpiry, DateTime newExpiry, int value, string unit)
+        {
+            _auditService.LogAction(
+                User.Identity.Name,
+                "LICENSE_EXTENDED",
+                "Company",
+                companyId.ToString(),
+                new { OldExpiry = oldExpiry },
+                new { NewExpiry = newExpiry, ExtendedBy = value, Unit = unit });
         }
 
         [HttpPost]

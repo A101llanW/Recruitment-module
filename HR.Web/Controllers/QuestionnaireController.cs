@@ -13,6 +13,7 @@ namespace HR.Web.Controllers
 {
     [Authorize(Roles = "Admin, HR, SuperAdmin")]
     [RoleBasedAuthorization("Admin", "HR")]
+    [ModuleAccess(RoleModuleCatalog.Questions)]
     public class QuestionnaireController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();
@@ -48,6 +49,7 @@ namespace HR.Web.Controllers
                     QuestionId = pq.Question.Id,
                     QuestionText = pq.Question.Text,
                     QuestionType = pq.Question.Type,
+                    AllowMultipleChoices = pq.Question.AllowMultipleChoices,
                     Order = pq.Order,
                     Options = GetQuestionOptions(pq.Question.Id, positionId),
                     IsRequired = true
@@ -120,13 +122,15 @@ namespace HR.Web.Controllers
                 _uow.Context.Set<PositionQuestion>().RemoveRange(existingAssignments);
 
                 // Add new assignments
+                var normalizedWeights = BuildEqualWeights(model.SelectedQuestionIds.Count);
                 for (int i = 0; i < model.SelectedQuestionIds.Count; i++)
                 {
                     var positionQuestion = new PositionQuestion
                     {
                         PositionId = model.Position.Id,
                         QuestionId = model.SelectedQuestionIds[i],
-                        Order = i + 1
+                        Order = i + 1,
+                        Weight = normalizedWeights[i]
                     };
                     _uow.Context.Set<PositionQuestion>().Add(positionQuestion);
                 }
@@ -192,6 +196,7 @@ namespace HR.Web.Controllers
         /// API endpoint for live preview
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult LivePreview(int positionId, List<int> questionIds)
         {
             try
@@ -238,19 +243,17 @@ namespace HR.Web.Controllers
         {
             try
             {
-                // Verify source position tenant
                 var sourcePosition = _uow.Positions.Get(sourcePositionId);
                 var targetPosition = _uow.Positions.Get(targetPositionId);
-                
-                if (sourcePosition == null || targetPosition == null) return HttpNotFound();
-                
-                var companyId = _tenantService.GetCurrentUserCompanyId();
-                if (companyId.HasValue && !_tenantService.IsSuperAdmin())
+                if (sourcePosition == null || targetPosition == null)
                 {
-                    if (sourcePosition.CompanyId != companyId.Value || targetPosition.CompanyId != companyId.Value)
-                    {
-                        return new HttpStatusCodeResult(403, "Access Denied");
-                    }
+                    return HttpNotFound();
+                }
+
+                var tenantAccessResult = EnsureCloneQuestionnaireTenantAccess(sourcePosition, targetPosition);
+                if (tenantAccessResult != null)
+                {
+                    return tenantAccessResult;
                 }
 
                 var sourceQuestions = _uow.Context.Set<PositionQuestion>()
@@ -258,22 +261,11 @@ namespace HR.Web.Controllers
                     .OrderBy(pq => pq.Order)
                     .ToList();
 
-                // Remove existing assignments from target
                 var existingTargetAssignments = _uow.Context.Set<PositionQuestion>()
                     .Where(pq => pq.PositionId == targetPositionId);
                 _uow.Context.Set<PositionQuestion>().RemoveRange(existingTargetAssignments);
 
-                // Clone assignments
-                for (int i = 0; i < sourceQuestions.Count; i++)
-                {
-                    var positionQuestion = new PositionQuestion
-                    {
-                        PositionId = targetPositionId,
-                        QuestionId = sourceQuestions[i].QuestionId,
-                        Order = i + 1
-                    };
-                    _uow.Context.Set<PositionQuestion>().Add(positionQuestion);
-                }
+                CloneQuestionAssignments(sourceQuestions, targetPositionId);
 
                 _uow.Complete();
                 return Json(new { success = true, message = "Questionnaire cloned successfully!" });
@@ -282,6 +274,63 @@ namespace HR.Web.Controllers
             {
                 return Json(new { success = false, message = ex.Message });
             }
+        }
+
+        private ActionResult EnsureCloneQuestionnaireTenantAccess(Position sourcePosition, Position targetPosition)
+        {
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            if (!companyId.HasValue || _tenantService.IsSuperAdmin())
+            {
+                return null;
+            }
+
+            if (sourcePosition.CompanyId == companyId.Value && targetPosition.CompanyId == companyId.Value)
+            {
+                return null;
+            }
+
+            return new HttpStatusCodeResult(403, "Access Denied");
+        }
+
+        private void CloneQuestionAssignments(IList<PositionQuestion> sourceQuestions, int targetPositionId)
+        {
+            for (var i = 0; i < sourceQuestions.Count; i++)
+            {
+                var positionQuestion = new PositionQuestion
+                {
+                    PositionId = targetPositionId,
+                    QuestionId = sourceQuestions[i].QuestionId,
+                    Order = i + 1,
+                    Weight = sourceQuestions[i].Weight
+                };
+                _uow.Context.Set<PositionQuestion>().Add(positionQuestion);
+            }
+        }
+
+        private static List<decimal> BuildEqualWeights(int questionCount)
+        {
+            var weights = new List<decimal>();
+            if (questionCount <= 0)
+            {
+                return weights;
+            }
+
+            if (questionCount == 1)
+            {
+                weights.Add(100m);
+                return weights;
+            }
+
+            var equalWeight = Math.Round(100m / questionCount, 2, MidpointRounding.AwayFromZero);
+            for (var i = 0; i < questionCount; i++)
+            {
+                weights.Add(equalWeight);
+            }
+
+            var difference = 100m - weights.Sum();
+            weights[weights.Count - 1] += difference;
+
+            return weights;
         }
     }
 
@@ -297,6 +346,7 @@ namespace HR.Web.Controllers
         public int QuestionId { get; set; }
         public string QuestionText { get; set; }
         public string QuestionType { get; set; }
+        public bool AllowMultipleChoices { get; set; }
         public int Order { get; set; }
         public List<QuestionOptionDisplay> Options { get; set; }
         public bool IsRequired { get; set; }
@@ -320,6 +370,7 @@ namespace HR.Web.Controllers
         public int QuestionId { get; set; }
         public string QuestionText { get; set; }
         public string QuestionType { get; set; }
+        public bool AllowMultipleChoices { get; set; }
         public int Order { get; set; }
         public List<QuestionOptionDisplay> Options { get; set; }
         public string Answer { get; set; }

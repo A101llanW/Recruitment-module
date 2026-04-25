@@ -11,6 +11,7 @@ namespace HR.Web.Controllers
 {
     [Authorize(Roles = "Admin, SuperAdmin")]
     [RoleBasedAuthorization("Admin")]
+    [ModuleAccess(RoleModuleCatalog.Reports)]
     public class ReportGeneratorController : Controller
     {
         private readonly ReportService _reportService = new ReportService();
@@ -23,6 +24,7 @@ namespace HR.Web.Controllers
 
         // POST: ReportGenerator/GenerateDirect
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult GenerateDirect(string reportType, string format = "csv")
         {
             try
@@ -50,6 +52,7 @@ namespace HR.Web.Controllers
 
         // POST: ReportGenerator/Preview
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult Preview(string reportType)
         {
             try

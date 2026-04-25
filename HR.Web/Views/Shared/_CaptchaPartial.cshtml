@@ -1,0 +1,521 @@
+@{
+    var captchaId = Guid.NewGuid().ToString();
+}
+
+<!-- Include jQuery directly -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<div class="modern-captcha-container" id="captchaContainer">
+    <div class="captcha-header">
+        <label class="captcha-label">Security Verification</label>
+        <p class="captcha-instruction">Please enter the characters you see in the image below</p>
+    </div>
+    
+    <div class="captcha-image-wrapper">
+        <div class="captcha-image-container">
+            <img id="captchaImage" src="" alt="CAPTCHA Image" class="captcha-img" />
+            <div class="captcha-loading" id="captchaLoading">
+                <div class="spinner"></div>
+                <span>Loading...</span>
+            </div>
+        </div>
+        <button type="button" id="refreshCaptcha" class="captcha-refresh-btn" title="Get new CAPTCHA">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+    </div>
+    
+    <div class="captcha-input-wrapper">
+        <div class="captcha-input-group">
+            <input type="text" 
+                   id="captchaInput" 
+                   name="captcha" 
+                   class="captcha-input" 
+                   placeholder="Enter characters" 
+                   maxlength="10" 
+                   autocomplete="off"
+                   required />
+            <div class="captcha-validation">
+                <span class="captcha-success" id="captchaSuccess">
+                    <i class="fas fa-check-circle"></i>
+                </span>
+                <span class="captcha-error" id="captchaError">
+                    <i class="fas fa-times-circle"></i>
+                </span>
+            </div>
+        </div>
+        <div class="captcha-feedback" id="captchaFeedback"></div>
+    </div>
+    
+    <input type="hidden" id="captchaId" name="captchaId" value="" />
+</div>
+
+<style>
+.modern-captcha-container {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 15px auto;
+    max-width: 400px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.modern-captcha-container:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.captcha-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.captcha-label {
+    display: block;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 8px;
+    font-size: 16px;
+}
+
+.captcha-instruction {
+    color: #6c757d;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.captcha-image-wrapper {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.captcha-image-container {
+    position: relative;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.captcha-img {
+    display: block;
+    width: 200px;
+    height: 80px;
+    border-radius: 6px;
+}
+
+.captcha-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 12px;
+    color: #6c757d;
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 5px;
+}
+
+@@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.captcha-refresh-btn {
+    position: absolute;
+    right: -45px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0,123,255,0.3);
+}
+
+.captcha-refresh-btn:hover {
+    background: #0056b3;
+    transform: translateY(-50%) rotate(180deg);
+    box-shadow: 0 4px 8px rgba(0,123,255,0.4);
+}
+
+.captcha-refresh-btn:active {
+    transform: translateY(-50%) rotate(180deg) scale(0.95);
+}
+
+.captcha-input-wrapper {
+    max-width: 300px;
+    margin: 0 auto;
+}
+
+.captcha-input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.captcha-input {
+    flex: 1;
+    padding: 12px 45px 12px 15px;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    text-align: center;
+    letter-spacing: 2px;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.captcha-input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+}
+
+.captcha-input.is-valid {
+    border-color: #28a745;
+}
+
+.captcha-input.is-invalid {
+    border-color: #dc3545;
+}
+
+.captcha-validation {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.captcha-success, .captcha-error {
+    display: none;
+    font-size: 18px;
+}
+
+.captcha-success {
+    color: #28a745;
+}
+
+.captcha-error {
+    color: #dc3545;
+}
+
+.captcha-feedback {
+    margin-top: 8px;
+    font-size: 13px;
+    text-align: center;
+    min-height: 20px;
+}
+
+.captcha-feedback.success {
+    color: #28a745;
+}
+
+.captcha-feedback.error {
+    color: #dc3545;
+}
+
+/* Responsive design */
+@@media (max-width: 480px) {
+    .modern-captcha-container {
+        padding: 15px;
+    }
+    
+    .captcha-img {
+        width: 160px;
+        height: 64px;
+    }
+    
+    .captcha-refresh-btn {
+        right: -40px;
+        width: 32px;
+        height: 32px;
+    }
+    
+    .captcha-input {
+        font-size: 14px;
+        padding: 10px 40px 10px 12px;
+    }
+}
+</style>
+
+<script>
+(function() {
+    var captchaId = '@Html.Raw(captchaId)';
+    var currentCaptchaId = '';
+    var isLoading = false;
+    
+    // DOM elements
+    console.log('Initializing CAPTCHA DOM elements...');
+    var $container = $('#captchaContainer');
+    var $image = $('#captchaImage');
+    var $loading = $('#captchaLoading');
+    var $input = $('#captchaInput');
+    var $hiddenId = $('#captchaId');
+    var $refreshBtn = $('#refreshCaptcha');
+    
+    console.log('DOM elements found:', {
+        container: $container.length,
+        image: $image.length,
+        loading: $loading.length,
+        input: $input.length,
+        hiddenId: $hiddenId.length,
+        refreshBtn: $refreshBtn.length
+    });
+    var $feedback = $('#captchaFeedback');
+    var $success = $('#captchaSuccess');
+    var $error = $('#captchaError');
+    
+    // Initialize
+    $(document).ready(function() {
+        loadCaptcha();
+        bindEvents();
+    });
+    
+    function bindEvents() {
+        $refreshBtn.on('click', function() {
+            if (!isLoading) {
+                loadCaptcha();
+            }
+        });
+        
+        $input.on('input', function() {
+            validateInput();
+        });
+        
+        $input.on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                validateCaptcha();
+            }
+        });
+    }
+    
+    function loadCaptcha() {
+        if (isLoading) return;
+        
+        console.log('Loading CAPTCHA...');
+        isLoading = true;
+        showLoading(true);
+        clearFeedback();
+        
+        // First test if controller is accessible
+        $.get('/Captcha/Test')
+            .done(function(testResponse) {
+                console.log('CaptchaController test:', testResponse);
+                if (testResponse && testResponse.success) {
+                    // Controller is working, try to generate CAPTCHA
+                    tryGenerateCaptcha();
+                } else {
+                    showError('CaptchaController test failed');
+                    isLoading = false;
+                    showLoading(false);
+                }
+            })
+            .fail(function(xhr, status, error) {
+                console.log('CaptchaController test failed:', status, error);
+                showError('CaptchaController not accessible');
+                isLoading = false;
+                showLoading(false);
+            });
+    }
+    
+    function tryGenerateCaptcha() {
+        // Try multiple possible endpoints
+        var endpoints = ['/Captcha/Generate', '/captcha/generate', '/Home/Captcha/Generate'];
+        
+        function tryEndpoint(index) {
+            if (index >= endpoints.length) {
+                console.log('All endpoints failed');
+                showError('Unable to load CAPTCHA. Please refresh the page.');
+                isLoading = false;
+                showLoading(false);
+                return;
+            }
+            
+            var endpoint = endpoints[index];
+            console.log('Trying endpoint:', endpoint);
+            
+            $.get(endpoint)
+                .done(function(response) {
+                    console.log('CAPTCHA response from', endpoint, ':', response);
+                    if (response && response.success) {
+                        currentCaptchaId = response.captchaId;
+                        $image.attr('src', 'data:image/png;base64,' + response.captchaImage);
+                        $hiddenId.val(response.captchaId);
+                        $input.val('').removeClass('is-valid is-invalid');
+                        console.log('CAPTCHA loaded successfully');
+                        isLoading = false;
+                        showLoading(false);
+                    } else {
+                        console.log('Invalid response from', endpoint, '- trying next');
+                        tryEndpoint(index + 1);
+                    }
+                })
+                .fail(function(xhr, status, error) {
+                    console.log('CAPTCHA load failed from', endpoint, ':', status, error);
+                    tryEndpoint(index + 1);
+                });
+        }
+        
+        tryEndpoint(0);
+    }
+    
+    function validateInput() {
+        var value = $input.val().trim();
+        
+        if (value.length === 0) {
+            $input.removeClass('is-valid is-invalid');
+            hideValidationIcons();
+            return;
+        }
+        
+        if (value.length >= 4) {
+            // Simple client-side validation
+            $input.removeClass('is-invalid').addClass('is-valid');
+            showValidationIcon('success');
+            clearFeedback();
+        } else {
+            $input.removeClass('is-valid').addClass('is-invalid');
+            showValidationIcon('error');
+            showFeedback('Please enter at least 4 characters', 'error');
+        }
+    }
+    
+    function validateCaptcha() {
+        var userInput = $input.val().trim();
+        
+        if (!userInput) {
+            showFeedback('Please enter the CAPTCHA characters', 'error');
+            return;
+        }
+        
+        if (!currentCaptchaId) {
+            showFeedback('CAPTCHA not loaded', 'error');
+            return;
+        }
+        
+        showLoading(true);
+        
+        $.post('/Captcha/Validate', {
+            captchaId: currentCaptchaId,
+            userInput: userInput
+        })
+        .done(function(response) {
+            if (response.success) {
+                showFeedback('CAPTCHA verified successfully!', 'success');
+                $input.addClass('is-valid').removeClass('is-invalid');
+                showValidationIcon('success');
+                
+                // Trigger form submission if in a form
+                var $form = $container.closest('form');
+                if ($form.length && !$form.valid || $form.valid()) {
+                    setTimeout(function() {
+                        $form.submit();
+                    }, 500);
+                }
+            } else {
+                showFeedback(response.message || 'Invalid CAPTCHA', 'error');
+                $input.addClass('is-invalid').removeClass('is-valid');
+                showValidationIcon('error');
+                
+                // Auto-refresh after error
+                setTimeout(function() {
+                    loadCaptcha();
+                }, 2000);
+            }
+        })
+        .fail(function() {
+            showFeedback('Network error during validation', 'error');
+        })
+        .always(function() {
+            showLoading(false);
+        });
+    }
+    
+    function showLoading(show) {
+        console.log('showLoading called with:', show);
+        console.log('DOM elements:', {
+            $loading: $loading.length,
+            $image: $image.length
+        });
+        
+        if (show) {
+            $loading.show();
+            $image.hide();
+        } else {
+            $loading.hide();
+            $image.show();
+        }
+    }
+    
+    function showFeedback(message, type) {
+        $feedback.text(message).removeClass('success error').addClass(type);
+    }
+    
+    function clearFeedback() {
+        $feedback.text('').removeClass('success error');
+    }
+    
+    function showValidationIcon(type) {
+        hideValidationIcons();
+        if (type === 'success') {
+            $success.show();
+        } else {
+            $error.show();
+        }
+    }
+    
+    function hideValidationIcons() {
+        $success.hide();
+        $error.hide();
+    }
+    
+    function showError(message) {
+        showFeedback(message, 'error');
+        showLoading(false);
+    }
+    
+    // Public API
+    window.CaptchaAPI = {
+        refresh: loadCaptcha,
+        validate: validateCaptcha,
+        getValue: function() {
+            return {
+                id: currentCaptchaId,
+                input: $input.val().trim()
+            };
+        },
+        isValid: function() {
+            return $input.hasClass('is-valid');
+        }
+    };
+})();
+</script>

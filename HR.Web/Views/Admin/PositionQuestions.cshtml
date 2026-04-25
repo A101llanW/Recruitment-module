@@ -1,12 +1,16 @@
-@model HR.Web.Controllers.PositionQuestionViewModel
+@model HR.Web.ViewModels.PositionQuestionViewModel
 @{
     ViewBag.Title = "Position Questions - " + Model.Position.Title;
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
+<div id="positionQuestionsAntiForgeryToken" style="display:none;">
+    @Html.AntiForgeryToken()
+</div>
+
 <div class="container mt-4">
     <h2>Question Assignment: @Model.Position.Title</h2>
-    <p class="text-muted">Assign and order questions for this position</p>
+    <p class="text-muted">Assign questions and distribute a shared 100-point budget across them.</p>
 
     @if (TempData["Message"] != null)
     {
@@ -18,24 +22,24 @@
             <div class="card">
                 <div class="card-header">
                     <h5>Available Questions</h5>
-                    <small>Drag questions to the right to assign them</small>
+                    <small>Assign questions to include them in scoring.</small>
                 </div>
-                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                <div class="card-body" style="max-height: 480px; overflow-y: auto;">
                     <div id="availableQuestions" class="question-list">
                         @foreach (var question in Model.AvailableQuestions)
                         {
                             var isAssigned = Model.AssignedQuestions.Any(aq => aq.QuestionId == question.Id);
-                            <div class="question-item @(isAssigned ? "assigned" : "")" 
-                                 data-question-id="@question.Id" 
+                            <div class="question-item @(isAssigned ? "assigned" : "")"
+                                 data-question-id="@question.Id"
                                  data-question-text="@question.Text"
                                  data-question-type="@question.Type">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
                                         <strong>@question.Text</strong>
-                                        <br/>
+                                        <br />
                                         <small class="text-muted">Type: @question.Type</small>
                                     </div>
-                                    <button class="btn btn-sm btn-primary assign-btn" 
+                                    <button class="btn btn-sm btn-primary assign-btn"
                                             @(isAssigned ? "disabled" : "")>
                                         @(isAssigned ? "Assigned" : "Assign")
                                     </button>
@@ -51,36 +55,76 @@
             <div class="card">
                 <div class="card-header">
                     <h5>Assigned Questions</h5>
-                    <small>Drag to reorder, click remove to unassign</small>
+                    <small>Drag to reorder. Move sliders to allocate question points.</small>
                 </div>
                 <div class="card-body">
+                    <div class="budget-panel mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>Point Budget</strong>
+                            <span id="budgetStatus" class="font-weight-bold">0 / 100 allocated</span>
+                        </div>
+                        <div class="progress mt-2">
+                            <div id="budgetProgress" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <small id="budgetHint" class="text-muted">Total is auto-balanced to 100 points.</small>
+                        <div class="text-right mt-2">
+                            <button id="redistributeWeights" type="button" class="btn btn-sm btn-outline-primary">Redistribute (Unlocked)</button>
+                        </div>
+                    </div>
+
+                    <div class="global-weight-panel mb-3">
+                        <label class="small text-muted mb-1" for="weightFocusQuestion">Quick Weight Slider</label>
+                        <select id="weightFocusQuestion" class="form-control form-control-sm mb-2" disabled>
+                            <option value="">Assign a question to start</option>
+                        </select>
+                        <div class="d-flex align-items-center">
+                            <input id="globalWeightSlider" type="range" min="0" max="100" step="1" class="flex-grow-1" value="0" disabled />
+                            <span id="globalWeightValue" class="weight-points ml-2">0 pts</span>
+                        </div>
+                        <small id="globalWeightHint" class="text-muted">Assign at least one question to activate the slider.</small>
+                    </div>
+
                     <div id="assignedQuestions" class="question-list sortable">
                         @if (Model.AssignedQuestions.Any())
                         {
-                            foreach (var pq in Model.AssignedQuestions)
+                            foreach (var pq in Model.AssignedQuestions.OrderBy(q => q.Order))
                             {
-                                <div class="question-item assigned" 
-                                     data-question-id="@pq.QuestionId" 
+                                var initialWeight = pq.Weight.HasValue ? Math.Round(pq.Weight.Value, 0) : 0m;
+                                <div class="question-item assigned"
+                                     data-question-id="@pq.QuestionId"
                                      data-question-text="@pq.Question.Text"
-                                     data-question-type="@pq.Question.Type">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div class="flex-grow-1">
-                                            <span class="drag-handle">⋮⋮</span>
+                                     data-question-type="@pq.Question.Type"
+                                     data-locked="false"
+                                     data-weight="@initialWeight.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="flex-grow-1 pr-2">
+                                            <span class="drag-handle">&#8942;&#8942;</span>
                                             <strong>@pq.Question.Text</strong>
-                                            <br/>
-                                            <small class="text-muted">Type: @pq.Question.Type | Order: @(pq.Order)</small>
+                                            <br />
+                                            <small class="text-muted question-meta">Type: @pq.Question.Type | Order: @(pq.Order)</small>
                                         </div>
-                                        <button class="btn btn-sm btn-danger remove-btn">Remove</button>
+                                        <div class="d-flex align-items-center">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary lock-btn mr-2" title="Lock weight">
+                                                <i class="fas fa-lock-open"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-danger remove-btn">Remove</button>
+                                        </div>
+                                    </div>
+                                    <div class="weight-editor mt-2">
+                                        <label class="small text-muted mb-1">Weight</label>
+                                        <div class="d-flex align-items-center">
+                                            <input type="range" min="0" max="100" step="1" class="weight-slider flex-grow-1" value="@initialWeight.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+                                            <input type="number" min="0" max="100" step="1" class="weight-input form-control form-control-sm ml-2" value="@initialWeight.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+                                            <span class="weight-points ml-2">@initialWeight.ToString("0", System.Globalization.CultureInfo.InvariantCulture) pts</span>
+                                        </div>
                                     </div>
                                 </div>
                             }
                         }
-                        else
-                        {
-                            <div class="text-muted text-center py-4">
-                                <em>No questions assigned yet. Drag questions from the left.</em>
-                            </div>
-                        }
+                    </div>
+
+                    <div id="assignedEmpty" class="text-muted text-center py-4 @(Model.AssignedQuestions.Any() ? "d-none" : "")">
+                        <em>No questions assigned yet. Assign one from the left to enable sliders.</em>
                     </div>
                 </div>
             </div>
@@ -89,7 +133,7 @@
 
     <div class="mt-4">
         <button id="saveAssignments" class="btn btn-success">Save Assignments</button>
-        <a href="@Url.Action("Details", "Positions", new { id = Model.PositionId })" class="btn btn-link">Back to Position</a>
+        <a href="@Url.Action("Index", "Positions")" class="btn btn-link">Back to Positions</a>
     </div>
 </div>
 
@@ -99,21 +143,21 @@
     border-radius: 4px;
     padding: 10px;
     margin-bottom: 8px;
-    background: white;
+    background: #fff;
     transition: all 0.2s ease;
 }
 
 .question-item:hover {
     border-color: #007bff;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.question-item.assigned {
-    opacity: 0.6;
+#availableQuestions .question-item.assigned {
+    opacity: 0.65;
     background: #f8f9fa;
 }
 
-.question-list.sortable .question-item {
+.question-list.sortable .question-item.assigned {
     cursor: move;
 }
 
@@ -123,7 +167,7 @@
     font-size: 12px;
 }
 
-.question-list.sortable .question-item:hover .drag-handle {
+.question-list.sortable .question-item.assigned:hover .drag-handle {
     color: #333;
 }
 
@@ -136,106 +180,543 @@
     opacity: 1;
     transform: rotate(2deg);
 }
+
+.weight-input {
+    width: 72px;
+}
+
+.weight-points {
+    width: 64px;
+    text-align: right;
+    font-weight: 600;
+}
+
+.budget-panel {
+    border: 1px solid #e1e1e1;
+    border-radius: 4px;
+    padding: 12px;
+    background: #fafafa;
+}
+
+.global-weight-panel {
+    border: 1px dashed #d5d5d5;
+    border-radius: 4px;
+    padding: 10px;
+    background: #fff;
+}
+
+.lock-btn {
+    width: 32px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.question-item.locked {
+    border-color: #ffc107;
+    background: #fffdf4;
+}
 </style>
 
 @section Scripts {
-<script src="~/Scripts/Sortable.min.js"></script>
-<script>
-$(document).ready(function() {
-    // Initialize sortable for assigned questions
-    var assignedQuestions = document.getElementById('assignedQuestions');
-    var sortable = Sortable.create(assignedQuestions, {
-        animation: 150,
-        ghostClass: 'sortable-ghost',
-        dragClass: 'sortable-drag',
-        handle: '.drag-handle',
-        onEnd: function() {
-            updateOrderNumbers();
-        }
-    });
+    <script src="~/Scripts/Sortable.min.js"></script>
+    <script>
+        $(function () {
+            var $assignedQuestions = $("#assignedQuestions");
+            var $assignedEmpty = $("#assignedEmpty");
+            var $focusSelect = $("#weightFocusQuestion");
+            var $globalSlider = $("#globalWeightSlider");
+            var $globalValue = $("#globalWeightValue");
+            var $globalHint = $("#globalWeightHint");
+            var $redistributeBtn = $("#redistributeWeights");
+            var positionId = @Model.PositionId;
 
-    // Handle assign button clicks
-    $('.assign-btn').click(function() {
-        var questionItem = $(this).closest('.question-item');
-        assignQuestion(questionItem);
-    });
+            var assignedQuestionsElement = document.getElementById("assignedQuestions");
+            if (window.Sortable && assignedQuestionsElement) {
+                Sortable.create(assignedQuestionsElement, {
+                    animation: 150,
+                    ghostClass: "sortable-ghost",
+                    dragClass: "sortable-drag",
+                    handle: ".drag-handle",
+                    onEnd: function () {
+                        refreshAssignedUi();
+                    }
+                });
+            }
 
-    // Handle remove button clicks
-    $(document).on('click', '.remove-btn', function() {
-        var questionItem = $(this).closest('.question-item');
-        removeQuestion(questionItem);
-    });
-
-    // Handle double-click to assign
-    $('#availableQuestions .question-item:not(.assigned)').dblclick(function() {
-        assignQuestion($(this));
-    });
-
-    function assignQuestion(questionItem) {
-        if (questionItem.hasClass('assigned')) return;
-
-        var clonedItem = questionItem.clone();
-        clonedItem.addClass('assigned');
-        clonedItem.find('.assign-btn').replaceWith('<button class="btn btn-sm btn-danger remove-btn">Remove</button>');
-        clonedItem.find('.d-flex').prepend('<span class="drag-handle">⋮⋮</span>');
-        
-        $('#assignedQuestions').append(clonedItem);
-        
-        questionItem.addClass('assigned');
-        questionItem.find('.assign-btn').prop('disabled', true).text('Assigned');
-        
-        updateOrderNumbers();
-    }
-
-    function removeQuestion(questionItem) {
-        var questionId = questionItem.data('question-id');
-        var originalItem = $('#availableQuestions').find('[data-question-id="' + questionId + '"]');
-        
-        originalItem.removeClass('assigned');
-        originalItem.find('.assign-btn').prop('disabled', false).text('Assign');
-        
-        questionItem.remove();
-        updateOrderNumbers();
-    }
-
-    function updateOrderNumbers() {
-        $('#assignedQuestions .question-item').each(function(index) {
-            $(this).find('.text-muted').html(function(_, html) {
-                return html.replace(/Order: \d+/, 'Order: ' + (index + 1));
+            $("#availableQuestions").on("click", ".assign-btn", function () {
+                var $questionItem = $(this).closest(".question-item");
+                assignQuestion($questionItem);
             });
-        });
-    }
 
-    // Save assignments
-    $('#saveAssignments').click(function() {
-        var assignments = [];
-        $('#assignedQuestions .question-item').each(function(index) {
-            assignments.push({
-                QuestionId: $(this).data('question-id'),
-                Order: index + 1
+            $("#availableQuestions").on("dblclick", ".question-item:not(.assigned)", function () {
+                assignQuestion($(this));
             });
-        });
 
-        $.ajax({
-            url: '@Url.Action("SavePositionQuestions", "Admin")',
-            type: 'POST',
-            data: {
-                positionId: @Model.PositionId,
-                assignments: assignments,
-                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
-            },
-            success: function(response) {
-                if (response.success) {
-                    location.reload();
-                } else {
-                    alert('Error: ' + response.message);
+            $assignedQuestions.on("click", ".remove-btn", function () {
+                removeQuestion($(this).closest(".question-item"));
+            });
+
+            $assignedQuestions.on("click", ".lock-btn", function () {
+                var $item = $(this).closest(".question-item");
+                toggleLock($item);
+            });
+
+            $assignedQuestions.on("input change", ".weight-slider", function () {
+                var $item = $(this).closest(".question-item");
+                onWeightChange($item, parseInt($(this).val(), 10));
+            });
+
+            $assignedQuestions.on("input change", ".weight-input", function () {
+                var $item = $(this).closest(".question-item");
+                var parsed = parseInt($(this).val(), 10);
+                if (isNaN(parsed)) {
+                    parsed = 0;
                 }
-            },
-            error: function() {
-                alert('Error saving assignments');
+                onWeightChange($item, parsed);
+            });
+
+            $focusSelect.on("change", function () {
+                syncGlobalSliderFromSelected();
+            });
+
+            $globalSlider.on("input change", function () {
+                var targetItem = getFocusedItem();
+                if (!targetItem.length) {
+                    return;
+                }
+                var parsed = parseInt($(this).val(), 10);
+                if (isNaN(parsed)) {
+                    parsed = 0;
+                }
+                onWeightChange(targetItem, parsed);
+                syncGlobalSliderFromSelected();
+            });
+
+            $("#saveAssignments").on("click", function () {
+                saveAssignments();
+            });
+
+            $redistributeBtn.on("click", function () {
+                redistributeUnlockedWeights();
+            });
+
+            initializeAssignedWeights();
+            refreshAssignedUi();
+
+            function initializeAssignedWeights() {
+                var $items = getAssignedItems();
+                if (!$items.length) {
+                    updateBudgetUi();
+                    return;
+                }
+
+                normalizeAllWeights();
+            }
+
+            function assignQuestion($availableItem) {
+                if ($availableItem.hasClass("assigned")) {
+                    return;
+                }
+
+                var questionId = parseInt($availableItem.data("question-id"), 10);
+                var questionText = ($availableItem.data("question-text") || "").toString();
+                var questionType = ($availableItem.data("question-type") || "").toString();
+
+                var $assignedItem = createAssignedItem(questionId, questionText, questionType, 0);
+                $assignedQuestions.append($assignedItem);
+
+                markAvailableItemAssigned(questionId, true);
+                normalizeAllWeights();
+                refreshAssignedUi();
+            }
+
+            function removeQuestion($assignedItem) {
+                var questionId = parseInt($assignedItem.data("question-id"), 10);
+                $assignedItem.remove();
+                markAvailableItemAssigned(questionId, false);
+
+                if (getAssignedItems().length) {
+                    normalizeAllWeights();
+                }
+
+                refreshAssignedUi();
+            }
+
+            function markAvailableItemAssigned(questionId, assigned) {
+                var $source = $("#availableQuestions .question-item[data-question-id='" + questionId + "']");
+                $source.toggleClass("assigned", assigned);
+                $source.find(".assign-btn").prop("disabled", assigned).text(assigned ? "Assigned" : "Assign");
+            }
+
+            function createAssignedItem(questionId, questionText, questionType, weight) {
+                var initialWeight = clamp(weight, 0, 100);
+                var $item = $("<div class='question-item assigned'></div>");
+                $item.attr("data-question-id", questionId);
+                $item.attr("data-question-text", questionText);
+                $item.attr("data-question-type", questionType);
+                $item.attr("data-locked", "false");
+
+                var $header = $("<div class='d-flex justify-content-between align-items-start'></div>");
+                var $content = $("<div class='flex-grow-1 pr-2'></div>");
+                var $handle = $("<span class='drag-handle'>&#8942;&#8942;</span>");
+                var $title = $("<strong></strong>").text(questionText);
+                var $meta = $("<small class='text-muted question-meta'></small>").text("Type: " + questionType);
+
+                $content.append($handle).append($title).append("<br />").append($meta);
+                $header.append($content);
+                var $actions = $("<div class='d-flex align-items-center'></div>");
+                $actions.append("<button type='button' class='btn btn-sm btn-outline-secondary lock-btn mr-2' title='Lock weight'><i class='fas fa-lock-open'></i></button>");
+                $actions.append("<button type='button' class='btn btn-sm btn-danger remove-btn'>Remove</button>");
+                $header.append($actions);
+
+                var $weightEditor = $("<div class='weight-editor mt-2'></div>");
+                $weightEditor.append("<label class='small text-muted mb-1'>Weight</label>");
+
+                var $weightRow = $("<div class='d-flex align-items-center'></div>");
+                var $slider = $("<input type='range' min='0' max='100' step='1' class='weight-slider flex-grow-1' />");
+                var $number = $("<input type='number' min='0' max='100' step='1' class='weight-input form-control form-control-sm ml-2' />");
+                var $points = $("<span class='weight-points ml-2'></span>");
+
+                $weightRow.append($slider).append($number).append($points);
+                $weightEditor.append($weightRow);
+
+                $item.append($header).append($weightEditor);
+                setItemWeight($item, initialWeight);
+
+                return $item;
+            }
+
+            function onWeightChange($item, desiredWeight) {
+                var $items = getAssignedItems();
+                if (!$items.length) {
+                    return;
+                }
+
+                if (isLocked($item)) {
+                    syncItemControls($item);
+                    return;
+                }
+
+                if ($items.length === 1) {
+                    setItemWeight($item, 100);
+                    refreshAssignedUi();
+                    return;
+                }
+
+                desiredWeight = clamp(Math.round(desiredWeight), 0, 100);
+                var currentWeight = getItemWeight($item);
+                var $others = $items.not($item);
+                var $lockedOthers = getLockedItems($others);
+                var lockedTotal = sumWeights($lockedOthers);
+                var $unlockedOthers = $others.not($lockedOthers);
+                var othersCurrentTotal = sumWeights($unlockedOthers);
+
+                var maxAllowed = clamp(100 - lockedTotal, 0, 100);
+                if (desiredWeight > maxAllowed) {
+                    desiredWeight = maxAllowed;
+                }
+
+                if (desiredWeight > currentWeight && othersCurrentTotal <= 0) {
+                    desiredWeight = currentWeight;
+                }
+
+                setItemWeight($item, desiredWeight);
+                var remainingBudget = 100 - desiredWeight - lockedTotal;
+                allocateWeights($unlockedOthers, remainingBudget);
+                refreshAssignedUi();
+            }
+
+            function normalizeAllWeights() {
+                var $items = getAssignedItems();
+                if (!$items.length) {
+                    return;
+                }
+
+                if ($items.length === 1) {
+                    setItemWeight($items.eq(0), 100);
+                    return;
+                }
+
+                var $locked = getLockedItems($items);
+                var lockedTotal = sumWeights($locked);
+                var $unlocked = $items.not($locked);
+                allocateWeights($unlocked, 100 - lockedTotal);
+            }
+
+            function allocateWeights($items, totalTarget) {
+                var count = $items.length;
+                if (!count) {
+                    return;
+                }
+
+                totalTarget = clamp(Math.round(totalTarget), 0, 100);
+                if (count === 1) {
+                    setItemWeight($items.eq(0), totalTarget);
+                    return;
+                }
+
+                var currentWeights = [];
+                var currentTotal = 0;
+                $items.each(function () {
+                    var value = getItemWeight($(this));
+                    currentWeights.push(value);
+                    currentTotal += value;
+                });
+
+                var baseWeights = [];
+                if (currentTotal <= 0) {
+                    var evenBase = Math.floor(totalTarget / count);
+                    var evenRemainder = totalTarget - (evenBase * count);
+                    for (var i = 0; i < count; i++) {
+                        baseWeights.push(evenBase + (i < evenRemainder ? 1 : 0));
+                    }
+                } else {
+                    var allocation = [];
+                    var allocated = 0;
+                    for (var j = 0; j < count; j++) {
+                        var exact = (currentWeights[j] / currentTotal) * totalTarget;
+                        var floored = Math.floor(exact);
+                        allocation.push({ index: j, value: floored, fraction: exact - floored });
+                        allocated += floored;
+                    }
+
+                    var remainder = totalTarget - allocated;
+                    allocation.sort(function (a, b) { return b.fraction - a.fraction; });
+                    for (var k = 0; k < remainder; k++) {
+                        allocation[k % allocation.length].value += 1;
+                    }
+                    allocation.sort(function (a, b) { return a.index - b.index; });
+                    baseWeights = allocation.map(function (entry) { return entry.value; });
+                }
+
+                $items.each(function (index) {
+                    setItemWeight($(this), baseWeights[index]);
+                });
+            }
+
+            function allocateEvenWeights($items, totalTarget) {
+                var count = $items.length;
+                if (!count) {
+                    return;
+                }
+
+                totalTarget = clamp(Math.round(totalTarget), 0, 100);
+                var base = Math.floor(totalTarget / count);
+                var remainder = totalTarget - (base * count);
+
+                $items.each(function (index) {
+                    setItemWeight($(this), base + (index < remainder ? 1 : 0));
+                });
+            }
+
+            function redistributeUnlockedWeights() {
+                var $items = getAssignedItems();
+                if (!$items.length) {
+                    return;
+                }
+
+                var $locked = getLockedItems($items);
+                var $unlocked = $items.not($locked);
+                if (!$unlocked.length) {
+                    refreshAssignedUi();
+                    return;
+                }
+
+                var lockedTotal = sumWeights($locked);
+                var unlockedTarget = clamp(100 - lockedTotal, 0, 100);
+                allocateEvenWeights($unlocked, unlockedTarget);
+                refreshAssignedUi();
+            }
+
+            function refreshAssignedUi() {
+                var $items = getAssignedItems();
+                if ($items.length) {
+                    $assignedEmpty.addClass("d-none");
+                } else {
+                    $assignedEmpty.removeClass("d-none");
+                }
+
+                $items.each(function (index) {
+                    var $item = $(this);
+                    var questionType = ($item.data("question-type") || "").toString();
+                    $item.find(".question-meta").text("Type: " + questionType + " | Order: " + (index + 1));
+                    setItemWeight($item, getItemWeight($item));
+                    syncItemControls($item);
+                });
+
+                updateBudgetUi();
+                refreshFocusQuestionOptions();
+
+                var unlockedCount = $items.filter(function () {
+                    return !isLocked($(this));
+                }).length;
+                $redistributeBtn.prop("disabled", !$items.length || unlockedCount === 0);
+            }
+
+            function updateBudgetUi() {
+                var allocated = sumWeights(getAssignedItems());
+                var percent = clamp(allocated, 0, 100);
+                var remaining = 100 - allocated;
+                var remainingText = remaining === 0 ? "balanced" : (remaining > 0 ? (remaining + " remaining") : (Math.abs(remaining) + " over"));
+                $("#budgetStatus").text(allocated + " / 100 allocated (" + remainingText + ")");
+                $("#budgetProgress").css("width", percent + "%");
+            }
+
+            function saveAssignments() {
+                var assignments = [];
+                getAssignedItems().each(function (index) {
+                    assignments.push({
+                        QuestionId: parseInt($(this).data("question-id"), 10),
+                        Order: index + 1,
+                        Weight: getItemWeight($(this))
+                    });
+                });
+
+                var antiForgeryToken = $("#positionQuestionsAntiForgeryToken input[name='__RequestVerificationToken']").val();
+
+                $.ajax({
+                    url: "@Url.Action("SavePositionQuestions", "Admin")",
+                    type: "POST",
+                    data: {
+                        positionId: positionId,
+                        assignments: assignments,
+                        __RequestVerificationToken: antiForgeryToken
+                    },
+                    success: function (response) {
+                        if (response && response.success) {
+                            location.reload();
+                        } else {
+                            alert("Error: " + (response && response.message ? response.message : "Unable to save assignments."));
+                        }
+                    },
+                    error: function () {
+                        alert("Error saving assignments.");
+                    }
+                });
+            }
+
+            function getAssignedItems() {
+                return $assignedQuestions.children(".question-item.assigned");
+            }
+
+            function isLocked($item) {
+                return $item.data("locked") === true || $item.data("locked") === "true";
+            }
+
+            function getLockedItems($items) {
+                return $items.filter(function () {
+                    return isLocked($(this));
+                });
+            }
+
+            function toggleLock($item) {
+                var locked = !isLocked($item);
+                $item.data("locked", locked);
+                syncItemControls($item);
+                normalizeAllWeights();
+                refreshAssignedUi();
+            }
+
+            function syncItemControls($item) {
+                var locked = isLocked($item);
+                $item.toggleClass("locked", locked);
+                $item.find(".weight-slider, .weight-input").prop("disabled", locked);
+                var $icon = $item.find(".lock-btn i");
+                if ($icon.length) {
+                    $icon.toggleClass("fa-lock", locked);
+                    $icon.toggleClass("fa-lock-open", !locked);
+                }
+            }
+
+            function refreshFocusQuestionOptions() {
+                var previousSelection = parseInt($focusSelect.val(), 10);
+                var $items = getAssignedItems();
+
+                $focusSelect.empty();
+
+                if (!$items.length) {
+                    $focusSelect.append($("<option></option>").attr("value", "").text("Assign a question to start"));
+                    $focusSelect.prop("disabled", true);
+                    $globalSlider.prop("disabled", true).val(0);
+                    $globalValue.text("0 pts");
+                    $globalHint.text("Assign at least one question to activate the slider.");
+                    return;
+                }
+
+                $items.each(function (index) {
+                    var $item = $(this);
+                    var id = parseInt($item.data("question-id"), 10);
+                    var questionText = ($item.data("question-text") || "").toString();
+                    var label = (index + 1) + ". " + questionText;
+                    if (label.length > 80) {
+                        label = label.substring(0, 77) + "...";
+                    }
+                    $focusSelect.append($("<option></option>").attr("value", id).text(label));
+                });
+
+                var hasPreviousSelection = !isNaN(previousSelection) && $focusSelect.find("option[value='" + previousSelection + "']").length > 0;
+                $focusSelect.val(hasPreviousSelection ? previousSelection : $focusSelect.find("option:first").val());
+                $focusSelect.prop("disabled", false);
+                $globalSlider.prop("disabled", false);
+                $globalHint.text("Pick a question above, then drag the slider to set its points.");
+                syncGlobalSliderFromSelected();
+            }
+
+            function getFocusedItem() {
+                var selectedId = parseInt($focusSelect.val(), 10);
+                if (isNaN(selectedId)) {
+                    return $();
+                }
+                return getAssignedItems().filter(function () {
+                    return parseInt($(this).data("question-id"), 10) === selectedId;
+                }).first();
+            }
+
+            function syncGlobalSliderFromSelected() {
+                var targetItem = getFocusedItem();
+                if (!targetItem.length) {
+                    $globalSlider.val(0);
+                    $globalValue.text("0 pts");
+                    return;
+                }
+                var value = getItemWeight(targetItem);
+                $globalSlider.val(value);
+                $globalValue.text(value + " pts");
+            }
+
+            function getItemWeight($item) {
+                var raw = $item.attr("data-weight");
+                var value = parseInt(raw, 10);
+                if (isNaN(value)) {
+                    value = parseInt($item.find(".weight-input").val(), 10);
+                }
+                if (isNaN(value)) {
+                    value = 0;
+                }
+                return clamp(value, 0, 100);
+            }
+
+            function setItemWeight($item, value) {
+                var rounded = clamp(Math.round(value), 0, 100);
+                $item.attr("data-weight", rounded);
+                $item.find(".weight-slider").val(rounded);
+                $item.find(".weight-input").val(rounded);
+                $item.find(".weight-points").text(rounded + " pts");
+            }
+
+            function sumWeights($items) {
+                var total = 0;
+                $items.each(function () {
+                    total += getItemWeight($(this));
+                });
+                return total;
+            }
+
+            function clamp(value, min, max) {
+                return Math.max(min, Math.min(max, value));
             }
         });
-    });
-});
-</script>
+    </script>
 }

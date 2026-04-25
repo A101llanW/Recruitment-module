@@ -23,28 +23,34 @@
                 m => m.Type,
                 new SelectList(typeOptions, Model.Type),
                 "-- Select question type --",
-                new { @class = "form-control" })
+                new { @class = "form-control", id = "questionType" })
+        </div>
+        <div class="form-check mb-3" id="multiChoiceToggle">
+            @Html.CheckBoxFor(m => m.AllowMultipleChoices, new { @class = "form-check-input", id = "allowMultipleChoices" })
+            <label class="form-check-label" for="allowMultipleChoices">Allow multiple selections</label>
         </div>
         <div class="form-check mb-3">
             @Html.CheckBoxFor(m => m.IsActive, new { @class = "form-check-input" })
             @Html.LabelFor(m => m.IsActive, new { @class = "form-check-label" })
         </div>
 
-        <h4>Options/Choices</h4>
-        <table class="table table-bordered">
+        <div id="optionsSection">
+            <h4>Options/Choices</h4>
+            <table class="table table-bordered">
             <thead><tr><th>Text</th><th>Points</th><th>Action</th></tr></thead>
             <tbody id="optionsTable">
             @for (int i = 0; i < Model.Options.Count; i++) {
                 <tr>
-                    <td>@Html.TextBoxFor(m => m.Options[i].Text, new { @class = "form-control" })</td>
-                    <td>@Html.TextBoxFor(m => m.Options[i].Points, new { @class = "form-control", type = "number", step = "0.01" })</td>
-                    <td><button type="button" class="btn btn-danger btn-sm" onclick="removeOption(this)">Remove</button></td>
+                    <td>@Html.TextBoxFor(m => m.Options[i].Text, new { @class = "form-control option-input" })</td>
+                    <td>@Html.TextBoxFor(m => m.Options[i].Points, new { @class = "form-control option-input", type = "number", step = "0.01" })</td>
+                    <td><button type="button" class="btn btn-danger btn-sm option-remove" onclick="removeOption(this)">Remove</button></td>
                     @Html.HiddenFor(m => m.Options[i].Id)
                 </tr>
             }
             </tbody>
-        </table>
-        <button id="addOptionBtn" type="button" class="btn btn-secondary mb-3">Add Option</button>
+            </table>
+            <button id="addOptionBtn" type="button" class="btn btn-secondary mb-3">Add Option</button>
+        </div>
 
         <div>
             <button type="submit" class="btn btn-success">Save</button>
@@ -63,9 +69,47 @@ function removeOption(btn) {
 document.getElementById('addOptionBtn').addEventListener('click', function() {
     var table = document.getElementById('optionsTable');
     var row = document.createElement('tr');
-    row.innerHTML = `<td><input class='form-control' type='text' name='Options[${table.rows.length}].Text' /></td><td><input class='form-control' type='number' step='0.01' name='Options[${table.rows.length}].Points' /></td><td><button type='button' class='btn btn-danger btn-sm' onclick='removeOption(this)'>Remove</button></td><input type='hidden' name='Options[${table.rows.length}].Id' value='' />`;
+    row.innerHTML = `<td><input class='form-control option-input' type='text' name='Options[${table.rows.length}].Text' /></td><td><input class='form-control option-input' type='number' step='0.01' name='Options[${table.rows.length}].Points' /></td><td><button type='button' class='btn btn-danger btn-sm option-remove' onclick='removeOption(this)'>Remove</button></td><input type='hidden' name='Options[${table.rows.length}].Id' value='' />`;
     table.appendChild(row);
 });
+
+function toggleOptionsForType() {
+    var type = (document.getElementById('questionType').value || '').toLowerCase();
+    var isChoice = type === 'choice';
+    var section = document.getElementById('optionsSection');
+    var addBtn = document.getElementById('addOptionBtn');
+    var inputs = document.querySelectorAll('.option-input');
+    var removeBtns = document.querySelectorAll('.option-remove');
+    var multiToggle = document.getElementById('multiChoiceToggle');
+    var multiInput = document.getElementById('allowMultipleChoices');
+
+    if (section) {
+        section.style.display = isChoice ? '' : 'none';
+    }
+
+    if (addBtn) {
+        addBtn.style.display = isChoice ? '' : 'none';
+    }
+
+    if (multiToggle) {
+        multiToggle.style.display = isChoice ? '' : 'none';
+    }
+
+    if (!isChoice && multiInput) {
+        multiInput.checked = false;
+    }
+
+    inputs.forEach(function(input) {
+        input.disabled = !isChoice;
+    });
+
+    removeBtns.forEach(function(btn) {
+        btn.disabled = !isChoice;
+    });
+}
+
+document.getElementById('questionType').addEventListener('change', toggleOptionsForType);
+toggleOptionsForType();
 </script>
 }
 

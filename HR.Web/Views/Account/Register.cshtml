@@ -6,17 +6,7 @@
     bool isSuperAdmin = ViewBag.IsSuperAdmin != null && (bool)ViewBag.IsSuperAdmin;
 }
 
-<style>
-    .mfa-setup-wrapper {
-        max-width: 1200px !important;
-        width: 95% !important;
-    }
-    .col-md-5, .col-md-12 {
-        max-width: 100% !important;
-    }
-</style>
-
-<div class="row justify-content-center mfa-setup-wrapper animate-fadeIn">
+<div class="row justify-content-center mfa-setup-wrapper mfa-setup-wrapper-wide animate-fadeIn">
     <div class="col-md-12">
         <div class="mfa-card shadow-lg border-0">
             <div class="mfa-header text-white bg-primary p-4 rounded-top">
@@ -161,7 +151,7 @@
 
                 <div class="mt-4 text-center">
                     <p class="text-muted small mb-0 font-weight-bold">Already have an account?</p>
-                    <a href="@Url.Action("Login")" class="btn btn-outline-primary btn-sm rounded-pill font-weight-bold px-4 py-2 mt-2 shadow-sm" style="border-width: 2px;">
+                    <a href="@Url.Action("Login", "Account", new { returnUrl = ViewBag.ReturnUrl as string })" class="btn btn-outline-primary btn-sm rounded-pill font-weight-bold px-4 py-2 mt-2 shadow-sm" style="border-width: 2px;">
                         <i class="fas fa-sign-in-alt mr-1"></i> Back to Login
                     </a>
                 </div>

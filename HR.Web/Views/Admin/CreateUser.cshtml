@@ -1,4 +1,5 @@
 @model HR.Web.ViewModels.CreateUserViewModel
+@using System.Collections.Generic
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "New User";
@@ -91,22 +92,22 @@
             <div class="card-header-system d-flex justify-content-between align-items-center">
                 <div>
                     <h4><i class="fas fa-user-plus mr-2 text-primary"></i> Manual User Provisioning</h4>
-                    <p class="text-muted small mb-0 mt-1">Direct account creation for organizational members</p>
+                    <p class="text-muted small mb-0 mt-1">Create a user and optionally assign a custom company role template.</p>
                 </div>
                 <a href="@Url.Action("GlobalUserManagement")" class="btn btn-outline-secondary btn-sm">
                     <i class="fas fa-arrow-left mr-1"></i> Back to List
                 </a>
             </div>
-            
+
             <div class="form-section">
                 @using (Html.BeginForm("CreateUser", "Admin", FormMethod.Post, new { autocomplete = "off" }))
                 {
                     @Html.AntiForgeryToken()
-                    
+
                     if (!ViewData.ModelState.IsValid)
                     {
                         <div class="alert alert-danger">
-                            <i class="fas fa-exclamation-circle mr-2"></i> <strong>Validation Failure:</strong> Please correct the errors below.
+                            <i class="fas fa-exclamation-circle mr-2"></i><strong>Validation Failure:</strong> Please correct the errors below.
                             @Html.ValidationSummary(true, "", new { @class = "small mt-2" })
                         </div>
                     }
@@ -171,21 +172,15 @@
 
                     <div class="row">
                         <div class="col-md-6 mb-4">
-                            <label class="info-label" for="Role">System Authority Level</label>
-                            @{
-                                var roles = new List<SelectListItem> {
-                                    new SelectListItem { Value = "Client", Text = "Standard Access (Client)" },
-                                    new SelectListItem { Value = "Admin", Text = "Elevated Control (Admin)" },
-                                    new SelectListItem { Value = "SuperAdmin", Text = "Master Authority (SuperAdmin)" }
-                                };
-                            }
-                            @Html.DropDownListFor(m => m.Role, roles, "-- Select Role --", new { @class = "form-control custom-select" })
-                            @Html.ValidationMessageFor(m => m.Role, "", new { @class = "text-danger small" })
+                            <label class="info-label" for="SelectedRoleKey">System Authority Level</label>
+                            @Html.DropDownListFor(m => m.SelectedRoleKey, Model.AvailableRoleOptions ?? new List<SelectListItem>(), "-- Select Role --", new { @class = "form-control custom-select", id = "SelectedRoleKey" })
+                            @Html.ValidationMessageFor(m => m.SelectedRoleKey, "", new { @class = "text-danger small" })
+                            <span class="text-muted small">Custom roles inherit admin sign-in but only see the modules granted to them.</span>
                         </div>
                         <div class="col-md-6 mb-4">
                             <label class="info-label" for="CompanyId">Organization Assignment</label>
                             @Html.DropDownListFor(m => m.CompanyId, new SelectList(Model.Companies, "Id", "Name"), "System (Global/No Company)", new { @class = "form-control custom-select" })
-                            <span class="text-muted small">Leave empty for Global/Super Admins.</span>
+                            <span class="text-muted small">SuperAdmin accounts stay global. Custom roles require a company assignment.</span>
                         </div>
                     </div>
 
@@ -198,7 +193,7 @@
                                 </label>
                             </div>
                             <p class="text-muted small mt-2 mb-0 ml-4">
-                                Highly recommended for manually provisioned accounts to ensure the user sets their own private credential upon login.
+                                Recommended for manually provisioned accounts so each user sets their own secret.
                             </p>
                         </div>
                     </div>
@@ -240,17 +235,24 @@
             setupToggle('toggleConfirmPassword', 'confirmPasswordInput', 'toggleConfirmIcon');
 
             $('form').submit(function(e) {
-                var role = $('#Role').val();
-                
-                if (role === 'Admin') {
-                    if (!confirm('SECURITY ALERT: You are granting Elevated Control (Admin) to this user. This allows them to manage company data. Continue?')) {
+                var selectedRole = $('#SelectedRoleKey').val() || '';
+                var companyId = $('#CompanyId').val();
+
+                if (selectedRole.indexOf('custom:') === 0 && !companyId) {
+                    alert('Custom roles can only be assigned to users that belong to a company.');
+                    e.preventDefault();
+                    return false;
+                }
+
+                if (selectedRole === 'builtin:Admin') {
+                    if (!confirm('SECURITY ALERT: You are granting full company admin access to this user. Continue?')) {
                         e.preventDefault();
                         return false;
                     }
                 }
 
-                if (role === 'SuperAdmin') {
-                    if (!confirm('CRITICAL SECURITY ALERT: You are granting MASTER AUTHORITY (SuperAdmin). This user will have UNRESTRICTED access to ALL organizations and system settings. Continue?')) {
+                if (selectedRole === 'builtin:SuperAdmin') {
+                    if (!confirm('CRITICAL SECURITY ALERT: You are granting MASTER AUTHORITY (SuperAdmin). This user will have unrestricted access to all organizations and system settings. Continue?')) {
                         e.preventDefault();
                         return false;
                     }

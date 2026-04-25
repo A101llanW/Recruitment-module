@@ -2,8 +2,9 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Departments";
+    var canManageDepartments = ViewBag.CanManageDepartments != null ? (bool)ViewBag.CanManageDepartments : false;
 }
-@if (User != null && User.Identity != null && (User.IsInRole("Admin") || User.IsInRole("HR")))
+@if (canManageDepartments || (User != null && User.Identity != null && User.IsInRole("HR")))
 {
     <a class="btn btn-primary mb-2" href="@Url.Action("Create")">New Department</a>
 }
@@ -33,7 +34,7 @@
                 }
             </td>
             <td>
-                @if (User != null && User.Identity != null && (User.IsInRole("Admin") || User.IsInRole("HR")))
+                @if (canManageDepartments || (User != null && User.Identity != null && User.IsInRole("HR")))
                 {
                     @Html.ActionLink("Details","Details", new { id=item.Id }, new { @class="btn btn-sm btn-info"}) @:|
                     @Html.ActionLink("Edit","Edit", new { id=item.Id }, new { @class="btn btn-sm btn-secondary"}) @:|
@@ -44,5 +45,4 @@
     }
     </tbody>
 </table>
-
 

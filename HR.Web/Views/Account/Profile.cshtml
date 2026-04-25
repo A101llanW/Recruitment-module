@@ -44,11 +44,25 @@
             </div>
 
             <div class="p-5">
+                @if (TempData["SuccessMessage"] != null)
+                {
+                    <div class="alert alert-success shadow-sm">
+                        <i class="fas fa-check-circle mr-2"></i>@TempData["SuccessMessage"]
+                    </div>
+                }
+
+                @if (TempData["ErrorMessage"] != null)
+                {
+                    <div class="alert alert-danger shadow-sm">
+                        <i class="fas fa-exclamation-circle mr-2"></i>@TempData["ErrorMessage"]
+                    </div>
+                }
 
 
                 @using (Html.BeginForm("Profile", "Account", FormMethod.Post, new { id = "profileForm" }))
                 {
                     @Html.AntiForgeryToken()
+                    @Html.ValidationSummary(true, "", new { @class = "alert alert-danger" })
                     
                     <div class="section-title mb-4 pb-2 border-bottom d-flex align-items-center">
                         <i class="fas fa-info-circle text-primary mr-2"></i>
@@ -85,6 +99,144 @@
                             @Html.ValidationMessageFor(m => m.Phone, "", new { @class = "text-danger small" })
                         </div>
                     </div>
+
+                    if (Model.IsTenantClientUser)
+                    {
+                        <div class="section-title mt-4 mb-4 pb-2 border-bottom d-flex align-items-center">
+                            <i class="fas fa-file-alt text-primary mr-2"></i>
+                            <h4 class="h5 mb-0 font-weight-bold">CV Profile</h4>
+                        </div>
+
+                        <div class="alert alert-light border mb-4">
+                            Fill in the details below to keep your CV profile ready. These fields prefill your application profile when you apply for positions in this tenant.
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Location</label>
+                                @Html.TextBoxFor(m => m.Location, new { @class = "form-control profile-input", placeholder = "City, Country" })
+                                @Html.ValidationMessageFor(m => m.Location, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-3 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Total Years Experience</label>
+                                @Html.TextBoxFor(m => m.TotalYearsExperience, new { @class = "form-control profile-input", type = "number", min = "0", step = "0.5", placeholder = "0" })
+                                @Html.ValidationMessageFor(m => m.TotalYearsExperience, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-3 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Relevant Years Experience</label>
+                                @Html.TextBoxFor(m => m.RelevantYearsExperience, new { @class = "form-control profile-input", type = "number", min = "0", step = "0.5", placeholder = "0" })
+                                @Html.ValidationMessageFor(m => m.RelevantYearsExperience, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Employment Type</label>
+                                @Html.TextBoxFor(m => m.EmploymentType, new { @class = "form-control profile-input", placeholder = "Full-time, Contract, Internship..." })
+                                @Html.ValidationMessageFor(m => m.EmploymentType, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Notice Period / Availability</label>
+                                @Html.TextBoxFor(m => m.NoticePeriod, new { @class = "form-control profile-input", placeholder = "Immediate, 1 Month..." })
+                                @Html.ValidationMessageFor(m => m.NoticePeriod, "", new { @class = "text-danger small" })
+                            </div>
+                        </div>
+
+                        <div class="section-title mt-2 mb-4 pb-2 border-bottom d-flex align-items-center">
+                            <i class="fas fa-briefcase text-primary mr-2"></i>
+                            <h4 class="h5 mb-0 font-weight-bold">Experience</h4>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Most Recent Company</label>
+                                @Html.TextBoxFor(m => m.MostRecentCompany, new { @class = "form-control profile-input", placeholder = "Company name" })
+                                @Html.ValidationMessageFor(m => m.MostRecentCompany, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Most Recent Job Title</label>
+                                @Html.TextBoxFor(m => m.MostRecentTitle, new { @class = "form-control profile-input", placeholder = "Job title" })
+                                @Html.ValidationMessageFor(m => m.MostRecentTitle, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Most Recent Start Date</label>
+                                @Html.TextBoxFor(m => m.MostRecentStartDate, "{0:yyyy-MM-dd}", new { @class = "form-control profile-input", type = "date" })
+                                @Html.ValidationMessageFor(m => m.MostRecentStartDate, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Most Recent End Date</label>
+                                @Html.TextBoxFor(m => m.MostRecentEndDate, "{0:yyyy-MM-dd}", new { @class = "form-control profile-input", type = "date" })
+                                @Html.ValidationMessageFor(m => m.MostRecentEndDate, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Second Most Recent Company</label>
+                                @Html.TextBoxFor(m => m.SecondMostRecentCompany, new { @class = "form-control profile-input", placeholder = "Company name" })
+                                @Html.ValidationMessageFor(m => m.SecondMostRecentCompany, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Second Most Recent Job Title</label>
+                                @Html.TextBoxFor(m => m.SecondMostRecentTitle, new { @class = "form-control profile-input", placeholder = "Job title" })
+                                @Html.ValidationMessageFor(m => m.SecondMostRecentTitle, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Second Most Recent Start Date</label>
+                                @Html.TextBoxFor(m => m.SecondMostRecentStartDate, "{0:yyyy-MM-dd}", new { @class = "form-control profile-input", type = "date" })
+                                @Html.ValidationMessageFor(m => m.SecondMostRecentStartDate, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Second Most Recent End Date</label>
+                                @Html.TextBoxFor(m => m.SecondMostRecentEndDate, "{0:yyyy-MM-dd}", new { @class = "form-control profile-input", type = "date" })
+                                @Html.ValidationMessageFor(m => m.SecondMostRecentEndDate, "", new { @class = "text-danger small" })
+                            </div>
+                        </div>
+
+                        <div class="section-title mt-2 mb-4 pb-2 border-bottom d-flex align-items-center">
+                            <i class="fas fa-graduation-cap text-primary mr-2"></i>
+                            <h4 class="h5 mb-0 font-weight-bold">Skills And Education</h4>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Core Skills</label>
+                                @Html.TextAreaFor(m => m.Skills, 4, 1, new { @class = "form-control profile-input", placeholder = "Key technical or functional skills" })
+                                @Html.ValidationMessageFor(m => m.Skills, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Core Competencies</label>
+                                @Html.TextAreaFor(m => m.Competencies, 4, 1, new { @class = "form-control profile-input", placeholder = "Communication, leadership, teamwork..." })
+                                @Html.ValidationMessageFor(m => m.Competencies, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Highest Education</label>
+                                @Html.TextBoxFor(m => m.EducationDegree, new { @class = "form-control profile-input", placeholder = "Bachelor's Degree, Diploma..." })
+                                @Html.ValidationMessageFor(m => m.EducationDegree, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Education Institution</label>
+                                @Html.TextBoxFor(m => m.EducationInstitution, new { @class = "form-control profile-input", placeholder = "Institution name" })
+                                @Html.ValidationMessageFor(m => m.EducationInstitution, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Certifications</label>
+                                @Html.TextAreaFor(m => m.Certifications, 3, 1, new { @class = "form-control profile-input", placeholder = "Any certifications or professional qualifications" })
+                                @Html.ValidationMessageFor(m => m.Certifications, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Portfolio or LinkedIn URL</label>
+                                @Html.TextBoxFor(m => m.PortfolioUrl, new { @class = "form-control profile-input", placeholder = "https://..." })
+                                @Html.ValidationMessageFor(m => m.PortfolioUrl, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-12 mb-4">
+                                <label class="small font-weight-bold text-uppercase text-muted mb-2 d-block">Key Achievement</label>
+                                @Html.TextAreaFor(m => m.KeyAchievement, 4, 1, new { @class = "form-control profile-input", placeholder = "Highlight a measurable achievement or standout contribution" })
+                                @Html.ValidationMessageFor(m => m.KeyAchievement, "", new { @class = "text-danger small" })
+                            </div>
+                            <div class="col-12 mb-4">
+                                <div class="custom-control custom-checkbox pt-2">
+                                    @Html.CheckBoxFor(m => m.WorkAuthorization, new { @class = "custom-control-input" })
+                                    <label class="custom-control-label font-weight-bold text-muted text-uppercase small" for="WorkAuthorization">I have the required work authorization</label>
+                                </div>
+                                @Html.ValidationMessageFor(m => m.WorkAuthorization, "", new { @class = "text-danger small" })
+                            </div>
+                        </div>
+                    }
 
                     <div class="section-title mt-4 mb-4 pb-2 border-bottom d-flex align-items-center">
                         <i class="fas fa-lock text-primary mr-2"></i>

@@ -18,12 +18,14 @@ namespace HR.Web.Controllers
     /// </summary>
     [Authorize(Roles = "Admin, SuperAdmin")]
     [RoleBasedAuthorization("Admin", "SuperAdmin")]
+    [ModuleAccess]
     public partial class AdminController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();
         private readonly SecurityService _securityService = new SecurityService();
         private readonly AuditService _auditService = new AuditService();
         private readonly TenantService _tenantService = new TenantService();
+        private readonly RolePermissionService _rolePermissionService = new RolePermissionService();
 
         // GET: Admin/Index - Default admin dashboard
         public ActionResult Index()
@@ -31,6 +33,11 @@ namespace HR.Web.Controllers
             if (_tenantService.IsActualSuperAdmin() || User.IsInRole("SuperAdmin"))
             {
                 return RedirectToAction("GlobalUserManagement");
+            }
+
+            if (_rolePermissionService.HasCurrentUserCustomAdminRole())
+            {
+                return RedirectToAction("Index", "Dashboard");
             }
 
             // Redirect to user management as the default admin page
@@ -52,84 +59,7 @@ namespace HR.Web.Controllers
         /// </summary>
         public ActionResult CandidateRankings(int? positionId)
         {
-            // Get all applications with related data
-            var applicationsQuery = _uow.Applications.GetAll(
-                a => a.Applicant,
-                a => a.Position,
-                a => a.Position.Department
-            ).AsQueryable();
-
-            // Apply tenant filter
-            applicationsQuery = _tenantService.ApplyTenantFilter(applicationsQuery);
-
-            var applications = applicationsQuery.ToList();
-
-            // Filter by position if specified
-            if (positionId.HasValue)
-            {
-                applications = applications.Where(a => a.PositionId == positionId.Value).ToList();
-            }
-
-            // Group applications by position
-            var candidatesByPosition = new Dictionary<Position, List<CandidateApplicationScore>>();
-            
-            foreach (var application in applications)
-            {
-                if (application.Position == null) continue;
-
-                // Always calculate a fresh questionnaire-based score so candidates
-                // are differentiated by their actual answers
-                var questionnaireScore = 0m;
-                try
-                {
-                    questionnaireScore = _scoringService.CalculateApplicationScore(application);
-                }
-                catch
-                {
-                    // If scoring fails for any reason, fall back to stored score
-                    questionnaireScore = application.Score ?? 0;
-                }
-
-                if (!candidatesByPosition.ContainsKey(application.Position))
-                {
-                    candidatesByPosition[application.Position] = new List<CandidateApplicationScore>();
-                }
-
-                var candidateScore = new CandidateApplicationScore
-                {
-                    ApplicationId = application.Id,
-                    CandidateName = application.Applicant != null ? application.Applicant.FullName : "Unknown",
-                    CandidateEmail = application.Applicant != null ? application.Applicant.Email : "",
-                    TotalScore = questionnaireScore,
-                    QuestionnaireScore = questionnaireScore,
-                    MaxQuestionnaireScore = 100,
-                    AppliedDate = application.AppliedOn,
-                    Status = application.Status ?? "Pending",
-                    PositionId = application.PositionId
-                };
-
-                candidatesByPosition[application.Position].Add(candidateScore);
-            }
-
-            // Sort candidates within each position by score (descending)
-            foreach (var position in candidatesByPosition.Keys.ToList())
-            {
-                candidatesByPosition[position] = candidatesByPosition[position]
-                    .OrderByDescending(c => c.TotalScore)
-                    .ToList();
-            }
-
-            // Get all positions for the filter dropdown
-            var allPositions = _uow.Positions.GetAll(p => p.Department).ToList();
-
-            var viewModel = new CandidateRankingsViewModel
-            {
-                Positions = allPositions,
-                CandidatesByPosition = candidatesByPosition
-            };
-
-            ViewBag.SelectedPositionId = positionId;
-            return View(viewModel);
+            return HandleCandidateRankings(positionId);
         }
 
         /// <summary>
@@ -215,6 +145,7 @@ namespace HR.Web.Controllers
                     Text = q.Text,
                     Type = q.Type,
                     IsActive = q.IsActive,
+                    AllowMultipleChoices = q.AllowMultipleChoices,
                     Options = q.QuestionOptions.Select(o => new QuestionOptionVM
                     {
                         Id = o.Id,
@@ -244,6 +175,7 @@ namespace HR.Web.Controllers
                 Text = question.Text,
                 Type = question.Type,
                 IsActive = question.IsActive,
+                AllowMultipleChoices = question.AllowMultipleChoices,
                 Options = question.QuestionOptions.Select(o => new QuestionOptionVM
                 {
                     Id = o.Id,
@@ -259,104 +191,7 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult EditQuestion(QuestionAdminViewModel model)
         {
-            if (!ModelState.IsValid)
-                return View(model);
-
-            Question q;
-            var isUpdate = model.Id.HasValue;
-            var oldValues = new object();
-            
-            try
-            {
-                if (isUpdate)
-                {
-                    q = _uow.Questions.Get(model.Id.Value);
-                    if (q == null) return HttpNotFound();
-                    
-                    // Store old values for audit
-                    oldValues = new { Text = q.Text, Type = q.Type, IsActive = q.IsActive };
-                    
-                    q.Text = model.Text;
-                    q.Type = model.Type;
-                    q.IsActive = model.IsActive;
-                    _uow.Questions.Update(q);
-                    var oldOptions = _uow.Context.Set<QuestionOption>().Where(o => o.QuestionId == q.Id);
-                    _uow.Context.Set<QuestionOption>().RemoveRange(oldOptions);
-                }
-
-                else
-                {
-                    // create new
-                    q = new Question
-                    {
-                        Text = model.Text,
-                        Type = model.Type,
-                        IsActive = model.IsActive
-                    };
-                    
-                    // Assign company
-                    var companyId = _tenantService.GetCurrentUserCompanyId();
-                    if (companyId.HasValue)
-                    {
-                        q.CompanyId = companyId.Value;
-                    }
-                    
-                    _uow.Questions.Add(q);
-                    _uow.Complete();
-                }
-                _uow.Complete(); // Save question so it exists for option linking
-
-                // Add options (allowed for any question type)
-                var options = new List<object>();
-                if (model.Options != null)
-                {
-                    foreach (var opt in model.Options)
-                    {
-                        if (!string.IsNullOrWhiteSpace(opt.Text))
-                        {
-                            var newOpt = new QuestionOption
-                            {
-                                QuestionId = q.Id,
-                                Text = opt.Text,
-                                Points = opt.Points
-                            };
-                            _uow.Context.Set<QuestionOption>().Add(newOpt);
-                            options.Add(new { Text = opt.Text, Points = opt.Points });
-                        }
-                    }
-                }
-                _uow.Complete();
-                
-                // Log the action
-                var newValues = new { 
-                    Text = q.Text, 
-                    Type = q.Type, 
-                    IsActive = q.IsActive,
-                    Options = options 
-                };
-                
-                if (isUpdate)
-                {
-                    _auditService.LogUpdate(User.Identity.Name, "Admin", q.Id.ToString(), oldValues, newValues);
-                }
-                else
-                {
-                    _auditService.LogCreate(User.Identity.Name, "Admin", q.Id.ToString(), newValues);
-                }
-                
-                TempData["Message"] = "Question saved.";
-            }
-            catch (Exception ex)
-            {
-                var action = isUpdate ? "UPDATE" : "CREATE";
-                _auditService.LogAction(User.Identity.Name, action, "Admin", 
-                    model.Id.HasValue ? model.Id.Value.ToString() : "new", 
-                    wasSuccessful: false, errorMessage: ex.Message);
-                
-                TempData["Error"] = "Error saving question: " + ex.Message;
-            }
-            
-            return RedirectToAction("Questions");
+            return HandleEditQuestion(model);
         }
 
         [HttpPost]
@@ -564,73 +399,7 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult AddToSampleQuestions(string questionsJson)
         {
-            try
-            {
-                // This method is similar to AddGeneratedQuestionsToSample but works with existing questions
-                var questions = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(questionsJson);
-                
-                // Check for duplicates in the existing sample questions
-                var existingQuestionsQuery = _uow.Questions.GetAll().AsQueryable();
-                existingQuestionsQuery = _tenantService.ApplyTenantFilter(existingQuestionsQuery);
-                var existingQuestions = existingQuestionsQuery.ToList();
-                var duplicates = new List<object>();
-                var newQuestions = new List<object>();
-
-                foreach (var question in questions)
-                {
-                    var questionText = question["text"].ToString();
-                    var questionType = question["type"].ToString();
-
-                    // Check for similar questions
-                    var similarQuestion = existingQuestions.FirstOrDefault(eq => 
-                        eq.Text.ToLower().Contains(questionText.ToLower().Substring(0, Math.Min(50, questionText.Length))) ||
-                        questionText.ToLower().Contains(eq.Text.ToLower().Substring(0, Math.Min(50, eq.Text.Length))));
-
-                    if (similarQuestion != null)
-                    {
-                        duplicates.Add(new
-                        {
-                            id = question["id"],
-                            text = questionText,
-                            type = questionType,
-                            existingQuestionId = similarQuestion.Id,
-                            existingQuestionText = similarQuestion.Text,
-                            existingQuestionType = similarQuestion.Type
-                        });
-                    }
-                    else
-                    {
-                        newQuestions.Add(new
-                        {
-                            questionData = question
-                        });
-                    }
-                }
-
-                if (duplicates.Any())
-                {
-                    return Json(new { 
-                        success = true, 
-                        requiresDecision = true,
-                        duplicates = duplicates, 
-                        newQuestions = newQuestions,
-                        message = string.Format("Found {0} potential duplicates. Please review before adding.", duplicates.Count)
-                    });
-                }
-                else
-                {
-                    // No duplicates, just add them to sample (they're already in the main question bank)
-                    return Json(new { 
-                        success = true, 
-                        requiresDecision = false,
-                        message = string.Format("All {0} questions are already in the question bank.", questions.Count)
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                return Json(new { success = false, message = "Error adding questions to sample: " + ex.Message });
-            }
+            return HandleAddToSampleQuestions(questionsJson);
         }
 
 
@@ -643,7 +412,7 @@ namespace HR.Web.Controllers
         [Authorize(Roles = "Admin, SuperAdmin")]
         public ActionResult UserManagement()
         {
-            var usersQuery = _uow.Users.GetAll().AsQueryable();
+            var usersQuery = _uow.Users.GetAll(u => u.RoleDefinition, u => u.Company).AsQueryable();
             usersQuery = _tenantService.ApplyTenantFilter(usersQuery);
             var users = usersQuery.ToList();
             var userViewModels = new List<UserManagementViewModel>();
@@ -668,12 +437,14 @@ namespace HR.Web.Controllers
                     LastName = user.LastName,
                     UserName = user.UserName,
                     Email = user.Email,
-                    Role = user.Role,
+                    Role = _rolePermissionService.GetDisplayRole(user),
+                    BaseRole = user.Role,
 
                     Phone = _uow.Applicants.GetAll() // Applicants are already tenant filtered if TenantService is applied, but here we query by email
                         .Where(a => a.Email == user.Email)
                         .Select(a => a.Phone)
                         .FirstOrDefault(),
+                    CompanyName = user.Company != null ? user.Company.Name : "System",
                     LastLoginDate = lastLogin != null ? (DateTime?)lastLogin.Timestamp : null,
                     LastLoginIP = lastLogin != null ? lastLogin.IPAddress : null,
                     IsLocked = isLocked,
@@ -701,7 +472,9 @@ namespace HR.Web.Controllers
             var viewModel = new CreateUserViewModel
             {
                 Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList(),
-                RequirePasswordChange = true
+                RequirePasswordChange = true,
+                AvailableRoleOptions = BuildAvailableRoleOptions(true, null, null, false, null),
+                SelectedRoleKey = "builtin:Client"
             };
 
             return View(viewModel);
@@ -717,86 +490,7 @@ namespace HR.Web.Controllers
         [ValidateInput(false)]
         public ActionResult CreateUser(CreateUserViewModel model)
         {
-            if (!_tenantService.IsActualSuperAdmin())
-            {
-                return new HttpStatusCodeResult(403, "Access Denied");
-            }
-
-            if (!ModelState.IsValid)
-            {
-                model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
-                return View(model);
-            }
-
-            // Check if username already exists within the same company
-            var existingUserInCompany = _uow.Users.GetAll().FirstOrDefault(u => 
-                u.UserName.Equals(model.UserName, StringComparison.OrdinalIgnoreCase) && 
-                u.CompanyId == model.CompanyId);
-
-            if (existingUserInCompany != null)
-            {
-                ModelState.AddModelError("UserName", "Username already exists within this company.");
-                model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
-                return View(model);
-            }
-
-            // Check if email already exists
-            var existingEmail = _uow.Users.GetAll().FirstOrDefault(u => u.Email.Equals(model.Email, StringComparison.OrdinalIgnoreCase));
-            if (existingEmail != null)
-            {
-                ModelState.AddModelError("Email", "Email already exists.");
-                model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
-                return View(model);
-            }
-
-            try
-            {
-                var user = new User
-                {
-                    FirstName = model.FirstName,
-                    LastName = model.LastName,
-                    UserName = model.UserName,
-                    Email = model.Email,
-                    Role = model.Role,
-                    PasswordHash = PasswordHelper.HashPassword(model.Password),
-                    CompanyId = model.CompanyId,
-                    RequirePasswordChange = model.RequirePasswordChange
-                };
-
-                _uow.Users.Add(user);
-                _uow.Complete();
-
-                if (model.Role == "Client")
-                {
-                    var applicant = new Applicant
-                    {
-                        FullName = string.Format("{0} {1}", model.FirstName, model.LastName),
-                        Email = model.Email,
-                        Phone = model.Phone,
-                        CompanyId = model.CompanyId
-                    };
-                    _uow.Applicants.Add(applicant);
-                    _uow.Complete();
-                }
-
-                _auditService.LogAction(
-                    User.Identity.Name,
-                    "USER_CREATED",
-                    "UserManagement",
-                    user.Id.ToString(),
-                    true,
-                    string.Format("Created user {0} ({1}) with role {2}", user.UserName, user.Email, user.Role)
-                );
-
-                TempData["SuccessMessage"] = string.Format("User {0} has been created successfully.", user.UserName);
-                return RedirectToAction("GlobalUserManagement");
-            }
-            catch (Exception ex)
-            {
-                ModelState.AddModelError("", "Error: " + ex.Message);
-                model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
-                return View(model);
-            }
+            return HandleCreateUser(model);
         }
 
         /// <summary>
@@ -806,7 +500,7 @@ namespace HR.Web.Controllers
         [Authorize(Roles = "Admin, SuperAdmin")]
         public ActionResult UpdateUserRole(int id)
         {
-            var user = _uow.Users.Get(id);
+            var user = _uow.Users.GetAll(u => u.RoleDefinition).FirstOrDefault(u => u.Id == id);
             if (user == null)
             {
                 return HttpNotFound();
@@ -831,12 +525,22 @@ namespace HR.Web.Controllers
                     .Select(a => a.Phone)
                     .FirstOrDefault(),
                 CurrentRole = user.Role,
+                CurrentRoleDisplay = _rolePermissionService.GetDisplayRole(user),
                 NewRole = user.Role,
+                SelectedRoleKey = BuildRoleSelectionKey(user),
                 CompanyId = user.CompanyId,
                 CurrentCompanyId = user.CompanyId,
+                CurrentRoleDefinitionId = user.RoleDefinitionId,
+                IsCurrentFullAdmin = _rolePermissionService.IsFullCompanyAdmin(user),
                 RequirePasswordChange = user.RequirePasswordChange,
                 CurrentRequirePasswordChange = user.RequirePasswordChange,
-                Companies = _tenantService.IsActualSuperAdmin() ? _uow.Companies.GetAll().OrderBy(c => c.Name).ToList() : null
+                Companies = _tenantService.IsActualSuperAdmin() ? _uow.Companies.GetAll().OrderBy(c => c.Name).ToList() : null,
+                AvailableRoleOptions = BuildAvailableRoleOptions(
+                    _tenantService.IsActualSuperAdmin(),
+                    _tenantService.GetCurrentUserCompanyId(),
+                    user.CompanyId,
+                    false,
+                    BuildRoleSelectionKey(user))
             };
 
             return View(viewModel);
@@ -851,203 +555,7 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult UpdateUserRole(UserRoleUpdateViewModel model)
         {
-            if (!ModelState.IsValid)
-            {
-                if (_tenantService.IsActualSuperAdmin())
-                {
-                    model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
-                }
-                return View(model);
-            }
-
-            var user = _uow.Users.Get(model.UserId);
-            if (user == null)
-            {
-                return HttpNotFound();
-            }
-
-            // Check for duplicate Username
-            if (user.UserName != model.UserName)
-            {
-                var existingUser = _uow.Users.GetAll().FirstOrDefault(u => u.UserName == model.UserName && u.Id != user.Id);
-                if (existingUser != null)
-                {
-                    ModelState.AddModelError("UserName", "This username is already taken.");
-                }
-            }
-
-            // Check for duplicate Email
-            if (user.Email != model.Email)
-            {
-                var existingUser = _uow.Users.GetAll().FirstOrDefault(u => u.Email == model.Email && u.Id != user.Id);
-                if (existingUser != null)
-                {
-                    ModelState.AddModelError("Email", "This email address is already in use.");
-                }
-            }
-
-            if (!ModelState.IsValid)
-            {
-                if (_tenantService.IsActualSuperAdmin())
-                {
-                    model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
-                }
-                return View(model);
-            }
-
-            // Check if user belongs to current tenant
-            var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && user.CompanyId != companyId.Value && !_tenantService.IsActualSuperAdmin())
-            {
-                return new HttpStatusCodeResult(403, "Access Denied");
-            }
-
-            // Role change restrictions for Admin users
-            if (!_tenantService.IsActualSuperAdmin())
-            {
-                // Admin users cannot change SuperAdmin accounts
-                if (user.Role == "SuperAdmin")
-                {
-                    TempData["ErrorMessage"] = "Admin users cannot modify SuperAdmin accounts.";
-                    return RedirectToAction("UserManagement");
-                }
-
-                // Admin users cannot assign SuperAdmin role
-                if (model.NewRole == "SuperAdmin")
-                {
-                    TempData["ErrorMessage"] = "Admin users cannot assign SuperAdmin role to any user.";
-                    return RedirectToAction("UserManagement");
-                }
-            }
-
-            var oldRole = user.Role;
-            var oldCompanyId = user.CompanyId;
-            var oldRequirePasswordChange = user.RequirePasswordChange;
-            var oldFirstName = user.FirstName;
-            var oldLastName = user.LastName;
-            var oldUserName = user.UserName;
-            var oldEmail = user.Email;
-            var oldPhone = user.Phone;
-
-            // Check if email changed and is unique
-            if (user.Email != model.Email)
-            {
-                var existingUser = _uow.Users.GetAll().FirstOrDefault(u => u.Email == model.Email && u.Id != user.Id);
-                if (existingUser != null)
-                {
-                    ModelState.AddModelError("Email", "This email address is already in use.");
-                    return View(model);
-                }
-                
-                // Regenerate token to force relogin on identity change
-                user.AccessToken = _securityService.GenerateSecureToken();
-            }
-
-            user.FirstName = model.FirstName;
-            user.LastName = model.LastName;
-            user.UserName = model.UserName;
-            user.Email = model.Email;
-            user.Phone = model.Phone;
-            user.Role = model.NewRole;
-            
-            // If identity or role changed, invalidate existing sessions by regenerating the token
-            if (oldUserName != user.UserName || oldRole != user.Role)
-            {
-                user.AccessToken = _securityService.GenerateSecureToken();
-            }
-
-            if (_tenantService.IsActualSuperAdmin())
-            {
-                user.CompanyId = model.CompanyId;
-                user.RequirePasswordChange = model.RequirePasswordChange;
-            }
-
-            try
-            {
-                // Sync with Applicant record if it exists (lookup by old email in case it changed)
-                var applicant = _uow.Context.Set<Applicant>().FirstOrDefault(a => a.Email == oldEmail);
-                if (applicant != null)
-                {
-                    applicant.FullName = string.Format("{0} {1}", model.FirstName, model.LastName);
-                    applicant.Email = model.Email; // Sync email change
-                    applicant.Phone = model.Phone;
-                    applicant.CompanyId = user.CompanyId; // Ensure company sync
-                }
-                else if (model.NewRole == "Client")
-                {
-                    // Create applicant record if it's a client but no record exists
-                    var newApplicant = new Applicant
-                    {
-                        FullName = string.Format("{0} {1}", model.FirstName, model.LastName),
-                        Email = user.Email,
-                        Phone = model.Phone,
-                        CompanyId = user.CompanyId
-                    };
-                    _uow.Applicants.Add(newApplicant);
-                }
-
-                // Single save for all changes (User update, Applicant update/create)
-                _uow.Complete();
-
-                // Log the update
-                _auditService.LogUpdate(
-                    User.Identity.Name,
-                    "Account",
-                    user.Id.ToString(),
-                    new { FirstName = oldFirstName, LastName = oldLastName, UserName = oldUserName, Email = oldEmail, Role = oldRole, CompanyId = oldCompanyId },
-                    new { FirstName = user.FirstName, LastName = user.LastName, UserName = user.UserName, Email = user.Email, Role = model.NewRole, CompanyId = user.CompanyId }
-                );
-            }
-            catch (System.Data.Entity.Validation.DbEntityValidationException ex)
-            {
-                var errorMessages = new List<string>();
-                foreach (var validationErrors in ex.EntityValidationErrors)
-                {
-                    foreach (var validationError in validationErrors.ValidationErrors)
-                    {
-                        errorMessages.Add(string.Format("Property: {0} Error: {1}", validationError.PropertyName, validationError.ErrorMessage));
-                        System.Diagnostics.Debug.WriteLine(string.Format("Property: {0} Error: {1}", validationError.PropertyName, validationError.ErrorMessage));
-                    }
-                }
-                TempData["ErrorMessage"] = "Data Validation Error: " + string.Join("; ", errorMessages);
-                
-                if (_tenantService.IsActualSuperAdmin())
-                {
-                    model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
-                }
-                return View(model);
-            }
-            catch (Exception ex)
-            {
-                TempData["ErrorMessage"] = "Error updating user: " + ex.Message;
-                if (_tenantService.IsActualSuperAdmin())
-                {
-                    model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
-                }
-                return View(model);
-            }
-
-            string successMsg = string.Format("User {0} updated successfully.", user.UserName);
-            if (oldRole != user.Role)
-            {
-                successMsg += string.Format(" Role changed from {0} to {1}.", oldRole, user.Role);
-            }
-
-            TempData["SuccessMessage"] = successMsg;
-            
-            // Sync session if updating current user
-            if (user.UserName == User.Identity.Name)
-            {
-                Session["IsActualSuperAdmin"] = _tenantService.IsActualSuperAdmin();
-            }
-
-            // Redirect based on authority level
-            if (_tenantService.IsActualSuperAdmin() || User.IsInRole("SuperAdmin"))
-            {
-                return RedirectToAction("GlobalUserManagement");
-            }
-            
-            return RedirectToAction("UserManagement");
+            return HandleUserRoleUpdate(model);
         }
 
         /// <summary>
@@ -1106,134 +614,7 @@ namespace HR.Web.Controllers
         [Authorize(Roles = "Admin, SuperAdmin")]
         public ActionResult SecurityLogs(LogFilter filter)
         {
-            // Detect if this is a fresh page load (no parameters) vs. a form execution.
-            // MVC Model Binder auto-populates 'Action' and 'Controller' from route data IF they exist in the model.
-            // We must clear them so we don't accidentally filter to "Admin" controller and "SecurityLogs" action.
-            bool isFreshLoad = Request.QueryString.Count == 0;
-            
-            if (filter == null)
-            {
-                filter = new LogFilter();
-            }
-            
-            if (isFreshLoad)
-            {
-                filter.Username = null;
-                filter.Action = null;
-                filter.Controller = null;
-            }
-            else
-            {
-                // Even on POST/Search, if they match the route exactly, they might be collisions
-                if (string.Equals(filter.Action, "SecurityLogs", StringComparison.OrdinalIgnoreCase)) filter.Action = null;
-                if (string.Equals(filter.Controller, "Admin", StringComparison.OrdinalIgnoreCase)) filter.Controller = null;
-            }
-
-            var viewModel = new SecurityLogsViewModel
-            {
-                Filter = filter
-            };
-
-            // Get login attempts
-            var loginAttemptsQuery = _uow.LoginAttempts.GetAll().AsQueryable();
-            loginAttemptsQuery = _tenantService.ApplyTenantFilter(loginAttemptsQuery);
-            
-            if (!string.IsNullOrEmpty(viewModel.Filter.Username))
-                loginAttemptsQuery = loginAttemptsQuery.Where(l => l.Username.Contains(viewModel.Filter.Username));
-            
-            if (!string.IsNullOrEmpty(viewModel.Filter.IPAddress))
-                loginAttemptsQuery = loginAttemptsQuery.Where(l => l.IPAddress.Contains(viewModel.Filter.IPAddress));
-            
-            if (viewModel.Filter.WasSuccessful.HasValue)
-                loginAttemptsQuery = loginAttemptsQuery.Where(l => l.WasSuccessful == viewModel.Filter.WasSuccessful.Value);
-            
-            if (viewModel.Filter.StartDate.HasValue)
-                loginAttemptsQuery = loginAttemptsQuery.Where(l => l.AttemptTime >= viewModel.Filter.StartDate.Value);
-            
-            if (viewModel.Filter.EndDate.HasValue)
-            {
-                var nextDay = viewModel.Filter.EndDate.Value.Date.AddDays(1);
-                loginAttemptsQuery = loginAttemptsQuery.Where(l => l.AttemptTime < nextDay);
-            }
-
-            var loginAttempts = loginAttemptsQuery
-                .OrderByDescending(l => l.AttemptTime)
-                .Take(1000) // Limit to prevent performance issues
-                .ToList();
-
-            viewModel.LoginAttempts = loginAttempts.Select(l => new LoginAttemptLog
-            {
-                Id = l.Id,
-                Username = l.Username,
-                IPAddress = l.IPAddress,
-                AttemptTime = l.AttemptTime,
-                WasSuccessful = l.WasSuccessful,
-                FailureReason = l.FailureReason
-            }).ToList();
-
-            // Get audit logs
-            var auditLogsQuery = _uow.AuditLogs.GetAll().AsQueryable();
-            auditLogsQuery = _tenantService.ApplyTenantFilter(auditLogsQuery);
-            
-            if (!string.IsNullOrEmpty(viewModel.Filter.Username))
-                auditLogsQuery = auditLogsQuery.Where(a => a.Username.Contains(viewModel.Filter.Username));
-            
-            // Filter by Action (ignore if it's the current action name)
-            if (!string.IsNullOrEmpty(viewModel.Filter.Action))
-            {
-                var actionMatch = viewModel.Filter.Action.ToLower();
-                // Ignore Action filter if it's "SecurityLogs" as this is not a valid audit log action
-                if (!string.Equals(actionMatch, "securitylogs", StringComparison.OrdinalIgnoreCase))
-                {
-                    auditLogsQuery = auditLogsQuery.Where(a => a.Action.ToLower().Contains(actionMatch));
-                }
-            }
-            
-            if (!string.IsNullOrEmpty(viewModel.Filter.Controller))
-                auditLogsQuery = auditLogsQuery.Where(a => a.Controller.Contains(viewModel.Filter.Controller));
-            
-            if (!string.IsNullOrEmpty(viewModel.Filter.IPAddress))
-                auditLogsQuery = auditLogsQuery.Where(a => a.IPAddress.Contains(viewModel.Filter.IPAddress));
-            
-            if (viewModel.Filter.WasSuccessful.HasValue)
-                auditLogsQuery = auditLogsQuery.Where(a => a.WasSuccessful == viewModel.Filter.WasSuccessful.Value);
-            
-            if (viewModel.Filter.StartDate.HasValue)
-                auditLogsQuery = auditLogsQuery.Where(a => a.Timestamp >= viewModel.Filter.StartDate.Value);
-            
-            if (viewModel.Filter.EndDate.HasValue)
-            {
-                var nextDay = viewModel.Filter.EndDate.Value.Date.AddDays(1);
-                auditLogsQuery = auditLogsQuery.Where(a => a.Timestamp < nextDay);
-            }
-
-            var auditLogs = auditLogsQuery
-                .OrderByDescending(a => a.Timestamp)
-                .Take(1000) // Limit to prevent performance issues
-                .ToList();
-
-            viewModel.AuditLogs = auditLogs.Select(a => new AuditLogEntry
-            {
-                Id = a.Id,
-                Username = a.Username,
-                Action = a.Action,
-                Controller = a.Controller,
-                EntityId = a.EntityId,
-                IPAddress = a.IPAddress,
-                Timestamp = a.Timestamp,
-                UserAgent = a.UserAgent,
-                WasSuccessful = a.WasSuccessful,
-                ErrorMessage = a.ErrorMessage
-            }).ToList();
-
-            // Calculate statistics
-            // Calculate statistics with tenant filtering
-            viewModel.TotalLoginAttempts = loginAttemptsQuery.Count();
-            viewModel.TotalAuditLogs = auditLogsQuery.Count();
-            viewModel.FailedLoginAttempts = loginAttemptsQuery.Count(l => !l.WasSuccessful);
-            viewModel.SuccessfulLogins = loginAttemptsQuery.Count(l => l.WasSuccessful);
-
-            return View(viewModel);
+            return HandleSecurityLogs(filter);
         }
 
         #endregion

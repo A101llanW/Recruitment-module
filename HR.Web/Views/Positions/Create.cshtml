@@ -107,6 +107,18 @@
         margin-top: 1.2rem !important;
         justify-content: flex-start !important;
     }
+    .question-weight-row {
+        border: 1px solid #e6e6e6;
+        border-radius: 0.35rem;
+        padding: 0.6rem;
+        margin-bottom: 0.6rem;
+        background: #fff;
+    }
+    .question-weight-value {
+        width: 64px;
+        text-align: right;
+        font-weight: 600;
+    }
 </style>
 
 <div class="container-fluid" style="margin-top: 1.2rem;">
@@ -117,16 +129,34 @@
         <div class="card-body card-body-blue">
 @{
     var questions = ViewBag.QuestionList as IEnumerable<HR.Web.Models.Question>;
+    var selectedQuestionWeights = ViewBag.SelectedQuestionWeights as System.Collections.Generic.Dictionary<int, decimal>
+        ?? new System.Collections.Generic.Dictionary<int, decimal>();
+    var passMarkValue = Model != null ? (int)Math.Round(Model.PassMark, MidpointRounding.AwayFromZero) : 50;
+    passMarkValue = Math.Max(0, Math.Min(100, passMarkValue));
     Html.EnableClientValidation(false);
     Html.EnableUnobtrusiveJavaScript(false);
 }
             @using (Html.BeginForm(null, null, FormMethod.Post, new { id = "positionCreateForm" })) {
                 @Html.AntiForgeryToken()
+                <input type="hidden" id="questionWeightsPayload" name="questionWeightsPayload" value="" />
                 @Html.ValidationSummary(true, "", new { @class = "text-danger" })
                 <div class="form-group mb-3">
                     @Html.LabelFor(m => m.Title, "Position Title", htmlAttributes: new { @class = "font-weight-bold w-100" })
                     @Html.TextBoxFor(m => m.Title, new { @class = "form-control mx-auto", placeholder = "e.g., Senior Software Engineer" })
                     @Html.ValidationMessageFor(m => m.Title, "", new { @class = "text-danger" })
+                </div>
+                <div class="form-group mb-3">
+                    <label class="font-weight-bold w-100">Job Type</label>
+                    @Html.DropDownListFor(
+                        m => m.IsTechnical,
+                        new List<SelectListItem>
+                        {
+                            new SelectListItem { Text = "Technical", Value = "true" },
+                            new SelectListItem { Text = "Non-Technical", Value = "false" }
+                        },
+                        "-- Select Job Type --",
+                        new { @class = "form-control mx-auto", style = "max-width: 350px;" })
+                    @Html.ValidationMessageFor(m => m.IsTechnical, "", new { @class = "text-danger" })
                 </div>
                 <div class="form-group mb-3">
                     @Html.LabelFor(m => m.Description, "Job Description", htmlAttributes: new { @class = "font-weight-bold w-100" })
@@ -180,6 +210,12 @@
                     @Html.LabelFor(m => m.DepartmentId, "Department", htmlAttributes: new { @class = "font-weight-bold w-100" })
                     @Html.DropDownList("DepartmentId", null, "-- Select Department --", new { @class = "form-control mx-auto", style = "max-width: 350px;" })
                 </div>
+                <div class="form-group mb-3">
+                    @Html.LabelFor(m => m.ExpiryDate, "Position Expiry Date", htmlAttributes: new { @class = "font-weight-bold w-100" })
+                    @Html.TextBoxFor(m => m.ExpiryDate, "{0:yyyy-MM-dd}", new { @class = "form-control mx-auto", type = "date", style = "max-width: 350px;" })
+                    <small class="form-text text-muted">This position will be automatically moved to Closed on the selected date.</small>
+                    @Html.ValidationMessageFor(m => m.ExpiryDate, "", new { @class = "text-danger" })
+                </div>
                 <div class="form-check mb-3 text-center">
                     @Html.CheckBoxFor(m => m.IsOpen, new { @class = "form-check-input" })
                     @Html.LabelFor(m => m.IsOpen, new { @class = "form-check-label" })
@@ -215,7 +251,14 @@
                                         {
                                             <div class="question-item mb-3 p-3 border rounded @(groupId)-item">
                                                 <div class="form-check mb-2">
-                                                    <input class="form-check-input question-checkbox @groupId-checkbox" type="checkbox" name="selectedQuestions" value="@q.Id" id="q_@q.Id" />
+                                                    <input class="form-check-input question-checkbox @groupId-checkbox"
+                                                           type="checkbox"
+                                                           name="selectedQuestions"
+                                                           value="@q.Id"
+                                                           id="q_@q.Id"
+                                                           data-question-id="@q.Id"
+                                                           data-question-text="@q.Text"
+                                                           data-initial-weight="@(selectedQuestionWeights.ContainsKey(q.Id) ? selectedQuestionWeights[q.Id] : 0m)" />
                                                     <label class="form-check-label" for="q_@q.Id">
                                                         <strong>Question:</strong> @q.Text
                                                         <span class="badge bg-secondary ms-2">@q.Type</span>
@@ -246,26 +289,29 @@
                                 </div>
                             }
                         </div>
-                        
-                        <script>
-                            document.addEventListener('DOMContentLoaded', function() {
-                                // Handle "Select All" for groups
-                                var groupSelects = document.querySelectorAll('.group-select-all');
-                                groupSelects.forEach(function(groupSelect) {
-                                    groupSelect.addEventListener('change', function() {
-                                        var targetGroupClass = this.getAttribute('data-target-group') + '-checkbox';
-                                        var checkboxes = document.querySelectorAll('.' + targetGroupClass);
-                                        var isChecked = this.checked;
-                                        checkboxes.forEach(function(box) {
-                                            box.checked = isChecked;
-                                        });
-                                    });
-                                });
 
-                                // Optional: Update "Select All" state if all individual items are checked/unchecked manually
-                                // This requires more event listeners, keeping it simple for now as requested.
-                            });
-                        </script>
+                        <div class="card border mt-3" id="questionWeightPanel">
+                            <div class="card-header bg-light">
+                                <strong>Question Weight Allocation (Real Time)</strong>
+                                <small class="text-muted d-block">As you select questions, distribute 100 points across them.</small>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted">Budget</span>
+                                    <span id="questionWeightBudgetText" class="font-weight-bold">0 / 100 allocated</span>
+                                </div>
+                                <div class="progress mb-3">
+                                    <div id="questionWeightBudgetBar" class="progress-bar bg-info" style="width:0%"></div>
+                                </div>
+                                <div class="d-flex justify-content-end mb-3">
+                                    <button type="button" id="questionWeightRedistributeBtn" class="btn btn-sm btn-outline-primary">Redistribute</button>
+                                </div>
+                                <div id="questionWeightRows"></div>
+                                <div id="questionWeightEmpty" class="text-muted">
+                                    Select at least one questionnaire question to activate sliders.
+                                </div>
+                            </div>
+                        </div>
                     }
                     else
                     {
@@ -273,6 +319,35 @@
                             No questions available. Please create questions in the Admin section first.
                         </div>
                     }
+                </div>
+
+                <div class="card border mt-3">
+                    <div class="card-header bg-light">
+                        <strong>Applicant Passmark Midpoint</strong>
+                        <small class="text-muted d-block">Applicants scoring at or above this value will appear in the Top Candidates column.</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center flex-wrap">
+                            <input type="range"
+                                   id="passMarkSlider"
+                                   name="PassMark"
+                                   min="0"
+                                   max="100"
+                                   step="1"
+                                   value="@passMarkValue"
+                                   class="flex-grow-1 mr-3" />
+                            <input type="number"
+                                   id="passMarkNumber"
+                                   min="0"
+                                   max="100"
+                                   step="1"
+                                   value="@passMarkValue"
+                                   class="form-control form-control-sm"
+                                   style="max-width: 96px;" />
+                            <span id="passMarkValue" class="badge badge-primary ml-3">@passMarkValue%</span>
+                        </div>
+                        @Html.ValidationMessageFor(m => m.PassMark, "", new { @class = "text-danger d-block mt-2" })
+                    </div>
                 </div>
 
                 <div class="d-flex justify-content-center gap-2 mt-4">
@@ -361,6 +436,278 @@
             formatSalary(min, currency) + ' - ' + formatSalary(max, currency);
     }
 
+    function initPassMarkControl() {
+        var slider = document.getElementById('passMarkSlider');
+        var number = document.getElementById('passMarkNumber');
+        var badge = document.getElementById('passMarkValue');
+        if (!slider || !number || !badge) return;
+
+        function clamp(raw) {
+            var parsed = parseInt(raw, 10);
+            if (isNaN(parsed)) return 50;
+            return Math.max(0, Math.min(100, parsed));
+        }
+
+        function sync(rawValue) {
+            var value = clamp(rawValue);
+            slider.value = value;
+            number.value = value;
+            badge.textContent = value + '%';
+        }
+
+        slider.addEventListener('input', function () {
+            sync(slider.value);
+        });
+
+        number.addEventListener('input', function () {
+            sync(number.value);
+        });
+
+        number.addEventListener('change', function () {
+            sync(number.value);
+        });
+
+        sync(slider.value || number.value);
+    }
+
+    function initQuestionWeightAllocator() {
+        var form = document.getElementById('positionCreateForm');
+        if (!form) return;
+
+        var payloadInput = document.getElementById('questionWeightsPayload');
+        var budgetText = document.getElementById('questionWeightBudgetText');
+        var budgetBar = document.getElementById('questionWeightBudgetBar');
+        var redistributeButton = document.getElementById('questionWeightRedistributeBtn');
+        var weightRows = document.getElementById('questionWeightRows');
+        var weightEmpty = document.getElementById('questionWeightEmpty');
+        var questionCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.question-checkbox'));
+        var questionWeights = {};
+
+        function clamp(v, min, max) {
+            return Math.max(min, Math.min(max, v));
+        }
+
+        function selectedCheckboxes() {
+            return questionCheckboxes.filter(function (cb) { return cb.checked; });
+        }
+
+        function allocateEvenly(selected) {
+            if (!selected.length) return;
+            if (selected.length === 1) {
+                questionWeights[selected[0].value] = 100;
+                return;
+            }
+
+            var base = Math.floor(100 / selected.length);
+            var rem = 100 - (base * selected.length);
+            selected.forEach(function (cb, idx) {
+                questionWeights[cb.value] = base + (idx < rem ? 1 : 0);
+            });
+        }
+
+        function normalizeSelection(selected) {
+            if (!selected.length) return;
+            if (selected.length === 1) {
+                questionWeights[selected[0].value] = 100;
+                return;
+            }
+
+            var raw = selected.map(function (cb) {
+                var val = parseFloat(questionWeights[cb.value]);
+                return isNaN(val) ? 0 : clamp(val, 0, 100);
+            });
+            var total = raw.reduce(function (a, b) { return a + b; }, 0);
+
+            if (total <= 0) {
+                allocateEvenly(selected);
+                return;
+            }
+
+            var normalized = raw.map(function (v) {
+                return Math.round((v / total) * 100);
+            });
+            var diff = 100 - normalized.reduce(function (a, b) { return a + b; }, 0);
+            normalized[normalized.length - 1] += diff;
+
+            selected.forEach(function (cb, idx) {
+                questionWeights[cb.value] = clamp(normalized[idx], 0, 100);
+            });
+        }
+
+        function updatePayload(selected) {
+            var pairs = selected.map(function (cb) {
+                return cb.value + '=' + (questionWeights[cb.value] || 0);
+            });
+            payloadInput.value = pairs.join(';');
+        }
+
+        function updateBudgetUi(selected) {
+            var total = selected.reduce(function (sum, cb) {
+                var val = parseFloat(questionWeights[cb.value]);
+                return sum + (isNaN(val) ? 0 : val);
+            }, 0);
+            total = Math.round(total);
+            budgetText.textContent = total + ' / 100 allocated';
+            budgetBar.style.width = clamp(total, 0, 100) + '%';
+        }
+
+        function updateRedistributeButtonState(selected) {
+            if (!redistributeButton) {
+                return;
+            }
+
+            redistributeButton.disabled = !selected.length;
+        }
+
+        function renderRows() {
+            var selected = selectedCheckboxes();
+            weightRows.innerHTML = '';
+
+            if (!selected.length) {
+                weightEmpty.style.display = '';
+                budgetText.textContent = '0 / 100 allocated';
+                budgetBar.style.width = '0%';
+                payloadInput.value = '';
+                updateRedistributeButtonState(selected);
+                return;
+            }
+
+            weightEmpty.style.display = 'none';
+            normalizeSelection(selected);
+            updateBudgetUi(selected);
+            updatePayload(selected);
+            updateRedistributeButtonState(selected);
+
+            selected.forEach(function (cb) {
+                var questionId = cb.value;
+                var questionText = cb.getAttribute('data-question-text') || ('Question ' + questionId);
+                var current = parseFloat(questionWeights[questionId]);
+                if (isNaN(current)) current = 0;
+
+                var row = document.createElement('div');
+                row.className = 'question-weight-row';
+                row.setAttribute('data-question-id', questionId);
+
+                var title = document.createElement('div');
+                title.className = 'small mb-2';
+                title.textContent = questionText;
+
+                var rowControls = document.createElement('div');
+                rowControls.className = 'd-flex align-items-center';
+
+                var slider = document.createElement('input');
+                slider.type = 'range';
+                slider.min = '0';
+                slider.max = '100';
+                slider.step = '1';
+                slider.className = 'flex-grow-1 question-weight-slider';
+                slider.value = Math.round(current);
+
+                var number = document.createElement('input');
+                number.type = 'number';
+                number.min = '0';
+                number.max = '100';
+                number.step = '1';
+                number.className = 'form-control form-control-sm ml-2';
+                number.style.maxWidth = '72px';
+                number.value = Math.round(current);
+
+                var value = document.createElement('span');
+                value.className = 'question-weight-value ml-2';
+                value.textContent = Math.round(current) + ' pts';
+
+                function applyValue(rawValue) {
+                    var selectedNow = selectedCheckboxes();
+                    if (!selectedNow.length) return;
+
+                    var target = clamp(parseInt(rawValue, 10) || 0, 0, 100);
+                    if (selectedNow.length === 1) {
+                        questionWeights[questionId] = 100;
+                    } else {
+                        questionWeights[questionId] = target;
+                        normalizeSelection(selectedNow);
+                    }
+
+                    renderRows();
+                }
+
+                slider.addEventListener('input', function () {
+                    applyValue(slider.value);
+                });
+
+                number.addEventListener('change', function () {
+                    applyValue(number.value);
+                });
+
+                rowControls.appendChild(slider);
+                rowControls.appendChild(number);
+                rowControls.appendChild(value);
+                row.appendChild(title);
+                row.appendChild(rowControls);
+                weightRows.appendChild(row);
+            });
+        }
+
+        var groupSelects = Array.prototype.slice.call(document.querySelectorAll('.group-select-all'));
+        groupSelects.forEach(function (groupSelect) {
+            groupSelect.addEventListener('change', function () {
+                var targetGroupClass = groupSelect.getAttribute('data-target-group') + '-checkbox';
+                var checkboxes = Array.prototype.slice.call(document.querySelectorAll('.' + targetGroupClass));
+                checkboxes.forEach(function (box) {
+                    box.checked = groupSelect.checked;
+                });
+                renderRows();
+            });
+
+            var targetGroupClass = groupSelect.getAttribute('data-target-group') + '-checkbox';
+            var targetBoxes = Array.prototype.slice.call(document.querySelectorAll('.' + targetGroupClass));
+            if (targetBoxes.length) {
+                groupSelect.checked = targetBoxes.every(function (box) { return box.checked; });
+            }
+        });
+
+        questionCheckboxes.forEach(function (cb) {
+            var initial = parseFloat(cb.getAttribute('data-initial-weight'));
+            if (!isNaN(initial)) {
+                questionWeights[cb.value] = clamp(initial, 0, 100);
+            }
+            cb.addEventListener('change', function () {
+                var groupClass = Array.prototype.slice.call(cb.classList).filter(function (cls) {
+                    return cls.indexOf('group_') === 0 && cls.indexOf('-checkbox') > -1;
+                })[0];
+                if (groupClass) {
+                    var groupId = groupClass.replace('-checkbox', '');
+                    var groupToggle = document.querySelector('.group-select-all[data-target-group="' + groupId + '"]');
+                    if (groupToggle) {
+                        var groupBoxes = Array.prototype.slice.call(document.querySelectorAll('.' + groupClass));
+                        groupToggle.checked = groupBoxes.every(function (box) { return box.checked; });
+                    }
+                }
+                renderRows();
+            });
+        });
+
+        if (redistributeButton) {
+            redistributeButton.addEventListener('click', function () {
+                var selected = selectedCheckboxes();
+                if (!selected.length) {
+                    return;
+                }
+
+                allocateEvenly(selected);
+                renderRows();
+            });
+        }
+
+        form.addEventListener('submit', function () {
+            var selected = selectedCheckboxes();
+            normalizeSelection(selected);
+            updatePayload(selected);
+        });
+
+        renderRows();
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var minInput = document.getElementById('salaryMin');
         var maxInput = document.getElementById('salaryMax');
@@ -374,14 +721,9 @@
             }
             updateSalaryRangeDisplay();
         }
+
+        initPassMarkControl();
+        initQuestionWeightAllocator();
     });
 </script>
 }
-
-
-
-
-
-
-
-

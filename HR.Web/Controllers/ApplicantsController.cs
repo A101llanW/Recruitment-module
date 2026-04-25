@@ -12,6 +12,7 @@ namespace HR.Web.Controllers
 {
     [Authorize(Roles = "Admin, SuperAdmin")]
     [RoleBasedAuthorization("Admin")]
+    [ModuleAccess(RoleModuleCatalog.Applicants)]
     public class ApplicantsController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();
@@ -67,72 +68,121 @@ namespace HR.Web.Controllers
 
         public ActionResult Details(int id, int? selectedApplicationId = null)
         {
-            // Try the original simple approach first
             var applicant = _uow.Applicants.Get(id);
             if (applicant == null)
             {
                 return HttpNotFound();
             }
 
-            // Check tenant access
+            var tenantAccessResult = EnsureApplicantTenantAccess(applicant);
+            if (tenantAccessResult != null)
+            {
+                return tenantAccessResult;
+            }
+
+            var applications = GetApplicantApplications(id);
+            LogApplicantDetailsDebug(applicant, applications.Count);
+
+            var selectedApp = SelectApplication(applications, selectedApplicationId);
+            PopulateSelectedApplicationViewData(selectedApp);
+            ViewBag.AllApplications = applications;
+            ViewBag.SelectedApplicationId = selectedApp != null ? selectedApp.Id : (int?)null;
+
+            return View(applicant);
+        }
+
+        private ActionResult EnsureApplicantTenantAccess(Applicant applicant)
+        {
             var companyId = _tenantService.GetCurrentUserCompanyId();
             if (companyId.HasValue && applicant.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
-            
-            // Get applications for this applicant using a simple direct query
-            var applications = _uow.Applications.GetAll()
-                .Where(a => a.ApplicantId == id)
+
+            return null;
+        }
+
+        private List<Application> GetApplicantApplications(int applicantId)
+        {
+            return _uow.Applications.GetAll()
+                .Where(a => a.ApplicantId == applicantId)
                 .OrderByDescending(a => a.AppliedOn)
                 .ToList();
-            
-            // Debug: Check what we found
-            System.Diagnostics.Debug.WriteLine("Found applicant: " + applicant.FullName + " (ID: " + applicant.Id + ")");
-            System.Diagnostics.Debug.WriteLine("Found " + applications.Count + " applications for applicant " + id);
-            
-            // Default to latest application if none selected
-            var selectedApp = selectedApplicationId.HasValue 
-                ? applications.FirstOrDefault(a => a.Id == selectedApplicationId.Value)
-                : applications.FirstOrDefault();
-                
-            if (selectedApp != null)
-            {
-                // Get questionnaire answers for selected application
-                var answers = _uow.ApplicationAnswers.GetAll()
-                    .Where(aa => aa.ApplicationId == selectedApp.Id)
-                    .ToList();
-                
-                // Load questions explicitly to avoid proxy issues
-                var candidateService = new CandidateEvaluationService();
-                var answerScores = new Dictionary<int, decimal>();
+        }
 
-                foreach (var answer in answers)
-                {
-                    if (answer.QuestionId > 0)
-                    {
-                        answer.Question = _uow.Questions.Get(answer.QuestionId);
-                    }
-                    var positionTitle = selectedApp.Position != null ? selectedApp.Position.Title : "";
-                    if (string.IsNullOrEmpty(positionTitle) && selectedApp.PositionId > 0) 
-                    {
-                         var pos = _uow.Positions.Get(selectedApp.PositionId);
-                         positionTitle = pos != null ? pos.Title : "";
-                    }
-                    answerScores[answer.Id] = candidateService.EvaluateIndividualAnswer(positionTitle, answer.AnswerText);
-                }
-                
-                ViewBag.SelectedApplication = selectedApp;
-                ViewBag.QuestionnaireAnswers = answers;
-                ViewBag.AnswerScores = answerScores;
-                
-                System.Diagnostics.Debug.WriteLine("Found " + answers.Count + " answers for application " + selectedApp.Id);
+        private static Application SelectApplication(IEnumerable<Application> applications, int? selectedApplicationId)
+        {
+            if (selectedApplicationId.HasValue)
+            {
+                return applications.FirstOrDefault(a => a.Id == selectedApplicationId.Value);
             }
-            
-            ViewBag.AllApplications = applications;
-            ViewBag.SelectedApplicationId = selectedApp != null ? selectedApp.Id : (int?)null;
-            
-            return View(applicant);
+
+            return applications.FirstOrDefault();
+        }
+
+        private static void LogApplicantDetailsDebug(Applicant applicant, int applicationCount)
+        {
+            System.Diagnostics.Debug.WriteLine("Found applicant: " + applicant.FullName + " (ID: " + applicant.Id + ")");
+            System.Diagnostics.Debug.WriteLine("Found " + applicationCount + " applications for applicant " + applicant.Id);
+        }
+
+        private void PopulateSelectedApplicationViewData(Application selectedApplication)
+        {
+            if (selectedApplication == null)
+            {
+                return;
+            }
+
+            var answers = GetApplicationAnswers(selectedApplication.Id);
+            var answerScores = CalculateAnswerScores(selectedApplication, answers);
+
+            ViewBag.SelectedApplication = selectedApplication;
+            ViewBag.QuestionnaireAnswers = answers;
+            ViewBag.AnswerScores = answerScores;
+
+            System.Diagnostics.Debug.WriteLine("Found " + answers.Count + " answers for application " + selectedApplication.Id);
+        }
+
+        private List<ApplicationAnswer> GetApplicationAnswers(int applicationId)
+        {
+            return _uow.ApplicationAnswers.GetAll()
+                .Where(aa => aa.ApplicationId == applicationId)
+                .ToList();
+        }
+
+        private Dictionary<int, decimal> CalculateAnswerScores(Application application, IEnumerable<ApplicationAnswer> answers)
+        {
+            var candidateService = new CandidateEvaluationService();
+            var positionTitle = ResolvePositionTitle(application);
+            var answerScores = new Dictionary<int, decimal>();
+
+            foreach (var answer in answers)
+            {
+                LoadAnswerQuestion(answer);
+                answerScores[answer.Id] = candidateService.EvaluateIndividualAnswer(positionTitle, answer.AnswerText);
+            }
+
+            return answerScores;
+        }
+
+        private void LoadAnswerQuestion(ApplicationAnswer answer)
+        {
+            if (answer.QuestionId > 0)
+            {
+                answer.Question = _uow.Questions.Get(answer.QuestionId);
+            }
+        }
+
+        private string ResolvePositionTitle(Application application)
+        {
+            var positionTitle = application.Position != null ? application.Position.Title : string.Empty;
+            if (!string.IsNullOrEmpty(positionTitle) || application.PositionId <= 0)
+            {
+                return positionTitle;
+            }
+
+            var position = _uow.Positions.Get(application.PositionId);
+            return position != null ? position.Title : string.Empty;
         }
 
         public ActionResult Create()
@@ -206,54 +256,67 @@ namespace HR.Web.Controllers
             {
                 return View(model);
             }
-            
+
+            return HandleApplicantEdit(model);
+        }
+
+        private ActionResult HandleApplicantEdit(Applicant model)
+        {
             try
             {
-                // Get old values for audit
                 var oldApplicant = _uow.Applicants.Get(model.Id);
-                var oldValues = new { 
-                    FullName = oldApplicant != null ? oldApplicant.FullName : null, 
-                    Email = oldApplicant != null ? oldApplicant.Email : null, 
-                    Phone = oldApplicant != null ? oldApplicant.Phone : null 
-                };
-                
-                _uow.Complete();
-
-                // Check tenant access (Double check before update)
-                var companyId = _tenantService.GetCurrentUserCompanyId();
-                if (companyId.HasValue && model.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+                var accessResult = EnsureApplicantModelTenantAccess(model);
+                if (accessResult != null)
                 {
-                   return new HttpStatusCodeResult(403, "Access Denied");
+                    return accessResult;
                 }
 
-                // If updating existing, ensure we don't accidentally change CompanyId
-                if (oldApplicant != null)
-                {
-                    model.CompanyId = oldApplicant.CompanyId;
-                }
-                
+                PreserveApplicantCompany(oldApplicant, model);
                 _uow.Applicants.Update(model);
                 _uow.Complete();
-                
-                // Log applicant update
-                var newValues = new { 
-                    FullName = model.FullName, 
-                    Email = model.Email, 
-                    Phone = model.Phone 
-                };
-                
+
+                var oldValues = BuildApplicantAuditValues(oldApplicant);
+                var newValues = BuildApplicantAuditValues(model);
                 _auditService.LogUpdate(User.Identity.Name, "Applicants", model.Id.ToString(), oldValues, newValues);
-                
                 return RedirectToAction("Index");
             }
             catch (Exception ex)
             {
                 _auditService.LogAction(User.Identity.Name, "UPDATE", "Applicants", model.Id.ToString(), 
                     wasSuccessful: false, errorMessage: ex.Message);
-                
+
                 ModelState.AddModelError("", "Error updating applicant: " + ex.Message);
                 return View(model);
             }
+        }
+
+        private ActionResult EnsureApplicantModelTenantAccess(Applicant model)
+        {
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            if (companyId.HasValue && model.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            return null;
+        }
+
+        private static void PreserveApplicantCompany(Applicant oldApplicant, Applicant model)
+        {
+            if (oldApplicant != null)
+            {
+                model.CompanyId = oldApplicant.CompanyId;
+            }
+        }
+
+        private static object BuildApplicantAuditValues(Applicant applicant)
+        {
+            return new
+            {
+                FullName = applicant != null ? applicant.FullName : null,
+                Email = applicant != null ? applicant.Email : null,
+                Phone = applicant != null ? applicant.Phone : null
+            };
         }
 
         public ActionResult Delete(int id)
@@ -373,9 +436,6 @@ namespace HR.Web.Controllers
         }
     }
 }
-
-
-
 
 
 

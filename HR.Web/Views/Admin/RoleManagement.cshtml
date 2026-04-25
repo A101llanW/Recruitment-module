@@ -1,0 +1,311 @@
+@model HR.Web.ViewModels.RoleManagementPageViewModel
+@using System
+@using System.Linq
+@using HR.Web.Services
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Role Management";
+}
+
+<style>
+    :root {
+        --system-blue: #6fb8dc;
+        --system-dark: #0d2c4a;
+        --border-color: #b2d7f7;
+        --bg-light: #f6faff;
+    }
+
+    .role-wrapper {
+        padding: 24px 0 40px;
+        background: var(--bg-light);
+        min-height: calc(100vh - 150px);
+    }
+
+    .role-card {
+        background: #fff;
+        border: 1.2px solid var(--border-color);
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        overflow: hidden;
+    }
+
+    .role-card-header {
+        background: #fafbfc;
+        border-bottom: 1.2px solid var(--border-color);
+        padding: 18px 24px;
+    }
+
+    .role-card-body {
+        padding: 24px;
+    }
+
+    .info-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .module-row {
+        border: 1px solid #e8f2fb;
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin-bottom: 12px;
+        background: #fbfdff;
+    }
+
+    .module-title {
+        color: var(--system-dark);
+        font-weight: 700;
+    }
+
+    .access-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        margin-right: 8px;
+        margin-bottom: 8px;
+    }
+
+    .access-manage {
+        background: rgba(52, 152, 219, 0.14);
+        color: #0d4e73;
+    }
+
+    .access-view {
+        background: rgba(40, 167, 69, 0.12);
+        color: #1f6b33;
+    }
+
+    .scope-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 5px 12px;
+        background: #eef6fd;
+        color: #0d2c4a;
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+
+    .btn-blue {
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+    }
+
+    .btn-blue:hover {
+        background: #2980b9;
+        color: white;
+    }
+</style>
+
+<div class="role-wrapper">
+    <div class="container-fluid">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+            <div>
+                <h2 style="color: var(--system-dark); font-weight: 700; margin: 0;">Role <span style="font-weight: 300;">Management</span></h2>
+                <p class="text-muted m-0">Create reusable role templates and control which modules they can open.</p>
+            </div>
+            <a href="@(Model.IsActualSuperAdmin ? Url.Action("GlobalUserManagement", "Admin") : Url.Action("UserManagement", "Admin"))" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left mr-2"></i> Back to Users
+            </a>
+        </div>
+
+        @if (TempData["ErrorMessage"] != null)
+        {
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-circle mr-2"></i>@TempData["ErrorMessage"]
+            </div>
+        }
+
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle mr-2"></i>Please correct the highlighted issues below.
+                @Html.ValidationSummary(true, "", new { @class = "small mt-2 mb-0" })
+            </div>
+        }
+
+        <div class="row">
+            <div class="col-lg-5 mb-4">
+                <div class="role-card">
+                    <div class="role-card-header">
+                        <h4 class="mb-1" style="color: var(--system-dark); font-weight: 700;">
+                            <i class="fas fa-user-tag text-primary mr-2"></i>@(Model.IsEditMode ? "Edit Role Template" : "Create Role Template")
+                        </h4>
+                        <p class="text-muted small mb-0">
+                            @(Model.IsActualSuperAdmin ? "Set per-module access levels and choose whether the template is global or company-specific." : "Choose the company modules this custom admin role can manage or view.")
+                        </p>
+                    </div>
+                    <div class="role-card-body">
+                        @using (Html.BeginForm(Model.IsEditMode ? "UpdateRole" : "CreateRole", "Admin", FormMethod.Post))
+                        {
+                            @Html.AntiForgeryToken()
+                            @Html.HiddenFor(m => m.EditingRoleId)
+
+                            <div class="form-group mb-4">
+                                <label class="info-label" for="Name">Role Name</label>
+                                @Html.TextBoxFor(m => m.Name, new { @class = "form-control", placeholder = "e.g. Recruitment Officer" })
+                                @Html.ValidationMessageFor(m => m.Name, "", new { @class = "text-danger small" })
+                            </div>
+
+                            <div class="form-group mb-4">
+                                <label class="info-label" for="Description">Description</label>
+                                @Html.TextAreaFor(m => m.Description, new { @class = "form-control", rows = 3, placeholder = "Short summary of what this role is expected to do." })
+                                @Html.ValidationMessageFor(m => m.Description, "", new { @class = "text-danger small" })
+                            </div>
+
+                            if (Model.IsActualSuperAdmin)
+                            {
+                                <div class="form-group mb-4">
+                                    <label class="info-label" for="CompanyId">Role Scope</label>
+                                    @Html.DropDownListFor(
+                                        m => m.CompanyId,
+                                        new SelectList(Model.Companies, "Id", "Name", Model.CompanyId),
+                                        "Global / System Template",
+                                        new { @class = "form-control custom-select" })
+                                    <span class="text-muted small">Leave blank to create a global template that can be assigned in any company.</span>
+                                </div>
+                            }
+                            else
+                            {
+                                @Html.HiddenFor(m => m.CompanyId)
+                            }
+
+                            <div class="mb-3">
+                                <span class="info-label">Module Access</span>
+                                @for (var i = 0; i < Model.ModulePermissions.Count; i++)
+                                {
+                                    <div class="module-row">
+                                        @Html.HiddenFor(m => m.ModulePermissions[i].ModuleKey)
+                                        @Html.HiddenFor(m => m.ModulePermissions[i].DisplayName)
+                                        @Html.HiddenFor(m => m.ModulePermissions[i].Description)
+                                        @Html.HiddenFor(m => m.ModulePermissions[i].IconClass)
+
+                                        <div class="d-flex justify-content-between align-items-start flex-wrap">
+                                            <div class="pr-3">
+                                                <div class="module-title">
+                                                    <i class="fas @Model.ModulePermissions[i].IconClass text-primary mr-2"></i>@Model.ModulePermissions[i].DisplayName
+                                                </div>
+                                                <div class="text-muted small mt-1">@Model.ModulePermissions[i].Description</div>
+                                            </div>
+                                            <div class="mt-2 mt-md-0">
+                                                @Html.HiddenFor(m => m.ModulePermissions[i].AccessLevel)
+                                                <div class="custom-control custom-checkbox mb-2">
+                                                    @Html.CheckBoxFor(m => m.ModulePermissions[i].IsSelected, new { @class = "custom-control-input", id = "perm_manage_" + i })
+                                                    <label class="custom-control-label font-weight-bold" for="@("perm_manage_" + i)">
+                                                        Allow Access
+                                                    </label>
+                                                </div>
+                                                <div class="custom-control custom-checkbox">
+                                                    @Html.CheckBoxFor(m => m.ModulePermissions[i].IsReadOnlySelected, new { @class = "custom-control-input", id = "perm_view_" + i })
+                                                    <label class="custom-control-label font-weight-bold" for="@("perm_view_" + i)">
+                                                        Allow Read-Only Access
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="d-flex justify-content-end">
+                                @if (Model.IsEditMode)
+                                {
+                                    <a href="@Url.Action("RoleManagement", "Admin")" class="btn btn-outline-secondary mr-2">
+                                        <i class="fas fa-times mr-1"></i>Cancel
+                                    </a>
+                                }
+                                <button type="submit" class="btn-blue">
+                                    <i class="fas @(Model.IsEditMode ? "fa-edit" : "fa-save") mr-2"></i>@(Model.IsEditMode ? "Update Role Template" : "Save Role Template")
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7 mb-4">
+                <div class="role-card">
+                    <div class="role-card-header">
+                        <h4 class="mb-1" style="color: var(--system-dark); font-weight: 700;">
+                            <i class="fas fa-layer-group text-primary mr-2"></i>Existing Role Templates
+                        </h4>
+                        <p class="text-muted small mb-0">Review and manage the role templates available for your organization.</p>
+                    </div>
+                    <div class="role-card-body">
+                        @if (!Model.ExistingRoles.Any())
+                        {
+                            <div class="alert alert-info mb-0">
+                                <i class="fas fa-info-circle mr-2"></i>No custom role templates have been created yet.
+                            </div>
+                        }
+                        else
+                        {
+                            foreach (var role in Model.ExistingRoles)
+                            {
+                                <div class="border rounded p-3 mb-3" style="border-color: #dfeaf5 !important;">
+                                    <div class="d-flex justify-content-between align-items-start flex-wrap">
+                                        <div class="pr-3">
+                                            <div class="d-flex align-items-center flex-wrap mb-2">
+                                                <h5 class="mb-0 mr-2" style="color: var(--system-dark); font-weight: 700;">@role.Name</h5>
+                                                <span class="scope-badge">
+                                                    <i class="fas @(role.IsGlobal ? "fa-globe" : "fa-building") mr-2"></i>@role.ScopeName
+                                                </span>
+                                            </div>
+                                            @if (!string.IsNullOrWhiteSpace(role.Description))
+                                            {
+                                                <p class="text-muted mb-2">@role.Description</p>
+                                            }
+                                            <div class="small text-muted mb-2">
+                                                Created by <strong>@role.CreatedByUserName</strong> on @role.CreatedDate.ToString("dd MMM yyyy HH:mm")
+                                            </div>
+                                            <div class="small text-muted mb-3">
+                                                Assigned users: <strong>@role.AssignedUsersCount</strong>
+                                            </div>
+                                            <div>
+                                                @foreach (var permission in role.Permissions)
+                                                {
+                                                    <span class="access-chip @(string.Equals(permission.AccessLevel, RoleAccessLevels.Manage, StringComparison.OrdinalIgnoreCase) ? "access-manage" : "access-view")">
+                                                        <i class="fas @permission.IconClass mr-2"></i>@permission.DisplayName: @permission.AccessLevel
+                                                    </span>
+                                                }
+                                            </div>
+                                        </div>
+                                        @if (role.CanDelete)
+                                        {
+                                            <div class="d-flex align-items-center">
+                                                <a href="@Url.Action("RoleManagement", "Admin", new { editRoleId = role.Id })" class="btn btn-outline-primary btn-sm mr-2">
+                                                    <i class="fas fa-edit mr-1"></i>Edit
+                                                </a>
+                                                @using (Html.BeginForm("DeleteRole", "Admin", FormMethod.Post, new { onsubmit = "return confirm('Delete this role template? Assigned users must be removed first.');" }))
+                                                {
+                                                    @Html.AntiForgeryToken()
+                                                    @Html.Hidden("id", role.Id)
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                        <i class="fas fa-trash-alt mr-1"></i>Delete
+                                                    </button>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
