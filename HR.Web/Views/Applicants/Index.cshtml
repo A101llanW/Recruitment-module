@@ -54,55 +54,153 @@
     };
 }
 
+<style>
+    .applicant-item {
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 4px;
+        margin-bottom: 4px;
+        background: #fff;
+    }
+
+    .applicant-summary {
+        cursor: pointer;
+        user-select: none;
+        min-height: 2.25rem;
+    }
+
+    .applicant-summary:hover {
+        background: #f8f9fa;
+    }
+
+    .applicant-chevron {
+        transition: transform 0.2s ease;
+        width: 1rem;
+        text-align: center;
+    }
+
+    .applicant-summary[aria-expanded="true"] .applicant-chevron {
+        transform: rotate(90deg);
+    }
+
+    .applicant-name-compact {
+        font-size: 0.95rem;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+
+    .applicant-meta-compact {
+        font-size: 0.8rem;
+        color: #6c757d;
+        white-space: nowrap;
+    }
+</style>
+
 <div class="mt-4">
     <h2 class="mb-3">Applicants</h2>
-    <div class="d-flex justify-content-between mb-3">
-        <input type="text"
-               id="searchBar"
-               class="form-control w-100 w-md-50"
-               placeholder="Search applicants...">
-    </div>
 
-    <div class="table-responsive">
-        <table class="table table-bordered table-striped" id="applicantsTable">
-            <thead class="table-dark">
-                <tr>
-                    <th>Name</th>
-                    <th class="d-none d-md-table-cell">Email</th>
-                    <th class="d-none d-md-table-cell">Phone</th>
-                    <th>
-                        <a href="@Url.Action("Index", new { sortOrder = ViewBag.ProficiencySortParam })" class="text-white text-decoration-none">
-                            Proficiency (Years)
-                            @{
-                            if (ViewBag.ProficiencySortParam == "proficiency_desc")
-                            {
-                <i class="fas fa-sort-up"></i> }
-                            else if (ViewBag.ProficiencySortParam == "")
-                            {
-<i class="fas fa-sort-down"></i> 
-                            }
-                            else
-                            {
-<i class="fas fa-sort"></i>
-                            }
-                                }
-                        </a>
-                    </th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody id="applicantTable">
-                @foreach (var item in Model)
+    <div class="d-flex flex-wrap align-items-end mb-2">
+        <div class="mr-3 mb-2 flex-grow-1" style="min-width: 200px;">
+            <label for="searchBar" class="small text-muted mb-1 d-block">Search</label>
+            <input type="text"
+                   id="searchBar"
+                   class="form-control form-control-sm"
+                   placeholder="Name, email, or phone…">
+        </div>
+        <div class="mr-3 mb-2">
+            <span class="small text-muted mb-1 d-block">Needs review</span>
+            <button type="button"
+                    id="needsReviewToggle"
+                    class="btn btn-sm btn-outline-warning"
+                    aria-pressed="false"
+                    title="Show only candidates with an active application that is not on hold and has no interview booked yet.">
+                <i class="fas fa-filter"></i> Off
+            </button>
+        </div>
+        <div class="mr-3 mb-2">
+            <label for="pageSizeSelect" class="small text-muted mb-1 d-block">Show up to</label>
+            <select id="pageSizeSelect" class="form-control form-control-sm" style="width: auto; min-width: 5.5rem;">
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="0">All</option>
+            </select>
+        </div>
+        <div class="mb-2 ml-md-auto">
+            <span class="small text-muted mb-1 d-block">Sort</span>
+            <a href="@Url.Action("Index", new { sortOrder = ViewBag.ProficiencySortParam })"
+               class="btn btn-sm btn-outline-secondary">
+                Proficiency
+                @if (ViewBag.ProficiencySortParam == "proficiency_desc")
                 {
-                    var latestApp = getLatestUninterviewedApp(item);
-                    var latestAppForHold = getLatestApp(item);
-                <tr data-proficiency="@getProficiencyValue(item)">
-                    <td>@item.FullName</td>
-                    <td class="d-none d-md-table-cell">@item.Email</td>
-                    <td class="d-none d-md-table-cell">@item.Phone</td>
-                    <td>@getProficiencyDisplay(item)</td>
-                    <td>
-                        <div class="d-flex flex-column flex-md-row">
+                    <i class="fas fa-sort-up"></i>
+                }
+                else if (ViewBag.ProficiencySortParam == "")
+                {
+                    <i class="fas fa-sort-down"></i>
+                }
+                else
+                {
+                    <i class="fas fa-sort"></i>
+                }
+            </a>
+        </div>
+    </div>
+    <p id="applicantListMeta" class="small text-muted mb-3"></p>
+
+    @if (Model == null || !Model.Any())
+    {
+        <div class="alert alert-info">No applicants yet.</div>
+    }
+    else
+    {
+        <div id="applicantList" class="applicant-list">
+            @foreach (var item in Model)
+            {
+                var latestApp = getLatestUninterviewedApp(item);
+                var latestAppForHold = getLatestApp(item);
+                var needsReview = latestApp != null;
+                var collapseId = "applicant-detail-" + item.Id;
+                var searchBlob = (item.FullName + " " + item.Email + " " + item.Phone).ToLowerInvariant();
+                <div class="applicant-item"
+                     data-needs-review="@(needsReview ? "1" : "0")"
+                     data-search-text="@searchBlob"
+                     data-proficiency="@getProficiencyValue(item)">
+                    <div class="applicant-summary d-flex align-items-center px-2 py-1 px-md-3 py-md-2"
+                         role="button"
+                         tabindex="0"
+                         data-toggle="collapse"
+                         data-target="#@collapseId"
+                         aria-expanded="false"
+                         aria-controls="@collapseId">
+                        <i class="fas fa-chevron-right applicant-chevron text-muted mr-2 small"></i>
+                        <div class="flex-grow-1 text-truncate applicant-name-compact" title="@item.FullName">
+                            @item.FullName
+                        </div>
+                        @if (needsReview)
+                        {
+                            <span class="badge badge-warning badge-pill mr-2">Review</span>
+                        }
+                        <span class="applicant-meta-compact d-none d-sm-inline">
+                            @getProficiencyDisplay(item)
+                        </span>
+                    </div>
+                    <div id="@collapseId" class="collapse applicant-details border-top bg-light px-3 py-3">
+                        <div class="row small mb-3">
+                            <div class="col-md-6 mb-1 mb-md-0">
+                                <span class="text-muted">Email</span>
+                                <div>@(string.IsNullOrEmpty(item.Email) ? "—" : item.Email)</div>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted">Phone</span>
+                                <div>@(string.IsNullOrEmpty(item.Phone) ? "—" : item.Phone)</div>
+                            </div>
+                            <div class="col-12 mt-2 d-sm-none">
+                                <span class="text-muted">Proficiency</span>
+                                <div>@getProficiencyDisplay(item)</div>
+                            </div>
+                        </div>
+                        <div class="d-flex flex-column flex-md-row flex-wrap">
                             <a href="@Url.Action("Details", "Applicants", new { id = item.Id })"
                                class="btn btn-sm btn-info mb-1 mb-md-0 mr-md-1">
                                 <i class="fas fa-user"></i> View
@@ -112,48 +210,135 @@
                             {
                                 if (latestAppForHold.Status != "On Hold")
                                 {
-                                    using (Html.BeginForm("PutOnHold", "Applications", FormMethod.Post))
+                                    using (Html.BeginForm("PutOnHold", "Applications", FormMethod.Post, new { @class = "d-inline mb-1 mb-md-0 mr-md-1" }))
                                     {
                                         @Html.AntiForgeryToken()
                                         @Html.Hidden("applicationId", latestAppForHold.Id)
-                                        <button type="submit"
-                                                class="btn btn-sm btn-warning mb-1 mb-md-0 mr-md-1">
+                                        <button type="submit" class="btn btn-sm btn-warning">
                                             Put On Hold
                                         </button>
                                     }
                                 }
                                 else
                                 {
-                                    using (Html.BeginForm("ReleaseHold", "Applications", FormMethod.Post))
+                                    using (Html.BeginForm("ReleaseHold", "Applications", FormMethod.Post, new { @class = "d-inline mb-1 mb-md-0 mr-md-1" }))
                                     {
                                         @Html.AntiForgeryToken()
                                         @Html.Hidden("applicationId", latestAppForHold.Id)
-                                        <button type="submit"
-                                                class="btn btn-sm btn-primary mb-1 mb-md-0 mr-md-1">
+                                        <button type="submit" class="btn btn-sm btn-primary">
                                             Release Hold
                                         </button>
                                     }
-                                    <span class="badge badge-secondary">On Hold</span>
+                                    <span class="badge badge-secondary align-self-center mb-1 mb-md-0 mr-md-1">On Hold</span>
                                 }
                             }
                         </div>
-                    </td>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
 
-                </tr>}
-            </tbody>
-        </table>
-    </div>
-    </div>
+<script>
+    (function () {
+        var searchBar = document.getElementById('searchBar');
+        var needsReviewToggle = document.getElementById('needsReviewToggle');
+        var pageSizeSelect = document.getElementById('pageSizeSelect');
+        var meta = document.getElementById('applicantListMeta');
+        if (!searchBar || !needsReviewToggle || !pageSizeSelect || !meta) {
+            return;
+        }
 
-    <script>
-        document.getElementById('searchBar').addEventListener('input', function () {
-            const filter = this.value.toLowerCase();
-            const rows = document.querySelectorAll('#applicantTable tr');
-            rows.forEach(row => {
-                const name = row.cells[0].textContent.toLowerCase();
-                row.style.display = name.includes(filter) ? '' : 'none';
+        function getPageSizeLimit() {
+            var v = parseInt(pageSizeSelect.value, 10);
+            if (isNaN(v) || v <= 0) {
+                return Number.POSITIVE_INFINITY;
+            }
+            return v;
+        }
+
+        function closeHiddenDetails() {
+            if (typeof jQuery === 'undefined') {
+                return;
+            }
+            document.querySelectorAll('.applicant-item').forEach(function (item) {
+                if (item.style.display === 'none') {
+                    var c = item.querySelector('.collapse');
+                    if (c && jQuery(c).collapse) {
+                        jQuery(c).collapse('hide');
+                    }
+                }
+            });
+        }
+
+        function applyFilters() {
+            var q = (searchBar.value || '').toLowerCase().trim();
+            var needsOnly = needsReviewToggle.getAttribute('aria-pressed') === 'true';
+            var limit = getPageSizeLimit();
+            var items = document.querySelectorAll('.applicant-item');
+            var matched = 0;
+            var shown = 0;
+
+            items.forEach(function (item) {
+                var blob = (item.getAttribute('data-search-text') || '');
+                var needs = item.getAttribute('data-needs-review') === '1';
+                var matchesSearch = !q || blob.indexOf(q) !== -1;
+                var matchesReview = !needsOnly || needs;
+                var passes = matchesSearch && matchesReview;
+
+                if (!passes) {
+                    item.style.display = 'none';
+                    return;
+                }
+
+                matched++;
+                if (shown < limit) {
+                    item.style.display = '';
+                    shown++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            closeHiddenDetails();
+
+            if (matched === 0) {
+                meta.textContent = 'No applicants match the current filters.';
+            } else if (shown < matched) {
+                meta.textContent = 'Showing ' + shown + ' of ' + matched + ' matching applicants (limit).';
+            } else {
+                meta.textContent = 'Showing ' + shown + ' matching applicant' + (shown === 1 ? '' : 's') + '.';
+            }
+        }
+
+        needsReviewToggle.addEventListener('click', function () {
+            var on = needsReviewToggle.getAttribute('aria-pressed') !== 'true';
+            needsReviewToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+            if (on) {
+                needsReviewToggle.classList.remove('btn-outline-warning');
+                needsReviewToggle.classList.add('btn-warning');
+                needsReviewToggle.innerHTML = '<i class="fas fa-filter"></i> On';
+            } else {
+                needsReviewToggle.classList.add('btn-outline-warning');
+                needsReviewToggle.classList.remove('btn-warning');
+                needsReviewToggle.innerHTML = '<i class="fas fa-filter"></i> Off';
+            }
+            applyFilters();
+        });
+
+        searchBar.addEventListener('input', applyFilters);
+        pageSizeSelect.addEventListener('change', applyFilters);
+
+        document.querySelectorAll('.applicant-summary').forEach(function (el) {
+            el.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    el.click();
+                }
             });
         });
-    </script>
 
-
+        applyFilters();
+    })();
+</script>

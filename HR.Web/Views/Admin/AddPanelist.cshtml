@@ -1,0 +1,128 @@
+@model HR.Web.ViewModels.CreatePanelistViewModel
+@using System.Collections.Generic
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Add Panelist";
+    var isActualSuperAdmin = User != null && User.IsInRole("SuperAdmin");
+    var templateOptions = Model.PanelistRoleTemplateOptions ?? new List<System.Web.Mvc.SelectListItem>();
+}
+
+<div class="container mt-4">
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <h4 class="mb-0"><i class="fas fa-user-plus mr-2"></i>Add Panelist</h4>
+                <small class="text-muted">Create a company user with the Panelist sign-in role and a role template from Role Templates (read-only module access, including scheduled interviews).</small>
+            </div>
+            <a href="@Url.Action("UserManagement", "Admin")" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left mr-1"></i> Back
+            </a>
+        </div>
+        <div class="card-body">
+            @if (isActualSuperAdmin)
+            {
+                <div class="alert alert-info">
+                    Select the organization first, then choose an access template. Templates include company-specific and global definitions.
+                </div>
+                <form method="get" action="@Url.Action("AddPanelist", "Admin")" class="mb-3">
+                    <div class="row align-items-end">
+                        <div class="col-md-6 form-group mb-0">
+                            @Html.LabelFor(m => m.CompanyId)
+                            @Html.DropDownListFor(
+                                m => m.CompanyId,
+                                new SelectList(Model.Companies ?? new List<HR.Web.Models.Company>(), "Id", "Name"),
+                                "-- Select company --",
+                                new { @class = "form-control custom-select" })
+                        </div>
+                        <div class="col-md-3 form-group mb-0">
+                            <button type="submit" class="btn btn-outline-primary">
+                                <i class="fas fa-sync mr-1"></i> Load templates
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            }
+
+            @Html.ValidationSummary(true, "", new { @class = "text-danger small mb-3" })
+
+            <div class="border rounded p-3">
+                <h5><i class="fas fa-user-plus mr-2 text-success"></i>New panelist account</h5>
+                <p class="text-muted small">
+                    Panelists can be CC&apos;d on candidate emails when they have an email on file. Assign permissions under <strong>Admin &rarr; Role Templates</strong> (this screen uses those templates).
+                </p>
+                @using (Html.BeginForm("AddPanelist", "Admin", FormMethod.Post, new { autocomplete = "off" }))
+                {
+                    @Html.AntiForgeryToken()
+                    @Html.HiddenFor(m => m.CompanyId)
+
+                    <div class="form-group">
+                        @Html.LabelFor(m => m.PanelistRoleDefinitionId)
+                        @Html.DropDownListFor(
+                            m => m.PanelistRoleDefinitionId,
+                            templateOptions,
+                            "-- Select access template --",
+                            new { @class = "form-control custom-select" })
+                        @Html.ValidationMessageFor(m => m.PanelistRoleDefinitionId, "", new { @class = "text-danger small" })
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            @Html.LabelFor(m => m.FirstName)
+                            @Html.TextBoxFor(m => m.FirstName, new { @class = "form-control", placeholder = "First name" })
+                            @Html.ValidationMessageFor(m => m.FirstName, "", new { @class = "text-danger small" })
+                        </div>
+                        <div class="col-md-6 form-group">
+                            @Html.LabelFor(m => m.LastName)
+                            @Html.TextBoxFor(m => m.LastName, new { @class = "form-control", placeholder = "Last name" })
+                            @Html.ValidationMessageFor(m => m.LastName, "", new { @class = "text-danger small" })
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        @Html.LabelFor(m => m.UserName)
+                        @Html.TextBoxFor(m => m.UserName, new { @class = "form-control", placeholder = "Unique username", autocomplete = "new-password" })
+                        @Html.ValidationMessageFor(m => m.UserName, "", new { @class = "text-danger small" })
+                    </div>
+
+                    <div class="form-group">
+                        @Html.LabelFor(m => m.Email)
+                        @Html.TextBoxFor(m => m.Email, new { @class = "form-control", placeholder = "panelist@company.com", type = "email" })
+                        @Html.ValidationMessageFor(m => m.Email, "", new { @class = "text-danger small" })
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            @Html.LabelFor(m => m.Password)
+                            @Html.PasswordFor(m => m.Password, new { @class = "form-control", placeholder = "Minimum 6 characters", autocomplete = "new-password" })
+                            @Html.ValidationMessageFor(m => m.Password, "", new { @class = "text-danger small" })
+                        </div>
+                        <div class="col-md-6 form-group">
+                            @Html.LabelFor(m => m.ConfirmPassword)
+                            @Html.PasswordFor(m => m.ConfirmPassword, new { @class = "form-control", placeholder = "Repeat password", autocomplete = "new-password" })
+                            @Html.ValidationMessageFor(m => m.ConfirmPassword, "", new { @class = "text-danger small" })
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        @Html.LabelFor(m => m.Phone)
+                        @Html.TextBoxFor(m => m.Phone, new { @class = "form-control", placeholder = "Optional phone number" })
+                        @Html.ValidationMessageFor(m => m.Phone, "", new { @class = "text-danger small" })
+                    </div>
+
+                    <div class="form-group">
+                        <div class="custom-control custom-checkbox">
+                            @Html.CheckBoxFor(m => m.RequirePasswordChange, new { @class = "custom-control-input", id = "RequirePasswordChange" })
+                            <label class="custom-control-label" for="RequirePasswordChange">
+                                Require panelist to change password on first login
+                            </label>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" @(templateOptions.Any() ? null : "disabled=\"disabled\"")>
+                        <i class="fas fa-save mr-1"></i> Create Panelist
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+</div>

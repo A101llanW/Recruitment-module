@@ -40,6 +40,7 @@ namespace HR.Web.Data
         public DbSet<ImpersonationRequest> ImpersonationRequests { get; set; }
         public DbSet<SystemSetting> SystemSettings { get; set; }
         public DbSet<TemporaryCredential> TemporaryCredentials { get; set; }
+        public DbSet<CompanyHrCcEmail> CompanyHrCcEmails { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
@@ -145,6 +146,12 @@ namespace HR.Web.Data
                 .WithMany(d => d.Positions)
                 .HasForeignKey(p => p.DepartmentId)
                 .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<CompanyHrCcEmail>()
+                .HasRequired(e => e.Company)
+                .WithMany(c => c.HrCcEmails)
+                .HasForeignKey(e => e.CompanyId)
+                .WillCascadeOnDelete(true);
         }
 
         private static string ResolveConnectionString()

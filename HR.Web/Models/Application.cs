@@ -33,6 +33,10 @@ namespace HR.Web.Models
         public decimal? Score { get; set; } // AI evaluation score (0-100)
         public string ScoreReason { get; set; } // Brief explanation of the score
 
+        public string CoverLetter { get; set; }
+
+        public DateTime? FailedCandidateEmailSentAt { get; set; }
+
         public virtual Applicant Applicant { get; set; }
         public virtual Position Position { get; set; }
         public virtual ICollection<ApplicationAnswer> ApplicationAnswers { get; set; }

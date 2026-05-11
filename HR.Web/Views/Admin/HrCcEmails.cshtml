@@ -1,0 +1,133 @@
+@model HR.Web.ViewModels.HrCcEmailsPageViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "HR CC emails";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">HR CC emails</h2>
+        <a href="@Url.Action("UserManagement", "Admin")" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left mr-1"></i> User management
+        </a>
+    </div>
+
+    <p class="text-muted">
+        Addresses listed here can be copied on candidate emails (interviews and failed-candidate messages) when an admin enables
+        <strong>CC HR / internal addresses</strong> and selects who should receive each send.
+    </p>
+
+    @if (Model.IsSuperAdmin && Model.CompanyChoices != null && Model.CompanyChoices.Any())
+    {
+        using (Html.BeginForm("HrCcEmails", "Admin", FormMethod.Get, new { @class = "mb-4" }))
+        {
+            <div class="form-row align-items-end">
+                <div class="form-group col-md-6 mb-0">
+                    <label for="companyPicker">Company</label>
+                    <select name="companyId" id="companyPicker" class="form-control" onchange="this.form.submit()">
+                        <option value="">-- Select company --</option>
+                        @foreach (var c in Model.CompanyChoices)
+                        {
+                            <option value="@c.Id" @(Model.CompanyId == c.Id ? "selected" : null)>@c.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        }
+    }
+
+    @if (!Model.CompanyId.HasValue)
+    {
+        <div class="alert alert-info">@Model.CompanyName</div>
+    }
+    else
+    {
+        <div class="card shadow-sm mb-4">
+            <div class="card-header font-weight-bold">
+                <i class="fas fa-building mr-2"></i>@Model.CompanyName
+            </div>
+            <div class="card-body">
+                <h5 class="mb-3">Current addresses</h5>
+                @if (Model.Contacts == null || !Model.Contacts.Any())
+                {
+                    <p class="text-muted mb-0">No HR CC addresses yet. Add one below.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Label</th>
+                                    <th class="text-right" style="width: 120px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in Model.Contacts)
+                                {
+                                    <tr>
+                                        <td>@row.Email</td>
+                                        <td>@(string.IsNullOrWhiteSpace(row.Label) ? "-" : row.Label)</td>
+                                        <td class="text-right">
+                                            @using (Html.BeginForm("DeleteHrCcEmail", "Admin", FormMethod.Post, new { @class = "d-inline" }))
+                                            {
+                                                @Html.AntiForgeryToken()
+                                                @Html.Hidden("id", row.Id)
+                                                if (Model.IsSuperAdmin)
+                                                {
+                                                    @Html.Hidden("companyId", Model.CompanyId.Value)
+                                                }
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove this CC address?');">
+                                                    Remove
+                                                </button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                <hr />
+                <h5 class="mb-3">Add address</h5>
+                @using (Html.BeginForm("AddHrCcEmail", "Admin", FormMethod.Post))
+                {
+                    @Html.AntiForgeryToken()
+                    @Html.HiddenFor(m => m.NewEntry.CompanyId)
+                    if (Model.CompanyUsersForHr != null && Model.CompanyUsersForHr.Any())
+                    {
+                        <div class="form-group">
+                            <label for="addFromUserId">Add from company user</label>
+                            <select name="addFromUserId" id="addFromUserId" class="form-control" style="max-width: 36rem;">
+                                <option value="">Optional: select a user (uses their email)</option>
+                                @foreach (var u in Model.CompanyUsersForHr)
+                                {
+                                    <option value="@u.Id">@u.DisplayName - @u.Email</option>
+                                }
+                            </select>
+                            <small class="form-text text-muted">
+                                Users already listed as HR CC addresses are hidden. Leave the dropdown empty to add only from the email field.
+                            </small>
+                        </div>
+                    }
+                    <div class="form-row">
+                        <div class="form-group col-md-5">
+                            @Html.LabelFor(m => m.NewEntry.Email)
+                            @Html.TextBoxFor(m => m.NewEntry.Email, new { @class = "form-control", type = "email", placeholder = "hr@company.com" })
+                            @Html.ValidationMessageFor(m => m.NewEntry.Email, "", new { @class = "text-danger small" })
+                        </div>
+                        <div class="form-group col-md-4">
+                            @Html.LabelFor(m => m.NewEntry.Label)
+                            @Html.TextBoxFor(m => m.NewEntry.Label, new { @class = "form-control", placeholder = "e.g. HR Manager" })
+                        </div>
+                        <div class="form-group col-md-3 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary btn-block">Add</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>

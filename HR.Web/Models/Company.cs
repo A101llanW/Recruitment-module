@@ -37,5 +37,6 @@ namespace HR.Web.Models
         public virtual ICollection<Question> Questions { get; set; }
         public virtual ICollection<RoleDefinition> RoleDefinitions { get; set; }
         public virtual ICollection<AuditLog> AuditLogs { get; set; }
+        public virtual ICollection<CompanyHrCcEmail> HrCcEmails { get; set; }
     }
 }

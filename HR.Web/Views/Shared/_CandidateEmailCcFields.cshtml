@@ -1,0 +1,88 @@
+@model HR.Web.ViewModels.CandidateEmailCcFieldsModel
+@using System.Linq
+@{
+    var prefix = Model.Prefix ?? "cc";
+    var panelists = Model.Panelists ?? new List<HR.Web.Models.User>();
+    var hrContacts = Model.HrContacts ?? new List<HR.Web.Models.CompanyHrCcEmail>();
+    var panelToggleId = prefix + "CcPanelistsToggle";
+    var panelContainerId = prefix + "CcPanelistsContainer";
+    var hrToggleId = prefix + "CcHrToggle";
+    var hrContainerId = prefix + "CcHrContainer";
+}
+
+<div class="custom-control custom-checkbox mb-2">
+    <input type="checkbox"
+           class="custom-control-input"
+           id="@panelToggleId"
+           name="includePanelistCc"
+           value="true"
+           onchange="toggleOptionalCcSection('@panelToggleId', '@panelContainerId', 'selectedPanelistIds')" />
+    <label class="custom-control-label" for="@panelToggleId">CC panelists</label>
+</div>
+<div id="@panelContainerId" class="border rounded p-2 mb-2 d-none">
+    <div class="small font-weight-bold mb-1">Select panelists to CC</div>
+    @if (panelists.Any())
+    {
+        foreach (var panelist in panelists)
+        {
+            var panelistCheckboxId = prefix + "-panelist-" + panelist.Id;
+            var panelistLabel = string.Format(
+                "{0} ({1})",
+                string.IsNullOrWhiteSpace(panelist.UserName) ? "Panelist" : panelist.UserName,
+                panelist.Email);
+            <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       id="@panelistCheckboxId"
+                       name="selectedPanelistIds"
+                       value="@panelist.Id" />
+                <label class="custom-control-label" for="@panelistCheckboxId">@panelistLabel</label>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="text-muted small">No panelist accounts with email were found (Panelist role or admin users marked as panelist).</div>
+    }
+</div>
+
+<div class="custom-control custom-checkbox mb-2">
+    <input type="checkbox"
+           class="custom-control-input"
+           id="@hrToggleId"
+           name="includeHrCc"
+           value="true"
+           onchange="toggleOptionalCcSection('@hrToggleId', '@hrContainerId', 'selectedHrCcIds')" />
+    <label class="custom-control-label" for="@hrToggleId">CC HR / internal addresses</label>
+</div>
+<div id="@hrContainerId" class="border rounded p-2 mb-2 d-none">
+    <div class="small font-weight-bold mb-1">Select HR addresses to CC</div>
+    @if (hrContacts.Any())
+    {
+        foreach (var hr in hrContacts)
+        {
+            var hrCheckboxId = prefix + "-hr-" + hr.Id;
+            var hrLabel = string.IsNullOrWhiteSpace(hr.Label)
+                ? hr.Email
+                : string.Format("{0} ({1})", hr.Label, hr.Email);
+            <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       id="@hrCheckboxId"
+                       name="selectedHrCcIds"
+                       value="@hr.Id" />
+                <label class="custom-control-label" for="@hrCheckboxId">@hrLabel</label>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="text-muted small">
+            No HR CC addresses configured.
+            @if (!string.IsNullOrWhiteSpace(Model.ManageHrCcUrl))
+            {
+                <a href="@Model.ManageHrCcUrl">Add HR CC emails</a>
+            }
+        </div>
+    }
+</div>

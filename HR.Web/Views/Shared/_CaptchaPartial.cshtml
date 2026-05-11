@@ -1,11 +1,7 @@
-@{
-    var captchaId = Guid.NewGuid().ToString();
-}
-
-<!-- Include jQuery directly -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-<div class="modern-captcha-container" id="captchaContainer">
+<div class="modern-captcha-container" id="captchaContainer"
+     data-captcha-url-test="@Url.Action("Test", "Captcha")"
+     data-captcha-url-generate="@Url.Action("Generate", "Captcha")"
+     data-captcha-url-validate="@Url.Action("Validate", "Captcha")">
     <div class="captcha-header">
         <label class="captcha-label">Security Verification</label>
         <p class="captcha-instruction">Please enter the characters you see in the image below</p>
@@ -117,12 +113,20 @@
     right: 0;
     bottom: 0;
     background: rgba(255,255,255,0.9);
-    display: flex;
+    display: none;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     font-size: 12px;
     color: #6c757d;
+}
+
+.modern-captcha-container.is-captcha-loading .captcha-loading {
+    display: flex;
+}
+
+.modern-captcha-container.is-captcha-loading .captcha-img {
+    visibility: hidden;
 }
 
 .spinner {
@@ -267,254 +271,299 @@
 </style>
 
 <script>
-(function() {
-    var captchaId = '@Html.Raw(captchaId)';
+(function () {
     var currentCaptchaId = '';
     var isLoading = false;
-    
-    // DOM elements
-    console.log('Initializing CAPTCHA DOM elements...');
-    var $container = $('#captchaContainer');
-    var $image = $('#captchaImage');
-    var $loading = $('#captchaLoading');
-    var $input = $('#captchaInput');
-    var $hiddenId = $('#captchaId');
-    var $refreshBtn = $('#refreshCaptcha');
-    
-    console.log('DOM elements found:', {
-        container: $container.length,
-        image: $image.length,
-        loading: $loading.length,
-        input: $input.length,
-        hiddenId: $hiddenId.length,
-        refreshBtn: $refreshBtn.length
-    });
-    var $feedback = $('#captchaFeedback');
-    var $success = $('#captchaSuccess');
-    var $error = $('#captchaError');
-    
-    // Initialize
-    $(document).ready(function() {
-        loadCaptcha();
-        bindEvents();
-    });
-    
-    function bindEvents() {
-        $refreshBtn.on('click', function() {
-            if (!isLoading) {
-                loadCaptcha();
-            }
-        });
-        
-        $input.on('input', function() {
-            validateInput();
-        });
-        
-        $input.on('keypress', function(e) {
-            if (e.which === 13) {
-                e.preventDefault();
-                validateCaptcha();
-            }
-        });
+
+    function getEl(id) {
+        return document.getElementById(id);
     }
-    
-    function loadCaptcha() {
-        if (isLoading) return;
-        
-        console.log('Loading CAPTCHA...');
-        isLoading = true;
-        showLoading(true);
-        clearFeedback();
-        
-        // First test if controller is accessible
-        $.get('/Captcha/Test')
-            .done(function(testResponse) {
-                console.log('CaptchaController test:', testResponse);
-                if (testResponse && testResponse.success) {
-                    // Controller is working, try to generate CAPTCHA
-                    tryGenerateCaptcha();
-                } else {
-                    showError('CaptchaController test failed');
-                    isLoading = false;
-                    showLoading(false);
-                }
-            })
-            .fail(function(xhr, status, error) {
-                console.log('CaptchaController test failed:', status, error);
-                showError('CaptchaController not accessible');
-                isLoading = false;
-                showLoading(false);
-            });
-    }
-    
-    function tryGenerateCaptcha() {
-        // Try multiple possible endpoints
-        var endpoints = ['/Captcha/Generate', '/captcha/generate', '/Home/Captcha/Generate'];
-        
-        function tryEndpoint(index) {
-            if (index >= endpoints.length) {
-                console.log('All endpoints failed');
-                showError('Unable to load CAPTCHA. Please refresh the page.');
-                isLoading = false;
-                showLoading(false);
-                return;
-            }
-            
-            var endpoint = endpoints[index];
-            console.log('Trying endpoint:', endpoint);
-            
-            $.get(endpoint)
-                .done(function(response) {
-                    console.log('CAPTCHA response from', endpoint, ':', response);
-                    if (response && response.success) {
-                        currentCaptchaId = response.captchaId;
-                        $image.attr('src', 'data:image/png;base64,' + response.captchaImage);
-                        $hiddenId.val(response.captchaId);
-                        $input.val('').removeClass('is-valid is-invalid');
-                        console.log('CAPTCHA loaded successfully');
-                        isLoading = false;
-                        showLoading(false);
-                    } else {
-                        console.log('Invalid response from', endpoint, '- trying next');
-                        tryEndpoint(index + 1);
-                    }
-                })
-                .fail(function(xhr, status, error) {
-                    console.log('CAPTCHA load failed from', endpoint, ':', status, error);
-                    tryEndpoint(index + 1);
-                });
+
+    function readDataUrls() {
+        var container = document.getElementById('captchaContainer');
+        if (!container) {
+            return { test: '', generate: '', validate: '' };
         }
-        
-        tryEndpoint(0);
+        return {
+            test: container.getAttribute('data-captcha-url-test') || '',
+            generate: container.getAttribute('data-captcha-url-generate') || '',
+            validate: container.getAttribute('data-captcha-url-validate') || ''
+        };
     }
-    
+
+    function parseJsonFromResponse(text, status) {
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            return { success: false, message: 'Invalid response from server (HTTP ' + status + '). Check network / login session.' };
+        }
+    }
+
+    function fetchCaptchaJson(url, options) {
+        var opts = options || {};
+        return fetch(url, {
+            method: opts.method || 'GET',
+            credentials: 'same-origin',
+            headers: opts.headers || { 'X-Requested-With': 'XMLHttpRequest' },
+            body: opts.body
+        }).then(function (res) {
+            return res.text().then(function (text) {
+                var data = parseJsonFromResponse(text, res.status);
+                return data;
+            });
+        });
+    }
+
+    function showLoading(show) {
+        var container = getEl('captchaContainer');
+        var img = getEl('captchaImage');
+        if (!container || !img) {
+            return;
+        }
+        if (show) {
+            container.classList.add('is-captcha-loading');
+            img.style.visibility = 'hidden';
+        } else {
+            container.classList.remove('is-captcha-loading');
+            img.style.visibility = 'visible';
+        }
+    }
+
+    function showFeedback(message, type) {
+        var el = getEl('captchaFeedback');
+        if (!el) {
+            return;
+        }
+        el.textContent = message || '';
+        el.classList.remove('success', 'error');
+        if (type) {
+            el.classList.add(type);
+        }
+    }
+
+    function clearFeedback() {
+        showFeedback('', null);
+    }
+
+    function hideValidationIcons() {
+        var ok = getEl('captchaSuccess');
+        var bad = getEl('captchaError');
+        if (ok) {
+            ok.style.display = 'none';
+        }
+        if (bad) {
+            bad.style.display = 'none';
+        }
+    }
+
+    function showValidationIcon(type) {
+        hideValidationIcons();
+        var el = type === 'success' ? getEl('captchaSuccess') : getEl('captchaError');
+        if (el) {
+            el.style.display = 'inline';
+        }
+    }
+
+    function showError(message) {
+        showFeedback(message, 'error');
+        isLoading = false;
+        showLoading(false);
+    }
+
     function validateInput() {
-        var value = $input.val().trim();
-        
+        var input = getEl('captchaInput');
+        if (!input) {
+            return;
+        }
+        var value = (input.value || '').trim();
+
         if (value.length === 0) {
-            $input.removeClass('is-valid is-invalid');
+            input.classList.remove('is-valid', 'is-invalid');
             hideValidationIcons();
             return;
         }
-        
+
         if (value.length >= 4) {
-            // Simple client-side validation
-            $input.removeClass('is-invalid').addClass('is-valid');
+            input.classList.remove('is-invalid');
+            input.classList.add('is-valid');
             showValidationIcon('success');
             clearFeedback();
         } else {
-            $input.removeClass('is-valid').addClass('is-invalid');
+            input.classList.remove('is-valid');
+            input.classList.add('is-invalid');
             showValidationIcon('error');
             showFeedback('Please enter at least 4 characters', 'error');
         }
     }
-    
+
+    function tryGenerateCaptcha(urls) {
+        return fetchCaptchaJson(urls.generate, { method: 'GET' })
+            .then(function (response) {
+                if (response && response.success && response.captchaImage) {
+                    currentCaptchaId = response.captchaId || '';
+                    var img = getEl('captchaImage');
+                    var hiddenId = getEl('captchaId');
+                    var input = getEl('captchaInput');
+                    if (img) {
+                        img.src = 'data:image/png;base64,' + response.captchaImage;
+                    }
+                    if (hiddenId) {
+                        hiddenId.value = response.captchaId || '';
+                    }
+                    if (input) {
+                        input.value = '';
+                        input.classList.remove('is-valid', 'is-invalid');
+                    }
+                    isLoading = false;
+                    showLoading(false);
+                } else {
+                    showError((response && response.message) ? response.message : 'Unable to load CAPTCHA. Please refresh the page.');
+                }
+            })
+            .catch(function () {
+                showError('Unable to load CAPTCHA (network error). Please refresh the page.');
+            });
+    }
+
+    function loadCaptcha() {
+        if (isLoading) {
+            return;
+        }
+
+        var urls = readDataUrls();
+        if (!urls.generate) {
+            showError('CAPTCHA configuration error. Please refresh the page.');
+            return;
+        }
+
+        isLoading = true;
+        showLoading(true);
+        clearFeedback();
+
+        tryGenerateCaptcha(urls);
+    }
+
     function validateCaptcha() {
-        var userInput = $input.val().trim();
-        
+        var input = getEl('captchaInput');
+        var urls = readDataUrls();
+        var userInput = input ? (input.value || '').trim() : '';
+
         if (!userInput) {
             showFeedback('Please enter the CAPTCHA characters', 'error');
             return;
         }
-        
+
         if (!currentCaptchaId) {
             showFeedback('CAPTCHA not loaded', 'error');
             return;
         }
-        
+
+        if (!urls.validate) {
+            showFeedback('CAPTCHA configuration error', 'error');
+            return;
+        }
+
         showLoading(true);
-        
-        $.post('/Captcha/Validate', {
-            captchaId: currentCaptchaId,
-            userInput: userInput
+
+        var body = 'captchaId=' + encodeURIComponent(currentCaptchaId) + '&userInput=' + encodeURIComponent(userInput);
+        fetch(urls.validate, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: body
         })
-        .done(function(response) {
-            if (response.success) {
-                showFeedback('CAPTCHA verified successfully!', 'success');
-                $input.addClass('is-valid').removeClass('is-invalid');
-                showValidationIcon('success');
-                
-                // Trigger form submission if in a form
-                var $form = $container.closest('form');
-                if ($form.length && !$form.valid || $form.valid()) {
-                    setTimeout(function() {
-                        $form.submit();
-                    }, 500);
+            .then(function (res) {
+                return res.text().then(function (text) {
+                    return parseJsonFromResponse(text, res.status);
+                });
+            })
+            .then(function (response) {
+                var inputEl = getEl('captchaInput');
+                var container = getEl('captchaContainer');
+                if (response && response.success) {
+                    showFeedback('CAPTCHA verified successfully!', 'success');
+                    if (inputEl) {
+                        inputEl.classList.add('is-valid');
+                        inputEl.classList.remove('is-invalid');
+                    }
+                    showValidationIcon('success');
+                    var form = container ? container.closest('form') : null;
+                    if (form) {
+                        var canSubmit = typeof form.checkValidity !== 'function' || form.checkValidity();
+                        if (canSubmit) {
+                            setTimeout(function () {
+                                form.submit();
+                            }, 500);
+                        }
+                    }
+                } else {
+                    showFeedback((response && response.message) ? response.message : 'Invalid CAPTCHA', 'error');
+                    if (inputEl) {
+                        inputEl.classList.add('is-invalid');
+                        inputEl.classList.remove('is-valid');
+                    }
+                    showValidationIcon('error');
+                    setTimeout(function () {
+                        loadCaptcha();
+                    }, 2000);
                 }
-            } else {
-                showFeedback(response.message || 'Invalid CAPTCHA', 'error');
-                $input.addClass('is-invalid').removeClass('is-valid');
-                showValidationIcon('error');
-                
-                // Auto-refresh after error
-                setTimeout(function() {
+            })
+            .catch(function () {
+                showFeedback('Network error during validation', 'error');
+            })
+            .then(function () {
+                showLoading(false);
+            });
+    }
+
+    function bindEvents() {
+        var refreshBtn = getEl('refreshCaptcha');
+        var input = getEl('captchaInput');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function () {
+                if (!isLoading) {
                     loadCaptcha();
-                }, 2000);
-            }
-        })
-        .fail(function() {
-            showFeedback('Network error during validation', 'error');
-        })
-        .always(function() {
-            showLoading(false);
-        });
-    }
-    
-    function showLoading(show) {
-        console.log('showLoading called with:', show);
-        console.log('DOM elements:', {
-            $loading: $loading.length,
-            $image: $image.length
-        });
-        
-        if (show) {
-            $loading.show();
-            $image.hide();
-        } else {
-            $loading.hide();
-            $image.show();
+                }
+            });
+        }
+        if (input) {
+            input.addEventListener('input', validateInput);
+            input.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter' || e.which === 13) {
+                    e.preventDefault();
+                    validateCaptcha();
+                }
+            });
         }
     }
-    
-    function showFeedback(message, type) {
-        $feedback.text(message).removeClass('success error').addClass(type);
+
+    function init() {
+        bindEvents();
+        loadCaptcha();
     }
-    
-    function clearFeedback() {
-        $feedback.text('').removeClass('success error');
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
     }
-    
-    function showValidationIcon(type) {
-        hideValidationIcons();
-        if (type === 'success') {
-            $success.show();
-        } else {
-            $error.show();
-        }
-    }
-    
-    function hideValidationIcons() {
-        $success.hide();
-        $error.hide();
-    }
-    
-    function showError(message) {
-        showFeedback(message, 'error');
-        showLoading(false);
-    }
-    
-    // Public API
+
     window.CaptchaAPI = {
         refresh: loadCaptcha,
         validate: validateCaptcha,
-        getValue: function() {
+        getValue: function () {
+            var input = getEl('captchaInput');
             return {
                 id: currentCaptchaId,
-                input: $input.val().trim()
+                input: input ? (input.value || '').trim() : ''
             };
         },
-        isValid: function() {
-            return $input.hasClass('is-valid');
+        isValid: function () {
+            var input = getEl('captchaInput');
+            return input && input.classList.contains('is-valid');
         }
     };
 })();

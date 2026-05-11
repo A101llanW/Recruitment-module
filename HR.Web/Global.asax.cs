@@ -29,6 +29,19 @@ namespace HR.Web
             // Disable automatic database changes to prevent schema conflicts
             Database.SetInitializer<HrContext>(null);
 
+            // Ensure optional columns exist when migrations were not applied manually (EF still maps them).
+            try
+            {
+                using (var db = new HrContext())
+                {
+                    DatabaseSchemaEnsure.ApplyOptionalColumns(db);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[MvcApplication] DatabaseSchemaEnsure: " + ex.Message);
+            }
+
             // Purge stale security records on startup (background — non-blocking)
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {

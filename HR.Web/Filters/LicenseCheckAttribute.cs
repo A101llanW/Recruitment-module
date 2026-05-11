@@ -9,10 +9,12 @@ namespace HR.Web.Filters
     {
         public override void OnActionExecuting(ActionExecutingContext filterContext)
         {
-            // SAFETY BYPASS: Never run license checks on the Account controller
-            // This prevents infinite loops on LicenseExpired and Login pages
+            // SAFETY BYPASS: Never run license checks on Account or Captcha
+            // Account: prevents infinite loops on LicenseExpired and Login pages
+            // Captcha: login AJAX must receive JSON, not a redirect to LicenseExpired
             var controllerName = filterContext.ActionDescriptor.ControllerDescriptor.ControllerName;
-            if (string.Equals(controllerName, "Account", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(controllerName, "Account", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(controllerName, "Captcha", StringComparison.OrdinalIgnoreCase))
             {
                 base.OnActionExecuting(filterContext);
                 return;

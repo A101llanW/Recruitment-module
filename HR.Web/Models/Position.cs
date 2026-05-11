@@ -54,6 +54,9 @@ namespace HR.Web.Models
         [Range(0, 100)]
         public decimal PassMark { get; set; }
 
+        [StringLength(4000)]
+        public string PassMarksByStageJson { get; set; }
+
         public virtual ICollection<Application> Applications { get; set; }
         public virtual ICollection<PositionQuestion> PositionQuestions { get; set; }
     }

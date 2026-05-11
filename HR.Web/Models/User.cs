@@ -73,6 +73,9 @@ namespace HR.Web.Models
         [StringLength(10)]
         public string EmailVerificationCode { get; set; }
         public System.DateTime? EmailVerificationExpiry { get; set; }
+
+        /// <summary>When true, user may be assigned as an interview panelist for workflow routing.</summary>
+        public bool IsPanelist { get; set; }
     }
 }
 

@@ -372,8 +372,24 @@
                         }
                         if (canManageRoleTemplates)
                         {
-                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "RoleManagement" ? "active" : "")">
-                                <a class="nav-link" href="@Url.Action("RoleManagement","Admin", new { tenant = tenantToken })"><i class="fas fa-user-tag"></i> Role Templates</a>
+                            <li class="nav-item dropdown @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"] != null && (ViewContext.RouteData.Values["action"].ToString() == "RoleManagement" || ViewContext.RouteData.Values["action"].ToString() == "EmailTemplates") ? "active" : "")">
+                                <a class="nav-link dropdown-toggle" href="#" id="templatesModuleMenu" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                    <i class="fas fa-layer-group"></i> Templates
+                                </a>
+                                <div class="dropdown-menu" aria-labelledby="templatesModuleMenu">
+                                    <a class="dropdown-item @(ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "RoleManagement" ? "active" : "")" href="@Url.Action("RoleManagement","Admin", new { tenant = tenantToken })">
+                                        <i class="fas fa-user-tag"></i> Role Templates
+                                    </a>
+                                    <a class="dropdown-item @(ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "EmailTemplates" ? "active" : "")" href="@Url.Action("EmailTemplates","Admin", new { tenant = tenantToken })">
+                                        <i class="fas fa-envelope-open-text"></i> Email Templates
+                                    </a>
+                                </div>
+                            </li>
+                        }
+                        if (isAdminUser || isImpersonating || isSuperAdminUser)
+                        {
+                            <li class="nav-item @(ViewContext.RouteData.Values["controller"] != null && ViewContext.RouteData.Values["controller"].ToString() == "Admin" && ViewContext.RouteData.Values["action"] != null && ViewContext.RouteData.Values["action"].ToString() == "HrCcEmails" ? "active" : "")">
+                                <a class="nav-link" href="@Url.Action("HrCcEmails","Admin", new { tenant = tenantToken })"><i class="fas fa-at"></i> HR CC Emails</a>
                             </li>
                         }
                         if (canViewSecurityLogs || isImpersonating)

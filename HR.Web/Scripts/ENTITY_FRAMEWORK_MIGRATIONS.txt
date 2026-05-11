@@ -1,0 +1,22 @@
+Database schema updates (without running EF DbMigrator)
+=========================================================
+
+This project keeps idempotent SQL under HR.Web\Migrations\*.sql.
+
+To apply them to the database configured in Web.config (connection name HrContext):
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File HR.Web\scripts\Apply-MigrationsSql.ps1
+
+Optional dry run (lists scripts only):
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File HR.Web\scripts\Apply-MigrationsSql.ps1 -WhatIf
+
+Optional custom Web.config path:
+
+  ...\Apply-MigrationsSql.ps1 -WebConfigPath "D:\sites\HR\Web.config"
+
+Requirements: sqlcmd on PATH (SQL Server Command Line Utilities).
+
+These scripts do not modify __MigrationHistory. If you still use EF migrations in
+some environments, keep that workflow separate; this SQL path is safe when EF
+is disabled.

@@ -1,0 +1,52 @@
+@model HR.Web.ViewModels.CoverLetterViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Cover Letter";
+}
+
+<div class="container mt-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">Cover Letter</h4>
+        </div>
+        <div class="card-body">
+            @if (TempData["ErrorMessage"] != null)
+            {
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle mr-2"></i>@TempData["ErrorMessage"]
+                </div>
+            }
+
+            <div class="alert alert-info">
+                Write a short cover letter for <strong>@Model.PositionTitle</strong> before continuing.
+            </div>
+
+            @using (Html.BeginForm("CoverLetter", "Applications", FormMethod.Post))
+            {
+                @Html.AntiForgeryToken()
+                @Html.HiddenFor(m => m.PositionId)
+                @Html.HiddenFor(m => m.PositionTitle)
+
+                <div class="form-group">
+                    @Html.LabelFor(m => m.CoverLetter, new { @class = "font-weight-bold" })
+                    @Html.TextAreaFor(
+                        m => m.CoverLetter,
+                        new
+                        {
+                            @class = "form-control",
+                            rows = 10,
+                            placeholder = "Dear Hiring Manager,\r\n\r\n..."
+                        })
+                    @Html.ValidationMessageFor(m => m.CoverLetter, "", new { @class = "text-danger" })
+                    <small class="form-text text-muted">Tip: Keep it focused. Explain why you are a good fit for this role.</small>
+                </div>
+
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="@Url.Action("Index", "Positions")" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Continue to Profile</button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
