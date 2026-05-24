@@ -113,6 +113,82 @@ namespace HR.Web.Controllers
             return View(BuildRoleManagementPageViewModel(model));
         }
 
+        private static IEnumerable<RolePermissionInputViewModel> GetSelectedModulePermissions(IEnumerable<RolePermissionInputViewModel> modulePermissions)
+        {
+            return (modulePermissions ?? Enumerable.Empty<RolePermissionInputViewModel>())
+                .Where(p => !string.Equals(p.AccessLevel, RoleAccessLevels.None, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void PersistRolePermissions(int roleDefinitionId, IEnumerable<RolePermissionInputViewModel> modulePermissions)
+        {
+            foreach (var permission in GetSelectedModulePermissions(modulePermissions))
+            {
+                _uow.RolePermissions.Add(new RolePermission
+                {
+                    RoleDefinitionId = roleDefinitionId,
+                    ModuleKey = permission.ModuleKey,
+                    AccessLevel = permission.AccessLevel
+                });
+            }
+
+            _uow.Complete();
+        }
+
+        private void ReplaceRolePermissions(RoleDefinition role, IEnumerable<RolePermissionInputViewModel> modulePermissions)
+        {
+            var existingPermissions = (role.RolePermissions ?? Enumerable.Empty<RolePermission>()).ToList();
+            _uow.Context.Set<RolePermission>().RemoveRange(existingPermissions);
+            _uow.Complete();
+            PersistRolePermissions(role.Id, modulePermissions);
+        }
+
+        private static RoleDefinition BuildNewRoleDefinition(RoleManagementPageViewModel model, int? scopedCompanyId, string createdBy)
+        {
+            return new RoleDefinition
+            {
+                CompanyId = scopedCompanyId,
+                Name = model.Name != null ? model.Name.Trim() : null,
+                Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description.Trim(),
+                CreatedByUserName = createdBy,
+                CreatedDate = DateTime.Now,
+                IsActive = true
+            };
+        }
+
+        private static void ApplyRoleDefinitionFields(RoleDefinition role, RoleManagementPageViewModel model, int? scopedCompanyId)
+        {
+            role.CompanyId = scopedCompanyId;
+            role.Name = model.Name != null ? model.Name.Trim() : null;
+            role.Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description.Trim();
+        }
+
+        private ActionResult RoleManagementForm(RoleManagementPageViewModel model, int? scopedCompanyId, int? editingRoleId = null)
+        {
+            if (model != null)
+            {
+                model.CompanyId = scopedCompanyId;
+                if (editingRoleId.HasValue)
+                {
+                    model.EditingRoleId = editingRoleId;
+                }
+            }
+
+            return View("RoleManagement", BuildRoleManagementPageViewModel(model ?? new RoleManagementPageViewModel()));
+        }
+
+        private void LogRoleTemplateCreated(RoleDefinition roleDefinition, int? scopedCompanyId)
+        {
+            var scopeCompany = scopedCompanyId.HasValue ? _uow.Companies.Get(scopedCompanyId.Value) : null;
+            var scopeName = scopeCompany != null ? scopeCompany.Name : "Global";
+            _auditService.LogAction(
+                GetAuditActorName(),
+                "ROLE_TEMPLATE_CREATED",
+                "RoleManagement",
+                roleDefinition.Id.ToString(),
+                true,
+                string.Format("Created role template '{0}' for scope '{1}'", roleDefinition.Name, scopeName));
+        }
+
         [HttpPost]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
@@ -137,44 +213,14 @@ namespace HR.Web.Controllers
 
             if (!ModelState.IsValid)
             {
-                model.CompanyId = scopedCompanyId;
-                return View("RoleManagement", BuildRoleManagementPageViewModel(model));
+                return RoleManagementForm(model, scopedCompanyId);
             }
 
-            var roleDefinition = new RoleDefinition
-            {
-                CompanyId = scopedCompanyId,
-                Name = model.Name != null ? model.Name.Trim() : null,
-                Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description.Trim(),
-                CreatedByUserName = GetAuditActorName(),
-                CreatedDate = DateTime.Now,
-                IsActive = true
-            };
-
+            var roleDefinition = BuildNewRoleDefinition(model, scopedCompanyId, GetAuditActorName());
             _uow.RoleDefinitions.Add(roleDefinition);
             _uow.Complete();
-
-            foreach (var permission in (model.ModulePermissions ?? Enumerable.Empty<RolePermissionInputViewModel>())
-                .Where(p => !string.Equals(p.AccessLevel, RoleAccessLevels.None, StringComparison.OrdinalIgnoreCase)))
-            {
-                _uow.RolePermissions.Add(new RolePermission
-                {
-                    RoleDefinitionId = roleDefinition.Id,
-                    ModuleKey = permission.ModuleKey,
-                    AccessLevel = permission.AccessLevel
-                });
-            }
-
-            _uow.Complete();
-            var scopeCompany = scopedCompanyId.HasValue ? _uow.Companies.Get(scopedCompanyId.Value) : null;
-            var scopeName = scopeCompany != null ? scopeCompany.Name : "Global";
-            _auditService.LogAction(
-                GetAuditActorName(),
-                "ROLE_TEMPLATE_CREATED",
-                "RoleManagement",
-                roleDefinition.Id.ToString(),
-                true,
-                string.Format("Created role template '{0}' for scope '{1}'", roleDefinition.Name, scopeName));
+            PersistRolePermissions(roleDefinition.Id, model.ModulePermissions);
+            LogRoleTemplateCreated(roleDefinition, scopedCompanyId);
 
             TempData["SuccessMessage"] = string.Format("Role template '{0}' created successfully.", roleDefinition.Name);
             return RedirectToAction("RoleManagement");
@@ -223,31 +269,11 @@ namespace HR.Web.Controllers
 
             if (!ModelState.IsValid)
             {
-                model.EditingRoleId = roleId;
-                model.CompanyId = scopedCompanyId;
-                return View("RoleManagement", BuildRoleManagementPageViewModel(model));
+                return RoleManagementForm(model, scopedCompanyId, roleId);
             }
 
-            role.CompanyId = scopedCompanyId;
-            role.Name = model.Name != null ? model.Name.Trim() : null;
-            role.Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description.Trim();
-
-            var existingPermissions = (role.RolePermissions ?? Enumerable.Empty<RolePermission>()).ToList();
-            _uow.Context.Set<RolePermission>().RemoveRange(existingPermissions);
-            _uow.Complete();
-
-            foreach (var permission in (model.ModulePermissions ?? Enumerable.Empty<RolePermissionInputViewModel>())
-                .Where(p => !string.Equals(p.AccessLevel, RoleAccessLevels.None, StringComparison.OrdinalIgnoreCase)))
-            {
-                _uow.RolePermissions.Add(new RolePermission
-                {
-                    RoleDefinitionId = role.Id,
-                    ModuleKey = permission.ModuleKey,
-                    AccessLevel = permission.AccessLevel
-                });
-            }
-
-            _uow.Complete();
+            ApplyRoleDefinitionFields(role, model, scopedCompanyId);
+            ReplaceRolePermissions(role, model.ModulePermissions);
             _auditService.LogAction(
                 GetAuditActorName(),
                 "ROLE_TEMPLATE_UPDATED",
@@ -499,16 +525,35 @@ namespace HR.Web.Controllers
             }
 
             var scope = GetRoleManagementScopeContext();
+            ValidateRoleDefinitionCompanyScope(scopedCompanyId, scope);
+            ValidateRoleDefinitionModuleSelection(model);
+            ValidateRoleDefinitionNameUniqueness(model, scopedCompanyId, editingRoleId);
+        }
+
+        private static bool HasSelectedModulePermissions(RoleManagementPageViewModel model)
+        {
+            return model.ModulePermissions != null &&
+                   model.ModulePermissions.Any(p => !string.Equals(p.AccessLevel, RoleAccessLevels.None, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void ValidateRoleDefinitionCompanyScope(int? scopedCompanyId, RoleManagementScopeContext scope)
+        {
             if (!scopedCompanyId.HasValue && !scope.IsGlobalSuperAdmin)
             {
                 ModelState.AddModelError("CompanyId", "Company context is required to create a role template.");
             }
+        }
 
-            if (model.ModulePermissions == null || !model.ModulePermissions.Any(p => !string.Equals(p.AccessLevel, RoleAccessLevels.None, StringComparison.OrdinalIgnoreCase)))
+        private void ValidateRoleDefinitionModuleSelection(RoleManagementPageViewModel model)
+        {
+            if (!HasSelectedModulePermissions(model))
             {
                 ModelState.AddModelError("", "Select at least one module before saving the role template.");
             }
+        }
 
+        private void ValidateRoleDefinitionNameUniqueness(RoleManagementPageViewModel model, int? scopedCompanyId, int? editingRoleId)
+        {
             var normalizedName = model.Name != null ? model.Name.Trim().ToLower() : string.Empty;
             var duplicateExists = _uow.Context.RoleDefinitions.Any(r =>
                 r.IsActive &&
@@ -598,45 +643,54 @@ namespace HR.Web.Controllers
             var scope = GetRoleManagementScopeContext();
             if (string.IsNullOrWhiteSpace(selectedRoleKey))
             {
-                return new RoleSelectionResolution
-                {
-                    ErrorMessage = "Role selection is required."
-                };
+                return RoleSelectionError("Role selection is required.");
             }
 
             if (selectedRoleKey.StartsWith("builtin:", StringComparison.OrdinalIgnoreCase))
             {
-                var builtinRole = selectedRoleKey.Substring("builtin:".Length);
-                if (string.Equals(builtinRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase) && !scope.IsGlobalSuperAdmin)
-                {
-                    return new RoleSelectionResolution
-                    {
-                        ErrorMessage = "Only superadmins can assign the SuperAdmin role."
-                    };
-                }
-
-                return new RoleSelectionResolution
-                {
-                    IsValid = true,
-                    BaseRole = builtinRole,
-                    DisplayRoleName = builtinRole
-                };
+                return ResolveBuiltinRoleSelection(selectedRoleKey, scope);
             }
 
             if (!selectedRoleKey.StartsWith("custom:", StringComparison.OrdinalIgnoreCase))
             {
-                return new RoleSelectionResolution
-                {
-                    ErrorMessage = "Unknown role selection."
-                };
+                return RoleSelectionError("Unknown role selection.");
             }
 
+            return ResolveCustomRoleSelection(selectedRoleKey, scope, actorCompanyId, targetCompanyId);
+        }
+
+        private static RoleSelectionResolution RoleSelectionError(string message)
+        {
+            return new RoleSelectionResolution { ErrorMessage = message };
+        }
+
+        private static RoleSelectionResolution RoleSelectionSuccess(string baseRole, int? roleDefinitionId, string displayName)
+        {
+            return new RoleSelectionResolution
+            {
+                IsValid = true,
+                BaseRole = baseRole,
+                RoleDefinitionId = roleDefinitionId,
+                DisplayRoleName = displayName
+            };
+        }
+
+        private static RoleSelectionResolution ResolveBuiltinRoleSelection(string selectedRoleKey, RoleManagementScopeContext scope)
+        {
+            var builtinRole = selectedRoleKey.Substring("builtin:".Length);
+            if (string.Equals(builtinRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase) && !scope.IsGlobalSuperAdmin)
+            {
+                return RoleSelectionError("Only superadmins can assign the SuperAdmin role.");
+            }
+
+            return RoleSelectionSuccess(builtinRole, null, builtinRole);
+        }
+
+        private RoleSelectionResolution ResolveCustomRoleSelection(string selectedRoleKey, RoleManagementScopeContext scope, int? actorCompanyId, int? targetCompanyId)
+        {
             if (!int.TryParse(selectedRoleKey.Substring("custom:".Length), out var roleDefinitionId))
             {
-                return new RoleSelectionResolution
-                {
-                    ErrorMessage = "Invalid custom role selection."
-                };
+                return RoleSelectionError("Invalid custom role selection.");
             }
 
             var roleDefinition = _uow.Context.RoleDefinitions
@@ -645,51 +699,39 @@ namespace HR.Web.Controllers
 
             if (roleDefinition == null)
             {
-                return new RoleSelectionResolution
-                {
-                    ErrorMessage = "The selected custom role no longer exists."
-                };
+                return RoleSelectionError("The selected custom role no longer exists.");
             }
 
+            return ValidateCustomRoleAssignment(roleDefinition, scope, actorCompanyId, targetCompanyId);
+        }
+
+        private static RoleSelectionResolution ValidateCustomRoleAssignment(
+            RoleDefinition roleDefinition,
+            RoleManagementScopeContext scope,
+            int? actorCompanyId,
+            int? targetCompanyId)
+        {
             if (!targetCompanyId.HasValue)
             {
-                return new RoleSelectionResolution
-                {
-                    ErrorMessage = "Custom roles can only be assigned to users that belong to a company."
-                };
+                return RoleSelectionError("Custom roles can only be assigned to users that belong to a company.");
             }
 
             if (roleDefinition.CompanyId.HasValue && roleDefinition.CompanyId.Value != targetCompanyId.Value)
             {
-                return new RoleSelectionResolution
-                {
-                    ErrorMessage = string.Format("The custom role '{0}' belongs to a different company scope.", roleDefinition.Name)
-                };
+                return RoleSelectionError(string.Format("The custom role '{0}' belongs to a different company scope.", roleDefinition.Name));
             }
 
             if (scope.IsImpersonating && !roleDefinition.CompanyId.HasValue)
             {
-                return new RoleSelectionResolution
-                {
-                    ErrorMessage = "Global role templates cannot be assigned while impersonating a company."
-                };
+                return RoleSelectionError("Global role templates cannot be assigned while impersonating a company.");
             }
 
             if (!scope.IsGlobalSuperAdmin && roleDefinition.CompanyId.HasValue && roleDefinition.CompanyId.Value != actorCompanyId)
             {
-                return new RoleSelectionResolution
-                {
-                    ErrorMessage = "You cannot assign a custom role from another company."
-                };
+                return RoleSelectionError("You cannot assign a custom role from another company.");
             }
 
-            return new RoleSelectionResolution
-            {
-                IsValid = true,
-                BaseRole = "Admin",
-                RoleDefinitionId = roleDefinition.Id,
-                DisplayRoleName = roleDefinition.Name
-            };
+            return RoleSelectionSuccess("Admin", roleDefinition.Id, roleDefinition.Name);
         }
 
         private static string BuildRoleSelectionKey(User user)

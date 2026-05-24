@@ -30,6 +30,11 @@ namespace HR.Web.Services
 
         public LinkedInProfileImportService(ISettingsService settingsService)
         {
+            if (settingsService == null)
+            {
+                throw new ArgumentNullException(nameof(settingsService));
+            }
+
             _settingsService = settingsService;
         }
 
@@ -146,6 +151,11 @@ namespace HR.Web.Services
 
         private LinkedInBasicProfileResult GetBasicProfile(string accessToken)
         {
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                throw new ArgumentException("LinkedIn access token is required.", nameof(accessToken));
+            }
+
             EnsureModernTls();
 
             var request = (HttpWebRequest)WebRequest.Create(IdentityEndpoint);

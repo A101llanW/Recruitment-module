@@ -18,6 +18,11 @@ namespace HR.Web.Services
 
         public TenantService(UnitOfWork uow)
         {
+            if (uow == null)
+            {
+                throw new ArgumentNullException(nameof(uow));
+            }
+
             _uow = uow;
         }
 

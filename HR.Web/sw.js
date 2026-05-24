@@ -1,5 +1,6 @@
 /* eslint-env serviceworker */
 /* global self */
+/* @noflow */
 var swGlobal = self;
 var LEADING_SLASHES = /^\/+/;
 var STATIC_PATH_PATTERN = /\/(?:Content|Scripts)\//i;
@@ -23,31 +24,31 @@ var STATIC_ASSETS = [
     appUrl("Content/images/nanosoft-logo.jpg")
 ];
 
-swGlobal.addEventListener("install", function (event) {
+swGlobal.addEventListener("install", (event) => {
     event.waitUntil(
-        swGlobal.caches.open(CACHE_NAME).then(function (cache) {
+        swGlobal.caches.open(CACHE_NAME).then((cache) => {
             return cache.addAll(STATIC_ASSETS);
-        }).then(function () {
+        }).then(() => {
             return swGlobal.skipWaiting();
         })
     );
 });
 
-swGlobal.addEventListener("activate", function (event) {
+swGlobal.addEventListener("activate", (event) => {
     event.waitUntil(
-        swGlobal.caches.keys().then(function (cacheNames) {
+        swGlobal.caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames
-                    .filter(function (cacheName) { return cacheName !== CACHE_NAME; })
-                    .map(function (cacheName) { return swGlobal.caches.delete(cacheName); })
+                    .filter((cacheName) => { return cacheName !== CACHE_NAME; })
+                    .map((cacheName) => { return swGlobal.caches.delete(cacheName); })
             );
-        }).then(function () {
+        }).then(() => {
             return swGlobal.clients.claim();
         })
     );
 });
 
-swGlobal.addEventListener("fetch", function (event) {
+swGlobal.addEventListener("fetch", (event) => {
     if (event.request.method !== "GET") {
         return;
     }
@@ -60,15 +61,15 @@ swGlobal.addEventListener("fetch", function (event) {
     if (event.request.mode === "navigate") {
         event.respondWith(
             swGlobal.fetch(event.request)
-                .then(function (response) {
+                .then((response) => {
                     var responseCopy = response.clone();
-                    swGlobal.caches.open(CACHE_NAME).then(function (cache) {
+                    swGlobal.caches.open(CACHE_NAME).then((cache) => {
                         cache.put(event.request, responseCopy);
                     });
                     return response;
                 })
-                .catch(function () {
-                    return swGlobal.caches.match(event.request).then(function (cachedPage) {
+                .catch(() => {
+                    return swGlobal.caches.match(event.request).then((cachedPage) => {
                         return cachedPage || swGlobal.caches.match(OFFLINE_URL);
                     });
                 })
@@ -81,14 +82,14 @@ swGlobal.addEventListener("fetch", function (event) {
 
     if (isStaticAsset) {
         event.respondWith(
-            swGlobal.caches.match(event.request).then(function (cached) {
+            swGlobal.caches.match(event.request).then((cached) => {
                 if (cached) {
                     return cached;
                 }
 
-                return swGlobal.fetch(event.request).then(function (response) {
+                return swGlobal.fetch(event.request).then((response) => {
                     var responseCopy = response.clone();
-                    swGlobal.caches.open(CACHE_NAME).then(function (cache) {
+                    swGlobal.caches.open(CACHE_NAME).then((cache) => {
                         cache.put(event.request, responseCopy);
                     });
                     return response;

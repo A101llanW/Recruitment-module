@@ -1,5 +1,6 @@
 /* eslint-env browser */
-/* global document, window */
+/* global document, window, Map, CSS */
+/* @noflow */
 /* exported initQuestionnaireAssignmentEditor */
 
 function clamp(v, min, max) {
@@ -33,22 +34,64 @@ function parseIntSafe(raw, fallback) {
     return Number.isNaN(parsed) ? fallback : parsed;
 }
 
+function getFirstElement(list) {
+    var first = null;
+    list.forEach((item) => {
+        if (first === null) {
+            first = item;
+        }
+    });
+    return first;
+}
+
+function getItemAtIndex(list, index) {
+    var found = null;
+    var pos = 0;
+    list.forEach((item) => {
+        if (pos === index) {
+            found = item;
+        }
+        pos += 1;
+    });
+    return found;
+}
+
+function incrementModulo(list, times, onItem) {
+    if (!list.length || times <= 0) {
+        return;
+    }
+    var len = list.length;
+    var step = 0;
+    while (step < times) {
+        var target = getItemAtIndex(list, step % len);
+        if (target) {
+            onItem(target);
+        }
+        step += 1;
+    }
+}
+
 function findWeightRow(container, questionId) {
     if (!container) {
         return null;
     }
-    var rows = container.querySelectorAll('.question-weight-row[data-question-id]');
-    for (var i = 0; i < rows.length; i++) {
-        if (rows[i].getAttribute('data-question-id') === String(questionId)) {
-            return rows[i];
+    var targetId = String(questionId);
+    var match = null;
+    container.querySelectorAll('.question-weight-row[data-question-id]').forEach((row) => {
+        if (!match && row.getAttribute('data-question-id') === targetId) {
+            match = row;
         }
-    }
-    return null;
+    });
+    return match;
 }
 
 function initQuestionnaireAssignmentEditor(options) {
     options = options || {};
-        var form = document.getElementById(options.formId) || document.getElementById('positionCreateForm') || document.getElementById('positionEditForm') || document.getElementById('templateEditForm');
+        var formIdOption = options.formId;
+        var stageCountInputIdOption = options.stageCountInputId;
+        var multiStageToggleFieldIdOption = options.multiStageToggleFieldId;
+        var stageCountSectionIdOption = options.stageCountSectionId;
+        var form = document.getElementById(formIdOption) || document.getElementById('positionCreateForm') || document.getElementById('positionEditForm') || document.getElementById('templateEditForm');
         if (!form) {
             return undefined;
         }
@@ -56,10 +99,10 @@ function initQuestionnaireAssignmentEditor(options) {
         var weightsFieldEl = document.getElementById(weightsFieldId);
         var stageValuesFieldId = 'questionStagesPayload';
         var stagesPayloadInput = document.getElementById(stageValuesFieldId);
-        var stageCountInput = document.getElementById(options.stageCountInputId || 'questionnaireStageCountInput');
-        var multiStageToggleFieldId = options.multiStageToggleFieldId || 'enableMultiStageToggle';
+        var stageCountInput = document.getElementById(stageCountInputIdOption || 'questionnaireStageCountInput');
+        var multiStageToggleFieldId = multiStageToggleFieldIdOption || 'enableMultiStageToggle';
         var secondaryStageToggleEl = document.getElementById(multiStageToggleFieldId);
-        var stageCountSection = document.getElementById(options.stageCountSectionId || 'questionnaireStageCountSection');
+        var stageCountSection = document.getElementById(stageCountSectionIdOption || 'questionnaireStageCountSection');
         var legendRow = document.getElementById('questionnaireStageLegendRow');
         var legendEl = document.getElementById('questionnaireStageLegend');
         var budgetText = document.getElementById('questionWeightBudgetText');
@@ -125,7 +168,7 @@ function initQuestionnaireAssignmentEditor(options) {
                     btn.setAttribute('role', 'tab');
                     btn.setAttribute('aria-selected', stageNum === activeQuestionnaireEditorStage ? 'true' : 'false');
                     btn.textContent = 'Stage ' + stageNum;
-                    btn.addEventListener('click', function () {
+                    btn.addEventListener('click', () => {
                         activeQuestionnaireEditorStage = stageNum;
                         refreshStageSwitcher();
                         syncAllCheckboxVisuals();
@@ -137,7 +180,7 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         function selectedCheckboxes() {
-            return questionCheckboxes.filter(function (cb) {
+            return questionCheckboxes.filter((cb) => {
                 return mapIsTrue(isQuestionSelected, cb.value);
             });
         }
@@ -158,11 +201,11 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         function syncGroupSelectHeaders() {
-            Array.prototype.slice.call(document.querySelectorAll('.group-select-all')).forEach(function (groupSelect) {
+            Array.prototype.slice.call(document.querySelectorAll('.group-select-all')).forEach((groupSelect) => {
                 var targetGroupClass = groupSelect.getAttribute('data-target-group') + '-checkbox';
                 var targetBoxes = Array.prototype.slice.call(document.querySelectorAll('.' + targetGroupClass));
                 if (targetBoxes.length) {
-                    groupSelect.checked = targetBoxes.every(function (box) {
+                    groupSelect.checked = targetBoxes.every((box) => {
                         return box.checked;
                     });
                 }
@@ -191,7 +234,7 @@ function initQuestionnaireAssignmentEditor(options) {
                 return;
             }
             clearElement(selectedQuestionsHiddenContainer);
-            questionCheckboxes.forEach(function (cb) {
+            questionCheckboxes.forEach((cb) => {
                 var qid = cb.value;
                 if (!mapIsTrue(isQuestionSelected, qid)) {
                     return;
@@ -217,7 +260,7 @@ function initQuestionnaireAssignmentEditor(options) {
                 stagesPayloadInput.value = '';
                 return;
             }
-            var pairs = selected.map(function (cb) {
+            var pairs = selected.map((cb) => {
                 var qid = cb.value;
                 var st = parseInt(mapGet(questionStages, qid, 1), 10);
                 if (Number.isNaN(st) || st < 1) {
@@ -233,7 +276,7 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         function selectedIds(selected) {
-            return selected.map(function (cb) { return cb.value; });
+            return selected.map((cb) => { return cb.value; });
         }
 
         function ensureWeight(questionId) {
@@ -245,7 +288,7 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         function sumByIds(questionIds) {
-            return questionIds.reduce(function (sum, questionId) {
+            return questionIds.reduce((sum, questionId) => {
                 ensureWeight(questionId);
                 return sum + mapGet(questionWeights, questionId, 0);
             }, 0);
@@ -259,28 +302,28 @@ function initQuestionnaireAssignmentEditor(options) {
 
             if (questionIds.length === 1) {
                 var single = new Map();
-                single.set(questionIds[0], sanitizedTarget);
+                single.set(getFirstElement(questionIds), sanitizedTarget);
                 return single;
             }
 
-            var basis = questionIds.map(function (questionId) {
+            var basis = questionIds.map((questionId) => {
                 var raw = basisAccessor(questionId);
                 var safe = clamp(parseIntSafe(raw, 0), 0, 100);
                 return { id: questionId, weight: safe };
             });
 
-            var totalBasis = basis.reduce(function (sum, item) { return sum + item.weight; }, 0);
+            var totalBasis = basis.reduce((sum, item) => { return sum + item.weight; }, 0);
             if (totalBasis <= 0) {
                 var evenBase = Math.floor(sanitizedTarget / questionIds.length);
                 var evenRemainder = sanitizedTarget - (evenBase * questionIds.length);
                 var evenResult = new Map();
-                questionIds.forEach(function (questionId, index) {
+                questionIds.forEach((questionId, index) => {
                     evenResult.set(questionId, evenBase + (index < evenRemainder ? 1 : 0));
                 });
                 return evenResult;
             }
 
-            var allocation = basis.map(function (item, index) {
+            var allocation = basis.map((item, index) => {
                 var exact = (item.weight / totalBasis) * sanitizedTarget;
                 var floored = Math.floor(exact);
                 return {
@@ -291,30 +334,30 @@ function initQuestionnaireAssignmentEditor(options) {
                 };
             });
 
-            var assigned = allocation.reduce(function (sum, item) { return sum + item.value; }, 0);
+            var assigned = allocation.reduce((sum, item) => { return sum + item.value; }, 0);
             var remainder = sanitizedTarget - assigned;
-            allocation.sort(function (a, b) { return b.fraction - a.fraction; });
-            for (var i = 0; i < remainder; i++) {
-                allocation[i % allocation.length].value += 1;
-            }
-            allocation.sort(function (a, b) { return a.index - b.index; });
+            allocation.sort((a, b) => { return b.fraction - a.fraction; });
+            incrementModulo(allocation, remainder, (item) => {
+                item.value += 1;
+            });
+            allocation.sort((a, b) => { return a.index - b.index; });
 
             var result = new Map();
-            allocation.forEach(function (item) {
+            allocation.forEach((item) => {
                 result.set(item.id, clamp(item.value, 0, 100));
             });
             return result;
         }
 
         function updatePayload(selected) {
-            var pairs = selected.map(function (cb) {
+            var pairs = selected.map((cb) => {
                 return cb.value + '=' + (mapGet(questionWeights, cb.value, 0));
             });
             weightsFieldEl.value = pairs.join(';');
         }
 
         function updateBudgetUi(selected) {
-            var total = selected.reduce(function (sum, cb) {
+            var total = selected.reduce((sum, cb) => {
                 ensureWeight(cb.value);
                 return sum + mapGet(questionWeights, cb.value, 0);
             }, 0);
@@ -328,7 +371,7 @@ function initQuestionnaireAssignmentEditor(options) {
                 return;
             }
 
-            var unlockedCount = selected.filter(function (cb) {
+            var unlockedCount = selected.filter((cb) => {
                 return !mapIsTrue(questionLocks, cb.value);
             }).length;
 
@@ -343,23 +386,23 @@ function initQuestionnaireAssignmentEditor(options) {
             var ids = selectedIds(selected);
             ids.forEach(ensureWeight);
 
-            var lockedIds = ids.filter(function (questionId) { return mapIsTrue(questionLocks, questionId); });
-            var unlockedIds = ids.filter(function (questionId) { return !mapIsTrue(questionLocks, questionId); });
+            var lockedIds = ids.filter((questionId) => { return mapIsTrue(questionLocks, questionId); });
+            var unlockedIds = ids.filter((questionId) => { return !mapIsTrue(questionLocks, questionId); });
             if (!unlockedIds.length) {
                 return;
             }
 
             var lockedTotal = sumByIds(lockedIds);
             if (lockedTotal > 100) {
-                var compressedLocked = normalizeIntegerDistribution(lockedIds, 100, function (questionId) { return mapGet(questionWeights, questionId, 0); });
-                lockedIds.forEach(function (questionId) { mapSet(questionWeights, questionId, compressedLocked.get(questionId)); });
+                var compressedLocked = normalizeIntegerDistribution(lockedIds, 100, (questionId) => { return mapGet(questionWeights, questionId, 0); });
+                lockedIds.forEach((questionId) => { mapSet(questionWeights, questionId, compressedLocked.get(questionId)); });
                 lockedTotal = 100;
             }
 
             var unlockedTarget = clamp(100 - lockedTotal, 0, 100);
             var base = Math.floor(unlockedTarget / unlockedIds.length);
             var remainder = unlockedTarget - (base * unlockedIds.length);
-            unlockedIds.forEach(function (questionId, index) {
+            unlockedIds.forEach((questionId, index) => {
                 mapSet(questionWeights, questionId, base + (index < remainder ? 1 : 0));
             });
         }
@@ -379,7 +422,7 @@ function initQuestionnaireAssignmentEditor(options) {
             }
 
             weightEmpty.style.display = 'none';
-            selected.forEach(function (cb) {
+            selected.forEach((cb) => {
                 var questionId = cb.value;
                 ensureWeight(questionId);
                 var row = findWeightRow(weightRows, questionId);
@@ -443,7 +486,7 @@ function initQuestionnaireAssignmentEditor(options) {
             ids.forEach(ensureWeight);
 
             function sumWeightsByIds(questionIds) {
-                return questionIds.reduce(function (sum, id) {
+                return questionIds.reduce((sum, id) => {
                     ensureWeight(id);
                     return sum + (mapGet(questionWeights, id, 0));
                 }, 0);
@@ -455,22 +498,22 @@ function initQuestionnaireAssignmentEditor(options) {
                 }
 
                 var pool = poolIds
-                    .map(function (id, index) {
+                    .map((id, index) => {
                         ensureWeight(id);
                         return { id: id, index: index, weight: mapGet(questionWeights, id, 0) };
                     })
-                    .filter(function (item) { return item.weight > 0; });
+                    .filter((item) => { return item.weight > 0; });
 
                 if (!pool.length) {
                     return;
                 }
 
-                var poolTotal = pool.reduce(function (sum, item) { return sum + item.weight; }, 0);
+                var poolTotal = pool.reduce((sum, item) => { return sum + item.weight; }, 0);
                 if (poolTotal <= 0) {
                     return;
                 }
 
-                var reductions = pool.map(function (item) {
+                var reductions = pool.map((item) => {
                     var exact = (item.weight / poolTotal) * reductionNeeded;
                     var floored = Math.floor(exact);
                     return {
@@ -482,24 +525,23 @@ function initQuestionnaireAssignmentEditor(options) {
                     };
                 });
 
-                var assigned = reductions.reduce(function (sum, item) { return sum + item.value; }, 0);
+                var assigned = reductions.reduce((sum, item) => { return sum + item.value; }, 0);
                 var remainder = reductionNeeded - assigned;
-                reductions.sort(function (a, b) { return b.fraction - a.fraction; });
+                reductions.sort((a, b) => { return b.fraction - a.fraction; });
 
-                for (var i = 0; i < remainder; i++) {
-                    var pick = reductions[i % reductions.length];
+                incrementModulo(reductions, remainder, (pick) => {
                     if (pick.value < pick.max) {
                         pick.value += 1;
                     }
-                }
+                });
 
-                reductions.sort(function (a, b) { return a.index - b.index; });
-                reductions.forEach(function (item) {
+                reductions.sort((a, b) => { return a.index - b.index; });
+                reductions.forEach((item) => {
                     mapSet(questionWeights, item.id, clamp((mapGet(questionWeights, item.id, 0)) - item.value, 0, 100));
                 });
             }
 
-            var lockedIds = ids.filter(function (id) { return mapIsTrue(questionLocks, id); });
+            var lockedIds = ids.filter((id) => { return mapIsTrue(questionLocks, id); });
             var lockedTotal = sumWeightsByIds(lockedIds);
             var maxForThis = clamp(100 - lockedTotal, 0, 100);
 
@@ -513,7 +555,7 @@ function initQuestionnaireAssignmentEditor(options) {
             }
 
             mapSet(questionWeights, questionId, desired);
-            var otherUnlockedIds = ids.filter(function (id) { return id !== questionId && !mapIsTrue(questionLocks, id); });
+            var otherUnlockedIds = ids.filter((id) => { return id !== questionId && !mapIsTrue(questionLocks, id); });
             var otherUnlockedTotal = sumWeightsByIds(otherUnlockedIds);
             var totalAfter = lockedTotal + desired + otherUnlockedTotal;
             var reductionNeeded = Math.max(0, totalAfter - 100);
@@ -549,7 +591,7 @@ function initQuestionnaireAssignmentEditor(options) {
             lockButton.className = 'btn btn-sm btn-outline-secondary question-weight-lock mr-2';
             lockButton.title = 'Lock weight';
             var lockIcon = document.createElement('i'); lockIcon.className = 'fas fa-lock-open'; lockButton.appendChild(lockIcon);
-            lockButton.addEventListener('click', function () {
+            lockButton.addEventListener('click', () => {
                 toggleLock(questionId);
             });
 
@@ -560,10 +602,10 @@ function initQuestionnaireAssignmentEditor(options) {
             slider.step = '1';
             slider.className = 'flex-grow-1 question-weight-slider';
             slider.value = mapGet(questionWeights, questionId, 0);
-            slider.addEventListener('input', function () {
+            slider.addEventListener('input', () => {
                 setFocusedWeight(questionId, slider.value);
             });
-            slider.addEventListener('change', function () {
+            slider.addEventListener('change', () => {
                 setFocusedWeight(questionId, slider.value);
             });
 
@@ -575,10 +617,10 @@ function initQuestionnaireAssignmentEditor(options) {
             number.className = 'form-control form-control-sm ml-2 question-weight-number';
             number.style.maxWidth = '72px';
             number.value = mapGet(questionWeights, questionId, 0);
-            number.addEventListener('input', function () {
+            number.addEventListener('input', () => {
                 setFocusedWeight(questionId, number.value);
             });
-            number.addEventListener('change', function () {
+            number.addEventListener('change', () => {
                 setFocusedWeight(questionId, number.value);
             });
 
@@ -606,7 +648,7 @@ function initQuestionnaireAssignmentEditor(options) {
                 return;
             }
 
-            selected.forEach(function (cb) {
+            selected.forEach((cb) => {
                 ensureWeight(cb.value);
                 var qid = cb.value;
                 if (!questionStages.has(qid) || Number.isNaN(parseInt(mapGet(questionStages, qid, 1), 10))) {
@@ -615,20 +657,20 @@ function initQuestionnaireAssignmentEditor(options) {
             });
 
             var ids = selectedIds(selected);
-            var total = ids.reduce(function (sum, id) { return sum + (mapGet(questionWeights, id, 0)); }, 0);
+            var total = ids.reduce((sum, id) => { return sum + (mapGet(questionWeights, id, 0)); }, 0);
             if (total <= 0) {
                 if (ids.length === 1) {
-                    mapSet(questionWeights, ids[0], 100);
+                    mapSet(questionWeights, getFirstElement(ids), 100);
                 } else {
                     var base = Math.floor(100 / ids.length);
                     var rem = 100 - (base * ids.length);
-                    ids.forEach(function (id, idx) {
+                    ids.forEach((id, idx) => {
                         mapSet(questionWeights, id, base + (idx < rem ? 1 : 0));
                     });
                 }
             }
 
-            selected.forEach(function (cb) {
+            selected.forEach((cb) => {
                 weightRows.appendChild(createWeightRow(cb));
             });
 
@@ -636,13 +678,13 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         var groupSelects = Array.prototype.slice.call(document.querySelectorAll('.group-select-all'));
-        groupSelects.forEach(function (groupSelect) {
-            groupSelect.addEventListener('change', function () {
+        groupSelects.forEach((groupSelect) => {
+            groupSelect.addEventListener('change', () => {
                 var targetGroupClass = groupSelect.getAttribute('data-target-group') + '-checkbox';
                 var checkboxes = Array.prototype.slice.call(document.querySelectorAll('.' + targetGroupClass));
                 var want = groupSelect.checked;
                 var nStages = getQuestionnaireStageCount();
-                checkboxes.forEach(function (box) {
+                checkboxes.forEach((box) => {
                     var qid = box.value;
                     if (nStages <= 1) {
                         mapSet(isQuestionSelected, qid, want);
@@ -670,11 +712,11 @@ function initQuestionnaireAssignmentEditor(options) {
             var targetGroupClass = groupSelect.getAttribute('data-target-group') + '-checkbox';
             var targetBoxes = Array.prototype.slice.call(document.querySelectorAll('.' + targetGroupClass));
             if (targetBoxes.length) {
-                groupSelect.checked = targetBoxes.every(function (box) { return box.checked; });
+                groupSelect.checked = targetBoxes.every((box) => { return box.checked; });
             }
         });
 
-        questionCheckboxes.forEach(function (cb) {
+        questionCheckboxes.forEach((cb) => {
             var qid = cb.value;
             var initial = parseFloat(cb.getAttribute('data-initial-weight'));
             if (!Number.isNaN(initial)) {
@@ -687,7 +729,7 @@ function initQuestionnaireAssignmentEditor(options) {
                 var st = (!Number.isNaN(initStage) && initStage > 0) ? initStage : 1;
                 mapSet(questionStages, qid, Math.min(cap, Math.max(1, st)));
             }
-            cb.addEventListener('change', function () {
+            cb.addEventListener('change', () => {
                 var nStages = getQuestionnaireStageCount();
                 var want = cb.checked;
                 if (nStages <= 1) {
@@ -708,15 +750,15 @@ function initQuestionnaireAssignmentEditor(options) {
                     }
                     syncCheckboxVisualFor(cb);
                 }
-                var groupClass = Array.prototype.slice.call(cb.classList).filter(function (cls) {
+                var groupClass = Array.prototype.slice.call(cb.classList).find((cls) => {
                     return cls.indexOf('group_') === 0 && cls.indexOf('-checkbox') > -1;
-                })[0];
+                });
                 if (groupClass) {
                     var groupId = groupClass.replace('-checkbox', '');
-                    var groupToggle = document.querySelector('.group-select-all[data-target-group="' + groupId + '"]');
+                    var groupToggle = document.querySelector('.group-select-all[data-target-group="' + CSS.escape(groupId) + '"]');
                     if (groupToggle) {
                         var groupBoxes = Array.prototype.slice.call(document.querySelectorAll('.' + groupClass));
-                        groupToggle.checked = groupBoxes.every(function (box) { return box.checked; });
+                        groupToggle.checked = groupBoxes.every((box) => { return box.checked; });
                     }
                 }
                 renderRows();
@@ -727,7 +769,7 @@ function initQuestionnaireAssignmentEditor(options) {
         syncGroupSelectHeaders();
 
         if (redistributeButton) {
-            redistributeButton.addEventListener('click', function () {
+            redistributeButton.addEventListener('click', () => {
                 var selected = selectedCheckboxes();
                 if (!selected.length) {
                     return;
@@ -738,10 +780,10 @@ function initQuestionnaireAssignmentEditor(options) {
             });
         }
 
-        form.addEventListener('submit', function () {
+        form.addEventListener('submit', () => {
             rebuildSelectedQuestionsHiddenInputs();
             var selected = selectedCheckboxes();
-            selected.forEach(function (cb) { ensureWeight(cb.value); });
+            selected.forEach((cb) => { ensureWeight(cb.value); });
             updatePayload(selected);
             updateStagesPayload(selected);
         });
@@ -772,20 +814,20 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         if (secondaryStageToggleEl && stageCountInput) {
-            secondaryStageToggleEl.addEventListener('change', function () {
+            secondaryStageToggleEl.addEventListener('change', () => {
                 applyHasSecondaryCheckbox(secondaryStageToggleEl.checked);
             });
         }
 
         if (stageCountInput) {
-            stageCountInput.addEventListener('change', function () {
+            stageCountInput.addEventListener('change', () => {
                 syncHasSecondaryFromStageCount();
                 updateStageCountSectionVisibility();
                 clampActiveEditorStage(getQuestionnaireStageCount());
                 refreshQuestionnaireStageUi();
                 renderRows();
             });
-            stageCountInput.addEventListener('input', function () {
+            stageCountInput.addEventListener('input', () => {
                 syncHasSecondaryFromStageCount();
                 updateStageCountSectionVisibility();
                 clampActiveEditorStage(getQuestionnaireStageCount());
@@ -812,7 +854,7 @@ function initQuestionnaireAssignmentEditor(options) {
             updateStageCountSectionVisibility();
             clampActiveEditorStage(getQuestionnaireStageCount());
         }
-        template.questions.forEach(function (item) {
+        template.questions.forEach((item) => {
             var qid = String(item.questionId);
             if (mapIsTrue(isQuestionSelected, qid)) {
                 return;

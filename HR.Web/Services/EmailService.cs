@@ -34,6 +34,11 @@ namespace HR.Web.Services
 
         public EmailService(ISettingsService settingsService)
         {
+            if (settingsService == null)
+            {
+                throw new ArgumentNullException(nameof(settingsService));
+            }
+
             _settingsService = settingsService;
 
             // Prioritize Database Settings, fall back to Web.config
@@ -312,7 +317,9 @@ namespace HR.Web.Services
 
         private static void LogSensitiveCodeForDevelopment(string label, string to, string code, string fileName)
         {
-            DevDiagnostics.LogOneTimeCode(label, to, code);
+            var recipient = to ?? string.Empty;
+            var oneTimeCode = code ?? string.Empty;
+            DevDiagnostics.LogOneTimeCode(label ?? string.Empty, recipient, oneTimeCode);
 
             if (!DevDiagnostics.IsEnabled())
             {
@@ -322,7 +329,7 @@ namespace HR.Web.Services
             try
             {
                 string logPath = AppDomain.CurrentDomain.BaseDirectory + fileName;
-                string logMessage = string.Format("[{0}] {1} for {2}: {3}{4}", DateTime.Now, label, to, code, Environment.NewLine);
+                string logMessage = string.Format("[{0}] {1} for {2}: {3}{4}", DateTime.Now, label ?? string.Empty, recipient, oneTimeCode, Environment.NewLine);
                 System.IO.File.AppendAllText(logPath, logMessage);
             }
             catch (Exception)
@@ -332,23 +339,6 @@ namespace HR.Web.Services
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

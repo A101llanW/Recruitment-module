@@ -37,44 +37,11 @@ namespace HR.Web.Controllers
 
         private ActionResult HandleUserRoleUpdate(UserRoleUpdateViewModel model)
         {
-            if (model == null)
-            {
-                return HttpNotFound();
-            }
-
             var isActualSuperAdmin = _tenantService.IsActualSuperAdmin();
-            if (!ModelState.IsValid)
+            var loadResult = TryLoadUserForRoleUpdate(model, isActualSuperAdmin, out var user);
+            if (loadResult != null)
             {
-                return ReturnUserRoleView(model, isActualSuperAdmin);
-            }
-
-            var user = _uow.Users.Get(model.UserId);
-            if (user == null)
-            {
-                return HttpNotFound();
-            }
-
-            // Users who already belong to a tenant cannot be moved to another organization from this screen (even by SuperAdmin).
-            if (user.CompanyId.HasValue)
-            {
-                if (model.CompanyId != user.CompanyId)
-                {
-                    ModelState.AddModelError(
-                        "CompanyId",
-                        "This user already belongs to an organization. You can change their role within that organization only, not reassign them to a different company.");
-                    model.CompanyId = user.CompanyId;
-                }
-
-                if (model.CurrentCompanyId != user.CompanyId)
-                {
-                    ModelState.AddModelError("", "Invalid organization context for this user. Please reopen the user from User Management.");
-                    model.CurrentCompanyId = user.CompanyId;
-                }
-            }
-
-            if (!ModelState.IsValid)
-            {
-                return ReturnUserRoleView(model, isActualSuperAdmin);
+                return loadResult;
             }
 
             ValidateRoleUpdateIdentityUniqueness(user, model);
@@ -115,6 +82,56 @@ namespace HR.Web.Controllers
 
             SetUserRoleUpdateSuccess(user, snapshot.OldRoleDisplay, updatedCurrentUser);
             return RedirectAfterUserRoleUpdate(user, updatedCurrentUser);
+        }
+
+        private ActionResult TryLoadUserForRoleUpdate(UserRoleUpdateViewModel model, bool isActualSuperAdmin, out User user)
+        {
+            user = null;
+            if (model == null)
+            {
+                return HttpNotFound();
+            }
+
+            if (!ModelState.IsValid)
+            {
+                return ReturnUserRoleView(model, isActualSuperAdmin);
+            }
+
+            user = _uow.Users.Get(model.UserId);
+            if (user == null)
+            {
+                return HttpNotFound();
+            }
+
+            ValidateRoleUpdateCompanyContext(user, model);
+            if (!ModelState.IsValid)
+            {
+                return ReturnUserRoleView(model, isActualSuperAdmin);
+            }
+
+            return null;
+        }
+
+        private void ValidateRoleUpdateCompanyContext(User user, UserRoleUpdateViewModel model)
+        {
+            if (!user.CompanyId.HasValue)
+            {
+                return;
+            }
+
+            if (model.CompanyId != user.CompanyId)
+            {
+                ModelState.AddModelError(
+                    "CompanyId",
+                    "This user already belongs to an organization. You can change their role within that organization only, not reassign them to a different company.");
+                model.CompanyId = user.CompanyId;
+            }
+
+            if (model.CurrentCompanyId != user.CompanyId)
+            {
+                ModelState.AddModelError("", "Invalid organization context for this user. Please reopen the user from User Management.");
+                model.CurrentCompanyId = user.CompanyId;
+            }
         }
 
         private ActionResult ReturnUserRoleView(UserRoleUpdateViewModel model, bool isActualSuperAdmin)
@@ -205,16 +222,19 @@ namespace HR.Web.Controllers
 
         private bool TryApplyUserRoleUpdates(User user, UserRoleUpdateViewModel model, UserRoleSnapshot snapshot, bool isActualSuperAdmin)
         {
-            if (user.Email != model.Email)
+            if (!ApplyUserProfileFields(user, model, snapshot, isActualSuperAdmin))
             {
-                var existingUserByEmail = _uow.Users.GetAll().FirstOrDefault(u => u.Email == model.Email && u.Id != user.Id);
-                if (existingUserByEmail != null)
-                {
-                    ModelState.AddModelError("Email", "This email address is already in use.");
-                    return false;
-                }
+                return false;
+            }
 
-                user.AccessToken = _securityService.GenerateSecureToken();
+            return ApplySelectedRoleToUser(user, model, snapshot, isActualSuperAdmin);
+        }
+
+        private bool ApplyUserProfileFields(User user, UserRoleUpdateViewModel model, UserRoleSnapshot snapshot, bool isActualSuperAdmin)
+        {
+            if (!TryUpdateUserEmail(user, model))
+            {
+                return false;
             }
 
             user.FirstName = model.FirstName;
@@ -230,11 +250,33 @@ namespace HR.Web.Controllers
 
             if (isActualSuperAdmin)
             {
-                // Tenant-bound accounts keep their organization; only global accounts can be assigned to a company from here.
                 user.CompanyId = snapshot.OldCompanyId.HasValue ? snapshot.OldCompanyId : model.CompanyId;
                 user.RequirePasswordChange = model.RequirePasswordChange;
             }
 
+            return true;
+        }
+
+        private bool TryUpdateUserEmail(User user, UserRoleUpdateViewModel model)
+        {
+            if (user.Email == model.Email)
+            {
+                return true;
+            }
+
+            var existingUserByEmail = _uow.Users.GetAll().FirstOrDefault(u => u.Email == model.Email && u.Id != user.Id);
+            if (existingUserByEmail != null)
+            {
+                ModelState.AddModelError("Email", "This email address is already in use.");
+                return false;
+            }
+
+            user.AccessToken = _securityService.GenerateSecureToken();
+            return true;
+        }
+
+        private bool ApplySelectedRoleToUser(User user, UserRoleUpdateViewModel model, UserRoleSnapshot snapshot, bool isActualSuperAdmin)
+        {
             var roleSelection = ResolveRoleSelection(
                 model.SelectedRoleKey,
                 isActualSuperAdmin,

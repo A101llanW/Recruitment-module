@@ -779,9 +779,9 @@ namespace HR.Web.Services
 
         private string GetRandomResponsibility(JobAnalysis analysis)
         {
+            var defaultResponsibilities = new[] { "managing projects", "working with clients", "developing solutions", "analyzing data", "leading teams" };
             if (analysis.Responsibilities == null || !analysis.Responsibilities.Any())
             {
-                var defaultResponsibilities = new[] { "managing projects", "working with clients", "developing solutions", "analyzing data", "leading teams" };
                 return defaultResponsibilities[GetSecureRandomInt(defaultResponsibilities.Length)];
             }
 

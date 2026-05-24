@@ -10,11 +10,6 @@ namespace HR.Web.Controllers
 {
     public partial class PositionsController
     {
-        private string GetCurrentActorName()
-        {
-            return User?.Identity?.Name ?? "System";
-        }
-
         private ActionResult HandleCreatePosition(Position model, int[] selectedQuestions, IDictionary<int, decimal> questionWeights, string questionStagesPayload)
         {
             if (_tenantService.IsSuperAdmin())
