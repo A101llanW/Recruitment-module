@@ -18,6 +18,8 @@ namespace HR.Web.Data
         public Repository<Onboarding> Onboardings { get { return new Repository<Onboarding>(_context); } }
 
         public Repository<Question> Questions { get { return new Repository<Question>(_context); } }
+        public Repository<QuestionnaireTemplate> QuestionnaireTemplates { get { return new Repository<QuestionnaireTemplate>(_context); } }
+        public Repository<QuestionnaireTemplateQuestion> QuestionnaireTemplateQuestions { get { return new Repository<QuestionnaireTemplateQuestion>(_context); } }
         public Repository<PositionQuestion> PositionQuestions { get { return new Repository<PositionQuestion>(_context); } }
         public Repository<PositionQuestionOption> PositionQuestionOptions { get { return new Repository<PositionQuestionOption>(_context); } }
         public Repository<RoleDefinition> RoleDefinitions { get { return new Repository<RoleDefinition>(_context); } }

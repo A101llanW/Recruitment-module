@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Web;
 using System.Web.Mvc;
 using HR.Web.Data;
 using HR.Web.Models;
@@ -115,7 +116,9 @@ namespace HR.Web.Controllers
                 Name = company.Name,
                 Slug = company.Slug,
                 IsActive = company.IsActive,
-                LicenseExpiryDate = company.LicenseExpiryDate
+                LicenseExpiryDate = company.LicenseExpiryDate,
+                CurrentLogoPath = company.LogoPath,
+                CurrentLogoUrl = CompanyLogoHelper.GetPublicUrl(company.LogoPath, Url)
             };
 
             return View(viewModel);
@@ -123,39 +126,66 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult EditCompany(EditCompanyViewModel model)
+        public ActionResult EditCompany(EditCompanyViewModel model, HttpPostedFileBase logoFile, bool removeLogo = false)
         {
             if (!ModelState.IsValid)
+            {
+                model.CurrentLogoUrl = CompanyLogoHelper.GetPublicUrl(model.CurrentLogoPath, Url);
                 return View(model);
+            }
 
             try
             {
                 var company = _uow.Companies.Get(model.Id);
                 if (company == null)
+                {
                     return HttpNotFound();
+                }
 
-                // Check for slug collision if it changed
+                if (logoFile != null && logoFile.ContentLength > 0 && removeLogo)
+                {
+                    ModelState.AddModelError("", "Choose either a new logo upload or remove the current logo, not both.");
+                    model.CurrentLogoPath = company.LogoPath;
+                    model.CurrentLogoUrl = CompanyLogoHelper.GetPublicUrl(company.LogoPath, Url);
+                    return View(model);
+                }
+
                 if (company.Slug != model.Slug)
                 {
                     var existing = _uow.Companies.GetAll().FirstOrDefault(c => c.Slug == model.Slug && c.Id != model.Id);
                     if (existing != null)
                     {
                         ModelState.AddModelError("Slug", "This slug is already in use by another company.");
+                        model.CurrentLogoPath = company.LogoPath;
+                        model.CurrentLogoUrl = CompanyLogoHelper.GetPublicUrl(company.LogoPath, Url);
                         return View(model);
                     }
                 }
 
-                var oldValues = new { 
-                    Name = company.Name, 
+                var oldValues = new {
+                    Name = company.Name,
                     Slug = company.Slug,
-                    IsActive = company.IsActive, 
-                    LicenseExpiry = company.LicenseExpiryDate 
+                    IsActive = company.IsActive,
+                    LicenseExpiry = company.LicenseExpiryDate,
+                    LogoPath = company.LogoPath
                 };
 
                 company.Name = model.Name;
                 company.Slug = model.Slug;
                 company.IsActive = model.IsActive;
                 company.LicenseExpiryDate = model.LicenseExpiryDate;
+
+                try
+                {
+                    CompanyLogoHelper.ApplyLogoUpdate(company, logoFile, removeLogo, Server);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    ModelState.AddModelError("", ex.Message);
+                    model.CurrentLogoPath = company.LogoPath;
+                    model.CurrentLogoUrl = CompanyLogoHelper.GetPublicUrl(company.LogoPath, Url);
+                    return View(model);
+                }
 
                 _uow.Companies.Update(company);
                 _uow.Complete();
@@ -165,17 +195,96 @@ namespace HR.Web.Controllers
                     "Company",
                     company.Id.ToString(),
                     oldValues,
-                    new { Name = company.Name, Slug = company.Slug, IsActive = company.IsActive, LicenseExpiry = company.LicenseExpiryDate }
+                    new {
+                        Name = company.Name,
+                        Slug = company.Slug,
+                        IsActive = company.IsActive,
+                        LicenseExpiry = company.LicenseExpiryDate,
+                        LogoPath = company.LogoPath
+                    }
                 );
 
                 TempData["SuccessMessage"] = string.Format("Company '{0}' updated successfully.", company.Name);
-                return RedirectToAction("Index");
+                return RedirectToAction("CompanyDetails", new { id = company.Id });
             }
             catch (Exception ex)
             {
                 ModelState.AddModelError("", "Error updating company: " + ex.Message);
+                model.CurrentLogoUrl = CompanyLogoHelper.GetPublicUrl(model.CurrentLogoPath, Url);
                 return View(model);
             }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public ActionResult UploadCompanyLogo(int id, HttpPostedFileBase logoFile)
+        {
+            var company = _uow.Companies.Get(id);
+            if (company == null)
+            {
+                return HttpNotFound();
+            }
+
+            if (logoFile == null || logoFile.ContentLength <= 0)
+            {
+                TempData["ErrorMessage"] = "Select a logo file to upload.";
+                return RedirectToAction("CompanyDetails", new { id });
+            }
+
+            try
+            {
+                var previousPath = company.LogoPath;
+                company.LogoPath = CompanyLogoHelper.SaveUploadedLogo(company.Id, logoFile, Server);
+                _uow.Companies.Update(company);
+                _uow.Complete();
+                CompanyLogoHelper.DeleteLogoFile(previousPath, Server);
+
+                _auditService.LogUpdate(
+                    User.Identity.Name,
+                    "Company",
+                    company.Id.ToString(),
+                    new { LogoPath = previousPath },
+                    new { LogoPath = company.LogoPath });
+
+                TempData["SuccessMessage"] = "Company logo updated.";
+            }
+            catch (InvalidOperationException ex)
+            {
+                TempData["ErrorMessage"] = ex.Message;
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = "Error uploading logo: " + ex.Message;
+            }
+
+            return RedirectToAction("CompanyDetails", new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public ActionResult RemoveCompanyLogo(int id)
+        {
+            var company = _uow.Companies.Get(id);
+            if (company == null)
+            {
+                return HttpNotFound();
+            }
+
+            var previousPath = company.LogoPath;
+            CompanyLogoHelper.DeleteLogoFile(previousPath, Server);
+            company.LogoPath = null;
+            _uow.Companies.Update(company);
+            _uow.Complete();
+
+            _auditService.LogUpdate(
+                User.Identity.Name,
+                "Company",
+                company.Id.ToString(),
+                new { LogoPath = previousPath },
+                new { LogoPath = (string)null });
+
+            TempData["SuccessMessage"] = "Company logo removed.";
+            return RedirectToAction("CompanyDetails", new { id });
         }
 
         /// <summary>
@@ -586,6 +695,8 @@ namespace HR.Web.Controllers
 
         public bool IsActive { get; set; }
         public DateTime? LicenseExpiryDate { get; set; }
+        public string CurrentLogoPath { get; set; }
+        public string CurrentLogoUrl { get; set; }
     }
 
     public class CompanyDetailsViewModel

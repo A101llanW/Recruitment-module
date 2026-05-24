@@ -1,0 +1,191 @@
+@using HR.Web.Helpers
+@{
+    ViewBag.Title = "Privacy Policy";
+    ViewBag.SuppressPageHero = true;
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var companyName = ViewBag.CompanyName as string ?? "Nanosoft";
+    var contactEmail = ViewBag.ContactEmail as string ?? "nanosoft.africa@gmail.com";
+    var contactAddress = ViewBag.ContactAddress as string ?? "Nairobi, Kenya";
+    var lastUpdated = ViewBag.LastUpdated as string ?? "May 15, 2026";
+    var legalTenant = ViewBag.LegalDocTenant as string;
+    var legalPage = ViewBag.LegalDocPage as string ?? "";
+    var relObj = ViewBag.LegalRelationship;
+    var rel = relObj is LegalRelationshipKind ? (LegalRelationshipKind)relObj : LegalRelationshipKind.Applicant;
+}
+
+<div class="container mt-4 mb-5">
+    <div class="card shadow-sm">
+        <div class="card-body p-4 p-md-5">
+            <nav class="legal-doc-switcher mb-4 pb-3 border-bottom" aria-label="Legal documents">
+                <a class="btn btn-sm mr-2 @(legalPage == "privacy" ? "btn-primary" : "btn-outline-primary")" href="@Url.Action("Privacy", "Home", new { tenant = legalTenant })">Privacy policy</a>
+                <a class="btn btn-sm @(legalPage == "terms" ? "btn-primary" : "btn-outline-primary")" href="@Url.Action("Terms", "Home", new { tenant = legalTenant })">Terms and conditions</a>
+            </nav>
+            <h2 class="mb-2">Privacy Policy</h2>
+            <p class="text-muted small mb-4">
+                Policy version: <strong>@(ViewBag.PrivacyVersionLabel as string)</strong>
+            </p>
+
+            @if (rel == LegalRelationshipKind.Applicant)
+            {
+                <p class="text-muted mb-4">
+                    This Privacy Policy explains how @companyName collects, uses, stores, and shares information when you use this recruitment platform <strong>as a candidate</strong> (creating an account, completing a profile, applying for roles, and receiving communications).
+                    By accessing or using the platform in that capacity, you agree to this Privacy Policy.
+                </p>
+
+                <h5>1. Information We Collect</h5>
+                <ul>
+                    <li>Identity and contact details you provide (name, email, phone, account identifiers).</li>
+                    <li>Application data such as profile details, CV/resume files, cover letters, questionnaire answers, and assessment or scoring outcomes.</li>
+                    <li>Security and authentication data including login attempts, verification events, and audit data needed to protect your account.</li>
+                    <li>Technical data such as IP address, browser/device details, and cookies used for authentication and tenant routing.</li>
+                </ul>
+
+                <h5>2. How We Use Information</h5>
+                <ul>
+                    <li>To run recruitment workflows for the organization you apply to, including reviewing applications and communicating about your candidacy.</li>
+                    <li>To secure accounts, detect unauthorized access, and maintain service integrity.</li>
+                    <li>To generate reports and analytics that support hiring decisions (processed by the hiring organization and platform operators as described here).</li>
+                    <li>To comply with law and enforce platform policies.</li>
+                </ul>
+
+                <h5>3. Communications and "From" addresses</h5>
+                <p>
+                    Operational emails (verification, application updates, security notices) may be sent from @companyName infrastructure addresses even when you are interacting with a specific employer's branded portal.
+                    The employer remains responsible for its own hiring decisions and for much of the content of messages sent through the platform on its behalf.
+                </p>
+
+                <h5>4. Sharing of Information</h5>
+                <ul>
+                    <li>With the employer organization whose roles you apply to, and with service providers that support hosting, email, security, and system operations.</li>
+                    <li>When required by law, regulation, legal process, or lawful government request.</li>
+                    <li>As part of a merger, acquisition, financing, restructuring, or sale of business assets involving @companyName.</li>
+                </ul>
+
+                <h5>5. Data Retention and Deletion</h5>
+                <p>
+                    Candidate and application records are retained for up to 24 months from the latest relevant activity by default, unless a longer retention period is required by law, dispute handling, audit, or legitimate business need.
+                    We may retain minimal records needed to meet legal and security obligations.
+                </p>
+
+                <h5>6. Data Security</h5>
+                <p>
+                    We implement reasonable administrative, technical, and organizational safeguards.
+                    No internet-based system is fully secure, so absolute security cannot be guaranteed.
+                </p>
+
+                <h5>7. Your Choices and Rights</h5>
+                <p>
+                    You may request access, correction, or deletion of your information where applicable.
+                    Certain requests may be limited by law, contractual, or security requirements.
+                </p>
+            }
+            else if (rel == LegalRelationshipKind.CompanyAdmin)
+            {
+                <p class="text-muted mb-4">
+                    This Privacy Policy explains how @companyName collects, uses, stores, and shares information when you use this recruitment platform <strong>as an authorized user of a customer organization</strong> (for example a company administrator managing positions, applicants, and hiring workflows).
+                    By using administrative features on behalf of your organization, you agree to this Privacy Policy together with your organization's own privacy obligations to candidates and staff.
+                </p>
+
+                <h5>1. Categories of Data</h5>
+                <ul>
+                    <li>Administrative account data (name, email, username, role, security settings, audit logs).</li>
+                    <li>Operational data you upload or configure on behalf of your employer (positions, questionnaires, templates, notes, ratings, and communications).</li>
+                    <li>Applicant and candidate personal data processed through the platform on behalf of your organization.</li>
+                    <li>Technical identifiers such as IP address, device/browser data, and cookies used for authentication, fraud prevention, and tenant routing.</li>
+                </ul>
+
+                <h5>2. Roles and Responsibilities</h5>
+                <p>
+                    Your organization is typically the <strong>controller</strong> of applicant and employee-related personal data entered into the system for its hiring programs.
+                    @companyName provides the software and related services and will process such data as instructed by the customer within the service, and as needed to operate, secure, and improve the platform, and to meet legal obligations.
+                </p>
+
+                <h5>3. Lawful Use and Confidentiality</h5>
+                <p>
+                    You must only use candidate and employee information for legitimate recruitment and employment purposes permitted by your organization and applicable law.
+                    You must not export, scrape, or misuse restricted data, and you must safeguard credentials and follow your organization's policies.
+                </p>
+
+                <h5>4. Communications and "From" addresses</h5>
+                <p>
+                    Messages initiated from the platform (including candidate notifications) may be delivered using @companyName operational email infrastructure.
+                    You remain responsible for the lawfulness and accuracy of content your organization sends to candidates.
+                </p>
+
+                <h5>5. Sharing and Subprocessors</h5>
+                <ul>
+                    <li>With infrastructure and service providers supporting hosting, email, security, analytics, and operations.</li>
+                    <li>When required by law or to protect rights, safety, and security.</li>
+                </ul>
+
+                <h5>6. Retention</h5>
+                <p>
+                    Retention of applicant records may follow platform defaults (for example up to 24 months from latest relevant activity unless configured otherwise), subject to law and your organization's instructions where applicable.
+                </p>
+
+                <h5>7. Security</h5>
+                <p>
+                    We implement reasonable safeguards; you must also follow good security practice (MFA where offered, strong passwords, prompt reporting of suspected compromise).
+                </p>
+
+                <h5>8. Your Rights</h5>
+                <p>
+                    Rights requests regarding data your organization controls may be directed to your organization's privacy contact; @companyName may assist where appropriate as processor or service provider.
+                </p>
+            }
+            else
+            {
+                <p class="text-muted mb-4">
+                    This Privacy Policy explains how @companyName collects, uses, stores, and shares information when you access the recruitment platform <strong>with Nanosoft SuperAdmin (platform operator) authority</strong> across customer tenants.
+                    By using SuperAdmin capabilities, you agree to this Privacy Policy.
+                </p>
+
+                <h5>1. High-Risk Access</h5>
+                <p>
+                    SuperAdmin accounts can access configuration, security, and operational data across organizations.
+                    Such access must be limited to legitimate administration, support, security incident response, and compliance, and must follow least privilege and organizational policy.
+                </p>
+
+                <h5>2. Data Categories</h5>
+                <ul>
+                    <li>Cross-tenant administrative and configuration data.</li>
+                    <li>Security telemetry, authentication events, and audit trails.</li>
+                    <li>Customer and applicant data where necessary to investigate abuse, restore service, or meet legal obligations.</li>
+                </ul>
+
+                <h5>3. Use Restrictions</h5>
+                <p>
+                    You must not browse or export tenant data except for a documented business need (support ticket, incident, migration, or explicit customer authorization).
+                    Unauthorized access or copying of customer data is prohibited and may be subject to discipline and legal action.
+                </p>
+
+                <h5>4. Communications</h5>
+                <p>
+                    Operational notices may be sent from @companyName infrastructure addresses.
+                </p>
+
+                <h5>5. Retention and Security</h5>
+                <p>
+                    Administrative logs may be retained longer where required for security investigations and compliance.
+                    You must enable and use MFA where required for privileged accounts.
+                </p>
+
+                <h5>6. Law Enforcement and Disclosure</h5>
+                <p>
+                    Disclosures may be made when required by law or to protect rights, safety, and the integrity of the service.
+                </p>
+            }
+
+            <h5 class="mt-4">@(rel == LegalRelationshipKind.Applicant ? "8" : rel == LegalRelationshipKind.CompanyAdmin ? "9" : "7"). Changes to This Policy</h5>
+            <p>
+                We may update this Privacy Policy from time to time. Changes become effective when posted on this page.
+            </p>
+
+            <h5>@(rel == LegalRelationshipKind.Applicant ? "9" : rel == LegalRelationshipKind.CompanyAdmin ? "10" : "8"). Contact Us</h5>
+            <p class="mb-1"><strong>Email:</strong> @contactEmail</p>
+            <p class="mb-4"><strong>Address:</strong> @contactAddress</p>
+
+            <p class="text-muted mb-0"><strong>Last updated:</strong> @lastUpdated</p>
+        </div>
+    </div>
+</div>

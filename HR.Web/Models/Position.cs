@@ -7,6 +7,11 @@ namespace HR.Web.Models
 {
     public class Position : ITenantEntity
     {
+        public Position()
+        {
+            QuestionnaireStageCount = 1;
+        }
+
         public int Id { get; set; }
 
         [Required]
@@ -56,6 +61,11 @@ namespace HR.Web.Models
 
         [StringLength(4000)]
         public string PassMarksByStageJson { get; set; }
+
+        /// <summary>
+        /// Number of questionnaire stages (1 = single questionnaire; 2+ = later stages opened by HR).
+        /// </summary>
+        public int QuestionnaireStageCount { get; set; }
 
         public virtual ICollection<Application> Applications { get; set; }
         public virtual ICollection<PositionQuestion> PositionQuestions { get; set; }

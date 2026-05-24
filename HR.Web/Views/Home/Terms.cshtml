@@ -1,0 +1,191 @@
+@using HR.Web.Helpers
+@{
+    ViewBag.Title = "Terms and Conditions";
+    ViewBag.SuppressPageHero = true;
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var companyName = ViewBag.CompanyName as string ?? "Nanosoft";
+    var contactEmail = ViewBag.ContactEmail as string ?? "nanosoft.africa@gmail.com";
+    var contactAddress = ViewBag.ContactAddress as string ?? "Nairobi, Kenya";
+    var lastUpdated = ViewBag.LastUpdated as string ?? "May 15, 2026";
+    var legalTenant = ViewBag.LegalDocTenant as string;
+    var legalPage = ViewBag.LegalDocPage as string ?? "";
+    var relObj = ViewBag.LegalRelationship;
+    var rel = relObj is LegalRelationshipKind ? (LegalRelationshipKind)relObj : LegalRelationshipKind.Applicant;
+}
+
+<div class="container mt-4 mb-5">
+    <div class="card shadow-sm">
+        <div class="card-body p-4 p-md-5">
+            <nav class="legal-doc-switcher mb-4 pb-3 border-bottom" aria-label="Legal documents">
+                <a class="btn btn-sm mr-2 @(legalPage == "privacy" ? "btn-primary" : "btn-outline-primary")" href="@Url.Action("Privacy", "Home", new { tenant = legalTenant })">Privacy policy</a>
+                <a class="btn btn-sm @(legalPage == "terms" ? "btn-primary" : "btn-outline-primary")" href="@Url.Action("Terms", "Home", new { tenant = legalTenant })">Terms and conditions</a>
+            </nav>
+            <h2 class="mb-2">Terms and Conditions</h2>
+            <p class="text-muted small mb-4">
+                Policy version: <strong>@(ViewBag.TermsVersionLabel as string)</strong>
+            </p>
+
+            @if (rel == LegalRelationshipKind.Applicant)
+            {
+                <p class="text-muted mb-4">
+                    These Terms and Conditions govern use of the @companyName recruitment platform <strong>as a candidate</strong> (including registration, profile completion, applications, questionnaires, and related communications).
+                    By using the platform in that capacity, you agree to these Terms and the matching <a href="@Url.Action("Privacy", "Home", new { tenant = legalTenant })">Privacy Policy</a>.
+                </p>
+
+                <h5>1. Eligibility and Accounts</h5>
+                <ul>
+                    <li>You must provide accurate registration and profile details.</li>
+                    <li>You are responsible for safeguarding your credentials and for activity under your account.</li>
+                    <li>Unauthorized account sharing, impersonation, or access attempts are prohibited.</li>
+                </ul>
+
+                <h5>2. Acceptable Use</h5>
+                <ul>
+                    <li>Use the platform only for lawful job-seeking and application activities.</li>
+                    <li>Do not upload malicious, fraudulent, infringing, or unlawful content.</li>
+                    <li>Do not attempt to bypass security controls, scrape restricted data, or disrupt services.</li>
+                </ul>
+
+                <h5>3. Candidate Submissions</h5>
+                <ul>
+                    <li>You confirm that submitted application information is truthful and complete to the best of your knowledge.</li>
+                    <li>You confirm you have rights to uploaded materials and grant processing for recruitment purposes.</li>
+                    <li>You consent to evaluation, scoring, and internal sharing with the hiring organization as needed to run the recruitment process.</li>
+                </ul>
+
+                <h5>4. Automated and Assisted Decisions</h5>
+                <p>
+                    The service may include automated scoring or ranking aids. You are responsible for reviewing outputs and understanding that automated suggestions can be imperfect.
+                </p>
+
+                <h5>5. Service Availability and Changes</h5>
+                <p>
+                    We may modify, suspend, or discontinue parts of the platform, and may update features or security controls.
+                </p>
+
+                <h5>6. Disclaimer and Limitation of Liability</h5>
+                <p>
+                    The platform is provided on an "as available" basis without warranties to the fullest extent permitted by law.
+                    To the extent permitted by law, @companyName is not liable for indirect, incidental, consequential, or special damages arising from platform use.
+                </p>
+
+                <h5>7. Termination</h5>
+                <p>
+                    We may suspend or terminate access for violations of these Terms, legal requirements, or security risks.
+                </p>
+
+                <h5>8. Governing Law and Venue</h5>
+                <p>
+                    These Terms are governed by the laws of Kenya. Any disputes arising out of or related to these Terms are subject to the courts of Kenya.
+                </p>
+            }
+            else if (rel == LegalRelationshipKind.CompanyAdmin)
+            {
+                <p class="text-muted mb-4">
+                    These Terms and Conditions govern use of the @companyName recruitment platform <strong>as an authorized company administrator</strong> for a customer organization (managing recruitment data, users, workflows, and communications).
+                    By using administrative features, you agree to these Terms and the matching <a href="@Url.Action("Privacy", "Home", new { tenant = legalTenant })">Privacy Policy</a>.
+                </p>
+
+                <h5>1. Authority</h5>
+                <p>
+                    You represent that you are authorized to operate the platform on behalf of your organization and to bind it to these Terms for administrative use of the service.
+                </p>
+
+                <h5>2. Customer Responsibilities</h5>
+                <ul>
+                    <li>Your organization is responsible for the lawfulness of its hiring processes and for instructions it gives through the platform.</li>
+                    <li>You must configure access controls appropriately and promptly offboard users who no longer require access.</li>
+                    <li>You must not use the platform for unlawful discrimination, surveillance, or unrelated processing of personal data.</li>
+                </ul>
+
+                <h5>3. Confidentiality and Applicant Data</h5>
+                <p>
+                    You must treat applicant data as confidential and use it only for recruitment and employment purposes consistent with applicable law and your organization's policies.
+                </p>
+
+                <h5>4. Acceptable Use</h5>
+                <ul>
+                    <li>No reverse engineering, unauthorized scraping, credential sharing, or attempts to access other tenants' data.</li>
+                    <li>No introduction of malware, abusive content, or attempts to degrade service security.</li>
+                </ul>
+
+                <h5>5. Service Changes</h5>
+                <p>
+                    We may modify features, enforce new security controls, or suspend access where needed to protect the service.
+                </p>
+
+                <h5>6. Disclaimer and Limitation of Liability</h5>
+                <p>
+                    The platform is provided on an "as available" basis without warranties to the fullest extent permitted by law.
+                    To the extent permitted by law, @companyName is not liable for indirect, incidental, consequential, or special damages arising from platform use.
+                </p>
+
+                <h5>7. Termination</h5>
+                <p>
+                    We may suspend or terminate access for violations, non-payment (if applicable), legal requirements, or security risks.
+                </p>
+
+                <h5>8. Governing Law and Venue</h5>
+                <p>
+                    These Terms are governed by the laws of Kenya. Any disputes arising out of or related to these Terms are subject to the courts of Kenya.
+                </p>
+            }
+            else
+            {
+                <p class="text-muted mb-4">
+                    These Terms and Conditions govern use of the @companyName recruitment platform <strong>with Nanosoft SuperAdmin (platform operator) authority</strong>.
+                    By using SuperAdmin capabilities, you agree to these Terms and the matching <a href="@Url.Action("Privacy", "Home", new { tenant = legalTenant })">Privacy Policy</a>.
+                </p>
+
+                <h5>1. Privileged Access</h5>
+                <p>
+                    SuperAdmin access is highly sensitive. You must use it only for legitimate administration, security, support, migration, and compliance tasks authorized by @companyName.
+                </p>
+
+                <h5>2. Prohibited Conduct</h5>
+                <ul>
+                    <li>No accessing tenant data without a documented need and appropriate authorization.</li>
+                    <li>No copying, exporting, or sharing customer data outside approved channels.</li>
+                    <li>No bypassing security controls, credential sharing, or assisting unauthorized access.</li>
+                </ul>
+
+                <h5>3. Monitoring and Audit</h5>
+                <p>
+                    Your actions may be logged and reviewed. You consent to monitoring necessary to secure the platform and investigate incidents.
+                </p>
+
+                <h5>4. Confidentiality</h5>
+                <p>
+                    You must maintain the confidentiality of non-public customer information and security configurations.
+                </p>
+
+                <h5>5. Service Integrity</h5>
+                <p>
+                    You must follow change-management practices and avoid disruptive configuration changes outside approved procedures.
+                </p>
+
+                <h5>6. Disclaimer and Limitation of Liability</h5>
+                <p>
+                    The platform is provided on an "as available" basis without warranties to the fullest extent permitted by law.
+                    To the extent permitted by law, @companyName is not liable for indirect, incidental, consequential, or special damages arising from platform use.
+                </p>
+
+                <h5>7. Termination</h5>
+                <p>
+                    SuperAdmin privileges may be revoked immediately for policy violations, security risk, or misuse.
+                </p>
+
+                <h5>8. Governing Law and Venue</h5>
+                <p>
+                    These Terms are governed by the laws of Kenya. Any disputes arising out of or related to these Terms are subject to the courts of Kenya.
+                </p>
+            }
+
+            <h5 class="mt-4">9. Contact</h5>
+            <p class="mb-1"><strong>Email:</strong> @contactEmail</p>
+            <p class="mb-4"><strong>Address:</strong> @contactAddress</p>
+
+            <p class="text-muted mb-0"><strong>Last updated:</strong> @lastUpdated</p>
+        </div>
+    </div>
+</div>

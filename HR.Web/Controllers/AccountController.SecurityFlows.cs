@@ -83,8 +83,19 @@ namespace HR.Web.Controllers
 
         private User FindUserByUsername(string username)
         {
+            return FindUserByUsername(username, LegalConsentSession.TryReadCompanyId(Session));
+        }
+
+        private User FindUserByUsername(string username, int? companyId)
+        {
             var lowerUsername = username.ToLower();
-            return _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+            var query = _uow.Context.Users.Where(u => u.UserName.ToLower() == lowerUsername);
+            if (companyId.HasValue)
+            {
+                query = query.Where(u => u.CompanyId == companyId.Value);
+            }
+
+            return query.FirstOrDefault();
         }
 
         private bool HasForcedPasswordChangeFlag()
@@ -220,7 +231,7 @@ namespace HR.Web.Controllers
         private void RenewAuthenticationCookie(string username, User user)
         {
             var userRole = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
-            var uaHash = ComputeUaHash(Request.UserAgent);
+            var uaHash = UserAgentFingerprint.Compute(Request.UserAgent);
             var userData = string.Format("{0}|{1}|{2}|{3}", userRole, user.CompanyId, user.AccessToken, uaHash);
 
             var ticket = new FormsAuthenticationTicket(
@@ -636,6 +647,7 @@ namespace HR.Web.Controllers
                 _uow.Complete();
 
                 Session.Remove("PendingMfaUsername");
+                LegalConsentSession.Clear(Session);
                 return CompleteLogin(user);
             }
 
@@ -664,6 +676,16 @@ namespace HR.Web.Controllers
             var loginContext = BuildLoginContext(user);
             EnsureUserAccessToken(user);
             IssueLoginCookie(user, loginContext.Role);
+
+            if (loginContext.IsSuperAdmin &&
+                ImpersonationSessionHelper.TryRestoreAfterLogout(user.UserName, Session, _uow, AuditSvc))
+            {
+                TempData["SuccessMessage"] = string.Format(
+                    "Welcome back. Your impersonation session for {0} has been restored.",
+                    Session["ImpersonatedCompanyName"] ?? "the company");
+                return RedirectToAction("Index", "Dashboard");
+            }
+
             return BuildLoginRedirect(loginContext);
         }
 
@@ -711,8 +733,17 @@ namespace HR.Web.Controllers
 
         private void IssueLoginCookie(User user, string userRole)
         {
-            var uaHash = ComputeUaHash(Request.UserAgent);
-            var userData = string.Format("{0}|{1}|{2}|{3}", userRole, user.CompanyId, user.AccessToken, uaHash);
+            var uaHash = UserAgentFingerprint.Compute(Request.UserAgent);
+            var companyIdValue = user.CompanyId.HasValue
+                ? user.CompanyId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : string.Empty;
+            var userData = string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "{0}|{1}|{2}|{3}",
+                userRole,
+                companyIdValue,
+                user.AccessToken ?? string.Empty,
+                uaHash);
 
             var ticket = new FormsAuthenticationTicket(
                 1,

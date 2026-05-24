@@ -131,12 +131,13 @@ namespace HR.Web.Controllers
             var questionList = _uow.Questions.GetAll(q => q.QuestionOptions).AsQueryable();
             questionList = _tenantService.ApplyTenantFilter(questionList);
             ViewBag.QuestionList = questionList.ToList();
+            ViewBag.QuestionnaireTemplates = new QuestionnaireTemplateService().GetActiveTemplatesForCurrentTenant();
             
             return View(new Position
             {
                 IsOpen = true,
                 PostedOn = DateTime.UtcNow,
-                ExpiryDate = DateTime.UtcNow.Date.AddDays(30),
+                ExpiryDate = DateTime.UtcNow.Date.AddMonths(3),
                 PassMark = 50m
             });
         }
@@ -145,10 +146,10 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
-        public ActionResult Create(Position model, int[] selectedQuestions, string questionWeightsPayload)
+        public ActionResult Create(Position model, int[] selectedQuestions, string questionWeightsPayload, string questionStagesPayload)
         {
             var questionWeights = ParseQuestionWeights(questionWeightsPayload);
-            return HandleCreatePosition(model, selectedQuestions, questionWeights);
+            return HandleCreatePosition(model, selectedQuestions, questionWeights, questionStagesPayload);
         }
 
         [Authorize(Roles = "Admin, SuperAdmin")]
@@ -205,7 +206,19 @@ namespace HR.Web.Controllers
             // Get currently selected question IDs for pre-checking
             var selectedQuestionIds = position.PositionQuestions != null ? position.PositionQuestions.Select(pq => pq.QuestionId).ToList() : new System.Collections.Generic.List<int>();
             ViewBag.SelectedQuestionIds = selectedQuestionIds;
-            
+            ViewBag.SelectedQuestionStages = position.PositionQuestions != null
+                ? position.PositionQuestions
+                    .Where(pq => pq != null)
+                    .GroupBy(pq => pq.QuestionId)
+                    .ToDictionary(g => g.Key, g =>
+                    {
+                        var sn = g.First().StageNumber;
+                        return sn <= 0 ? 1 : sn;
+                    })
+                : new System.Collections.Generic.Dictionary<int, int>();
+
+            ViewBag.QuestionnaireTemplates = new QuestionnaireTemplateService().GetActiveTemplatesForCurrentTenant();
+
             return View(position);
         }
 
@@ -213,10 +226,10 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
-        public ActionResult Edit(Position model, int[] selectedQuestions, string questionWeightsPayload)
+        public ActionResult Edit(Position model, int[] selectedQuestions, string questionWeightsPayload, string questionStagesPayload)
         {
             var questionWeights = ParseQuestionWeights(questionWeightsPayload);
-            return HandleEditPosition(model, selectedQuestions, questionWeights);
+            return HandleEditPosition(model, selectedQuestions, questionWeights, questionStagesPayload);
         }
 
         [Authorize(Roles = "Admin, SuperAdmin")]
@@ -428,6 +441,87 @@ namespace HR.Web.Controllers
             }
 
             return weights;
+        }
+
+        private static IDictionary<int, int> ParseQuestionStages(string payload, int[] selectedQuestions, int questionnaireStageCount)
+        {
+            var stages = new Dictionary<int, int>();
+            if (selectedQuestions != null)
+            {
+                foreach (var qid in selectedQuestions.Distinct())
+                {
+                    if (qid > 0)
+                    {
+                        stages[qid] = 1;
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(payload))
+            {
+                return stages;
+            }
+
+            var max = Math.Max(1, questionnaireStageCount);
+            foreach (var entry in payload.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = entry.Split('=');
+                if (parts.Length != 2)
+                {
+                    continue;
+                }
+
+                int questionId;
+                if (!int.TryParse(parts[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out questionId) || questionId <= 0)
+                {
+                    continue;
+                }
+
+                int stage;
+                if (!int.TryParse(parts[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out stage))
+                {
+                    continue;
+                }
+
+                if (!stages.ContainsKey(questionId))
+                {
+                    continue;
+                }
+
+                stage = Math.Max(1, Math.Min(max, stage));
+                stages[questionId] = stage;
+            }
+
+            return stages;
+        }
+
+        private static string ValidateQuestionnaireStageConfiguration(int questionnaireStageCount, int[] selectedQuestions, IDictionary<int, int> stages)
+        {
+            if (questionnaireStageCount <= 1)
+            {
+                return null;
+            }
+
+            var selected = selectedQuestions != null
+                ? selectedQuestions.Where(id => id > 0).Distinct().ToList()
+                : new List<int>();
+            if (!selected.Any())
+            {
+                return null;
+            }
+
+            for (var s = 1; s <= questionnaireStageCount; s++)
+            {
+                if (!selected.Any(qid => stages.ContainsKey(qid) && stages[qid] == s))
+                {
+                    return string.Format(
+                        "This position uses {0} questionnaire stages. Add at least one question assigned to stage {1}.",
+                        questionnaireStageCount,
+                        s);
+                }
+            }
+
+            return null;
         }
 
         [Authorize(Roles = "Admin, SuperAdmin")]

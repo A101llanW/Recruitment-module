@@ -1,6 +1,4 @@
 using System;
-using System.Security.Cryptography;
-using System.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -39,6 +37,7 @@ namespace HR.Web.Controllers
         {
             // If no tenant is specified in the URL, check if we have a remembered company
             var urlTenantToken = RouteData.Values["tenant"] as string;
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(urlTenantToken);
             if (string.IsNullOrEmpty(urlTenantToken))
             {
                 var preferredTenantCookie = Request.Cookies["PreferredTenant"];
@@ -62,9 +61,20 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         [AllowAnonymous]
         [ValidateInput(false)]
-        public ActionResult Login(string username, string password, string captcha, string role, string returnUrl)
+        public ActionResult Login(string username, string password, string captcha, string role, string returnUrl, bool acceptLegalTerms = false, string legalRelationship = null)
         {
+            _ = acceptLegalTerms;
+            _ = legalRelationship;
             return HandleLoginPost(username, password, captcha, role, returnUrl);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [AllowAnonymous]
+        [ValidateInput(false)]
+        public ActionResult ConfirmLegalConsent(bool acceptLegalTerms = false)
+        {
+            return HandleConfirmLegalConsent(acceptLegalTerms);
         }
 
         [Authorize]
@@ -144,7 +154,7 @@ namespace HR.Web.Controllers
         [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<ActionResult> UpdateAndSendVerification(string newEmail)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           {
+        {
             var username = User.Identity.Name;
             var user = GetCurrentUserFromIdentity(username);
 
@@ -349,21 +359,6 @@ namespace HR.Web.Controllers
             return HandleResetPassword(model);
         }
 
-        /// <summary>
-        /// Computes a short SHA256 fingerprint of the User-Agent string.
-        /// Used to bind auth cookies to the issuing browser for cookie theft detection.
-        /// </summary>
-        private string ComputeUaHash(string userAgent)
-        {
-            if (string.IsNullOrEmpty(userAgent)) return "unknown";
-            using (var sha = SHA256.Create())
-            {
-                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(userAgent));
-                return Convert.ToBase64String(hash).Substring(0, 16);
-            }
-        }
-
-
         // MFA Setup
         [HttpGet]
         public ActionResult SetupMFA()
@@ -432,7 +427,11 @@ namespace HR.Web.Controllers
             var user = _uow.Context.Users.FirstOrDefault(u => u.UserName == username);
             if (user == null) return Json(new { success = false, message = "User not found" });
 
-            SendMfaCode(user, method);
+            if (!SendMfaCode(user, method))
+            {
+                return Json(new { success = false, message = "Failed to send verification email. Check SMTP configuration." });
+            }
+
             return Json(new { success = true });
         }
 
@@ -445,12 +444,22 @@ namespace HR.Web.Controllers
                 string username = Session["PendingMfaUsername"] as string ?? (User.Identity.IsAuthenticated ? User.Identity.Name : null);
                 if (string.IsNullOrEmpty(username)) return RedirectToAction("Login");
 
-                var lowerUsername = username.ToLower();
-                var user = _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
+                var user = FindPendingMfaUser(username);
                 if (user == null) return RedirectToAction("Login");
 
-                ViewBag.MfaMethod = user.MfaMethod ?? "App";
+                ViewBag.MfaMethod = user.MfaMethod ?? "Email";
                 ViewBag.EmailHint = MaskContactInfo(user.Email);
+
+                if (UsesEmailMfa(user))
+                {
+                    if (!HasActiveMfaCode(user))
+                    {
+                        if (!SendMfaCode(user))
+                        {
+                            ViewBag.MfaSendError = "We could not send a verification email. Check SMTP settings or use Resend below.";
+                        }
+                    }
+                }
 
                 return View();
             }
@@ -475,22 +484,72 @@ namespace HR.Web.Controllers
             string username = Session["PendingMfaUsername"] as string;
             if (string.IsNullOrEmpty(username)) return Json(new { success = false, message = "Session expired" });
 
-            var user = _uow.Context.Users.FirstOrDefault(u => u.UserName == username);
+            var user = FindPendingMfaUser(username);
             if (user == null) return Json(new { success = false, message = "User not found" });
 
-            SendMfaCode(user);
+            if (!UsesEmailMfa(user))
+            {
+                return Json(new { success = false, message = "Email verification is not enabled for this account." });
+            }
+
+            if (!SendMfaCode(user))
+            {
+                return Json(new { success = false, message = "Failed to send verification email. Check SMTP configuration." });
+            }
+
             return Json(new { success = true });
         }
 
-        private void SendMfaCode(User user)
+        private User FindPendingMfaUser(string username)
         {
-            SendMfaCode(user, null);
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return null;
+            }
+
+            var companyId = LegalConsentSession.TryReadCompanyId(Session);
+            var lowerUsername = username.ToLower();
+            var userQuery = _uow.Context.Users.Where(u => u.UserName.ToLower() == lowerUsername);
+            if (companyId.HasValue)
+            {
+                userQuery = userQuery.Where(u => u.CompanyId == companyId.Value);
+            }
+
+            return userQuery.FirstOrDefault();
         }
 
-        private void SendMfaCode(User user, string overrideMethod)
+        private static bool UsesEmailMfa(User user)
+        {
+            return user != null &&
+                string.Equals(user.MfaMethod, "Email", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasActiveMfaCode(User user)
+        {
+            return user != null &&
+                !string.IsNullOrEmpty(user.TwoFactorCode) &&
+                user.TwoFactorExpiry.HasValue &&
+                user.TwoFactorExpiry.Value > DateTime.Now;
+        }
+
+        private bool SendMfaCode(User user)
+        {
+            return SendMfaCode(user, null);
+        }
+
+        private bool SendMfaCode(User user, string overrideMethod)
         {
             string method = overrideMethod ?? user.MfaMethod;
-            if (method != "Email") return;
+            if (!string.Equals(method, "Email", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(user.Email))
+            {
+                System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] User has no email address ---");
+                return false;
+            }
 
             string code = SecuritySvc.GenerateTemporaryCode();
             user.TwoFactorCode = code;
@@ -498,19 +557,20 @@ namespace HR.Web.Controllers
             _uow.Users.Update(user);
             _uow.Complete();
 
-            if (method == "Email")
+            DevDiagnostics.LogOneTimeCode("MFA CODE", user.Email, code);
+
+            try
             {
-                var userEmail = user.Email;
-                var securityToken = code;
-                Task.Run(async () => {
-                    try {
-                        var emailSvc = new EmailService(new SettingsService());
-                        await emailSvc.SendMfaCodeEmailAsync(userEmail, securityToken);
-                    } catch (Exception ex) {
-                        System.Diagnostics.Debug.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
-                        System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
-                    }
-                });
+                EmailSvc.SendMfaCodeEmailAsync(user.Email.Trim(), code).GetAwaiter().GetResult();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DevDiagnostics.LogOneTimeCode("MFA CODE (email failed — use code above)", user.Email, code);
+                System.Diagnostics.Debug.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
+                System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
+                AuditSvc.LogAction(user.UserName, "MFA_EMAIL_SEND_FAILED", "Account", user.Id.ToString(), ex.Message);
+                return false;
             }
         }
 
@@ -521,7 +581,7 @@ namespace HR.Web.Controllers
             if (parts.Length != 2) return email;
             var name = parts[0];
             if (name.Length <= 2) return email;
-            return name.Substring(0, 2) + "****@ " + parts[1];
+            return name.Substring(0, 2) + "****@" + parts[1];
         }
 
         private ActionResult CompleteLogin(User user)

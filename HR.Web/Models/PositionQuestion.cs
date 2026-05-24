@@ -21,9 +21,15 @@ namespace HR.Web.Models
         public PositionQuestion()
         {
             IsRequired = true;
+            StageNumber = 1;
         }
 
         public bool IsRequired { get; set; }
+
+        /// <summary>
+        /// 1-based questionnaire stage this question belongs to (must be &lt;= position.QuestionnaireStageCount).
+        /// </summary>
+        public int StageNumber { get; set; }
 
         public virtual Position Position { get; set; }
         public virtual Question Question { get; set; }

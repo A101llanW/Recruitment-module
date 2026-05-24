@@ -14,6 +14,11 @@ namespace HR.Web.Models
 
         public string AnswerText { get; set; }
 
+        /// <summary>
+        /// Questionnaire stage this answer was submitted under.
+        /// </summary>
+        public int StageNumber { get; set; }
+
         public virtual Application Application { get; set; }
         public virtual Question Question { get; set; }
     }

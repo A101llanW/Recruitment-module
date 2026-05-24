@@ -1,0 +1,157 @@
+@model HR.Web.ViewModels.QuestionnaireTemplateEditViewModel
+@{
+    ViewBag.Title = Model.Id > 0 ? "Edit Questionnaire Template" : "New Questionnaire Template";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var questions = Model.AvailableQuestions ?? new List<HR.Web.Models.Question>();
+    var selectedQuestionIds = Model.SelectedQuestionIds ?? new List<int>();
+    var selectedQuestionWeights = Model.SelectedQuestionWeights ?? new Dictionary<int, decimal>();
+    var selectedQuestionStages = Model.SelectedQuestionStages ?? new Dictionary<int, int>();
+    var selectedSet = new HashSet<int>(selectedQuestionIds);
+}
+<style>
+    .question-weight-row { border: 1px solid #e6e6e6; border-radius: 0.35rem; padding: 0.6rem; margin-bottom: 0.6rem; background: #fff; }
+    .question-weight-row.locked { border-color: #ffc107; background: #fffdf4; }
+    .question-weight-lock { width: 34px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+    .question-weight-value { width: 64px; text-align: right; font-weight: 600; }
+    .questionnaire-stage-switcher-btn { min-width: 4.5rem; padding: 0.45rem 0.75rem; border-radius: 0.35rem; border: 2px solid #dee2e6; background: #fff; cursor: pointer; font-weight: 700; font-size: 0.85rem; color: #0d2c4a; }
+    .questionnaire-stage-switcher-btn.active { border-color: #3498db; box-shadow: 0 2px 8px rgba(52, 152, 219, 0.22); background: #f0f8ff; }
+</style>
+
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">@ViewBag.Title</h2>
+            <p class="text-muted mb-0">Pick questions from your bank, set weights and stages, then save for reuse on job positions.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="@Url.Action("QuestionnaireTemplates", "Admin")">
+            <i class="fas fa-arrow-left mr-1"></i> Back to Templates
+        </a>
+    </div>
+
+    @using (Html.BeginForm(null, null, FormMethod.Post, new { id = "templateEditForm" }))
+    {
+        @Html.AntiForgeryToken()
+        @Html.HiddenFor(m => m.Id)
+        <input type="hidden" id="questionWeightsPayload" name="questionWeightsPayload" value="" />
+        <input type="hidden" id="questionStagesPayload" name="questionStagesPayload" value="" />
+        <div id="selectedQuestionsHiddenContainer" aria-hidden="true"></div>
+        @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    @Html.LabelFor(m => m.Name, new { @class = "font-weight-bold" })
+                    @Html.TextBoxFor(m => m.Name, new { @class = "form-control", placeholder = "e.g. Standard Technical Screen" })
+                    @Html.ValidationMessageFor(m => m.Name, "", new { @class = "text-danger" })
+                </div>
+                <div class="form-group">
+                    @Html.LabelFor(m => m.Description, new { @class = "font-weight-bold" })
+                    @Html.TextAreaFor(m => m.Description, 2, 80, new { @class = "form-control", placeholder = "Optional notes about when to use this template" })
+                </div>
+                <div class="form-check mb-3">
+                    <input type="checkbox" class="form-check-input" id="hasSecondaryStageCheckbox" @(Model.StageCount > 1 ? "checked=\"checked\"" : "") />
+                    <label class="form-check-label" for="hasSecondaryStageCheckbox">Use multiple questionnaire stages</label>
+                </div>
+                <div id="questionnaireStageCountSection" class="form-group @(Model.StageCount > 1 ? "" : "d-none")">
+                    @Html.LabelFor(m => m.StageCount, new { @class = "font-weight-bold" })
+                    @Html.TextBoxFor(m => m.StageCount, new { @class = "form-control", type = "number", min = "1", max = "10", style = "max-width:120px;", id = "questionnaireStageCountInput" })
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-light font-weight-bold">Template questions</div>
+            <div class="card-body">
+                <div id="questionnaireStageLegendRow" class="mb-3 d-none">
+                    <div class="small font-weight-bold mb-2">Questionnaire stage</div>
+                    <div id="questionnaireStageLegend" class="d-flex flex-wrap align-items-stretch" role="tablist"></div>
+                </div>
+
+                @if (questions.Any())
+                {
+                    var groupedQuestions = questions.GroupBy(q => q.Company != null ? q.Company.Name : "Global Questions").OrderBy(g => g.Key);
+                    <div class="question-list">
+                        @foreach (var group in groupedQuestions)
+                        {
+                            var groupId = "group_" + Math.Abs(group.Key.GetHashCode());
+                            <div class="card mb-3 border">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                                    <h6 class="mb-0 font-weight-bold">@group.Key</h6>
+                                    <div class="custom-control custom-checkbox">
+                                        <input type="checkbox" class="custom-control-input group-select-all" id="@groupId" data-target-group="@groupId">
+                                        <label class="custom-control-label font-weight-bold text-primary" for="@groupId">Select All</label>
+                                    </div>
+                                </div>
+                                <div class="card-body p-3">
+                                    @foreach (var q in group)
+                                    {
+                                        var isSelected = selectedSet.Contains(q.Id);
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input question-checkbox @groupId-checkbox"
+                                                   type="checkbox"
+                                                   value="@q.Id"
+                                                   id="q_@q.Id"
+                                                   @(isSelected ? "checked=\"checked\"" : "")
+                                                   data-question-id="@q.Id"
+                                                   data-question-text="@q.Text"
+                                                   data-initial-weight="@(selectedQuestionWeights.ContainsKey(q.Id) ? selectedQuestionWeights[q.Id] : 0m)"
+                                                   data-initial-stage="@(selectedQuestionStages.ContainsKey(q.Id) ? selectedQuestionStages[q.Id] : 1)" />
+                                            <label class="form-check-label" for="q_@q.Id">
+                                                <strong>@q.Text</strong>
+                                                <span class="badge badge-secondary ml-1">@q.Type</span>
+                                            </label>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="card border mt-3" id="questionWeightPanel">
+                        <div class="card-header bg-light">
+                            <strong>Question Weight Allocation</strong>
+                            <small class="text-muted d-block">Distribute 100 points across selected questions.</small>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Budget</span>
+                                <span id="questionWeightBudgetText" class="font-weight-bold">0 / 100 allocated</span>
+                            </div>
+                            <div class="progress mb-3">
+                                <div id="questionWeightBudgetBar" class="progress-bar bg-info" style="width:0%"></div>
+                            </div>
+                            <div class="d-flex justify-content-end mb-3">
+                                <button type="button" id="questionWeightRedistributeBtn" class="btn btn-sm btn-outline-primary">Redistribute (Unlocked)</button>
+                            </div>
+                            <div id="questionWeightRows"></div>
+                            <div id="questionWeightEmpty" class="text-muted">Select at least one question to activate sliders.</div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-info mb-0">No questions available. <a href="@Url.Action("EditQuestion", "Admin")">Add questions</a> first.</div>
+                }
+            </div>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Save Template</button>
+            <a class="btn btn-outline-secondary" href="@Url.Action("QuestionnaireTemplates", "Admin")">Cancel</a>
+        </div>
+    }
+</div>
+
+@section Scripts {
+<script src="@Url.Content("~/Scripts/questionnaire-assignment.js")"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        initQuestionnaireAssignmentEditor({
+            formId: 'templateEditForm',
+            stageCountInputId: 'questionnaireStageCountInput',
+            hasSecondaryStageCheckboxId: 'hasSecondaryStageCheckbox',
+            stageCountSectionId: 'questionnaireStageCountSection'
+        });
+    });
+</script>
+}

@@ -1,27 +1,49 @@
+@using HR.Web.Helpers
 @{
+    Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Login";
+    ViewBag.HideNavbar = true;
+    ViewBag.SuppressPageHero = true;
+    var tenantToken = ViewContext.RouteData.Values["tenant"] as string;
+    var showLegalModal = ViewBag.ShowLegalConsentModal as bool? == true;
+    var tenantContext = ViewBag.TenantContext as HR.Web.Models.Company;
+    var tenantCompanyName = tenantContext != null && !string.IsNullOrWhiteSpace(tenantContext.Name)
+        ? tenantContext.Name
+        : null;
 }
 
-<!-- Include Bootstrap CSS for proper layout -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-<div class="row justify-content-center mfa-setup-wrapper">
-    <div class="col-md-5">
-        <div class="mfa-card">
-            <div class="mfa-header">
+<div class="mfa-setup-wrapper mfa-setup-wrapper-login animate-fadeIn">
+    <div class="mfa-card auth-login-card">
+        <div class="auth-login-layout">
+            <aside class="auth-login-aside">
                 <div class="login-icon-wrap">
                     <i class="fas fa-shield-alt"></i>
                 </div>
-                <h3>Welcome Back</h3>
-                <p>Sign in to your account to continue.</p>
-            </div>
+                @if (!string.IsNullOrEmpty(tenantCompanyName))
+                {
+                    <span class="auth-eyebrow">@tenantCompanyName</span>
+                    <h3>HR sign-in</h3>
+                    <p class="auth-login-aside__lead">Sign in to apply, complete questionnaires, and follow applications and interviews for @tenantCompanyName.</p>
+                }
+                else
+                {
+                    <span class="auth-eyebrow">HR administration</span>
+                    <h3>Sign in</h3>
+                    <p class="auth-login-aside__lead">Sign in to apply for roles, complete questionnaires, and follow your hiring progress in one place.</p>
+                }
+                <ul class="auth-login-features">
+                    <li><i class="fas fa-check-circle"></i> Structured questionnaires with scoring at each stage</li>
+                    <li><i class="fas fa-check-circle"></i> Track applications and your next steps</li>
+                    <li><i class="fas fa-check-circle"></i> Interview schedules and updates in one place</li>
+                </ul>
+            </aside>
 
-            <div class="mfa-body">
+            <div class="auth-login-main">
+            <div class="mfa-body auth-login-body">
 
                 @if (Request.QueryString["reason"] == "session_invalid")
                 {
-                    <div class="alert alert-warning alert-dismissible fade show mb-4" role="alert" style="border-left: 4px solid #ffc107; border-radius: 8px;">
+                    <div class="alert auth-alert alert-warning alert-dismissible fade show mb-4" role="alert">
                         <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
                         <i class="fas fa-exclamation-triangle mr-2"></i>
                         <strong>Security Update:</strong> Your account credentials have been updated. Please sign in again.
@@ -30,7 +52,7 @@
 
                 @if (Request.QueryString["reason"] == "session_hijack")
                 {
-                    <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert" style="border-left: 4px solid #dc3545; border-radius: 8px;">
+                    <div class="alert auth-alert alert-danger alert-dismissible fade show mb-4" role="alert">
                         <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
                         <i class="fas fa-shield-alt mr-2"></i>
                         <strong>Security Alert:</strong> Session terminated from unrecognized device. Change your password if this wasn't you.
@@ -39,7 +61,7 @@
 
                 @if (Request.QueryString["reason"] == "idle_timeout")
                 {
-                    <div class="alert alert-info alert-dismissible fade show mb-4" role="alert" style="border-left: 4px solid #17a2b8; border-radius: 8px;">
+                    <div class="alert auth-alert alert-info alert-dismissible fade show mb-4" role="alert">
                         <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
                         <i class="fas fa-clock mr-2"></i>
                         <strong>Session Expired:</strong> Signed out after inactivity. Please log in again.
@@ -48,7 +70,7 @@
 
                 @if (ViewBag.SuccessMessage != null)
                 {
-                    <div class="alert alert-success alert-dismissible fade show mb-4" role="alert" style="border-radius: 8px;">
+                    <div class="alert auth-alert alert-success alert-dismissible fade show mb-4" role="alert">
                         <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
                         <i class="fas fa-check-circle mr-2"></i> @ViewBag.SuccessMessage
                     </div>
@@ -61,12 +83,12 @@
                             <i class="fas fa-building"></i>
                         </div>
                         <h5 class="mb-1">Continue to @ViewBag.PreferredCompanyName</h5>
-                        <p class="text-muted small mb-3">You last visited this company portal.</p>
+                        <p class="text-muted small mb-3">Resume where you left off.</p>
                         <div class="d-flex flex-column align-items-center mt-3">
-                            <a href="@Url.Action("Login", "Account", new { tenant = ViewBag.PreferredCompanySlug, returnUrl = ViewBag.ReturnUrl })" class="btn btn-outline-primary btn-sm px-4 py-2 mb-3" style="border-radius: 8px; font-weight: 600; min-width: 200px; border-width: 1px;">
+                            <a href="@Url.Action("Login", "Account", new { tenant = ViewBag.PreferredCompanySlug, returnUrl = ViewBag.ReturnUrl })" class="btn btn-outline-auth btn-sm mb-3">
                                 Go to Portal <i class="fas fa-arrow-right ml-2"></i>
                             </a>
-                            <button type="button" class="btn btn-outline-secondary btn-sm px-4 py-2" style="border-radius: 8px; font-weight: 500; min-width: 200px;" onclick="this.closest('.company-welcome-card').style.display='none'">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="this.closest('.company-welcome-card').style.display='none'">
                                 Use a different account
                             </button>
                         </div>
@@ -75,12 +97,16 @@
 
                 @if (ViewBag.MultiCandidates != null)
                 {
+                    var multiCandidates = ((IEnumerable<HR.Web.Models.User>)ViewBag.MultiCandidates).ToList();
                     <div class="multi-candidate-picker mb-4">
-                        <div class="alert alert-info py-2 px-3 small mb-3">
-                            <i class="fas fa-info-circle mr-1"></i> We found multiple accounts for this email.
-                        </div>
+                        @if (multiCandidates.Count > 1)
+                        {
+                            <div class="alert alert-info py-2 px-3 small mb-3">
+                                <i class="fas fa-info-circle mr-1"></i> We found multiple accounts for this email.
+                            </div>
+                        }
                         <div class="list-group">
-                            @foreach (var candidate in (IEnumerable<HR.Web.Models.User>)ViewBag.MultiCandidates)
+                            @foreach (var candidate in multiCandidates)
                             {
                                 var tenantSlug = candidate.Company != null ? candidate.Company.Slug : "";
                                 var companyName = candidate.Company != null ? candidate.Company.Name : "Main System";
@@ -103,57 +129,102 @@
                     </div>
                 }
 
-                @Html.ValidationSummary(true, "", new { @class = "alert alert-danger mb-4", style = "border-radius: 8px; border-left: 4px solid #dc3545;" })
+                @if (TempData["ErrorMessage"] != null)
+                {
+                    <div class="alert alert-warning alert-dismissible fade show mb-4" role="alert">
+                        <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+                        @TempData["ErrorMessage"]
+                    </div>
+                }
 
-                @using (Html.BeginForm("Login", "Account", FormMethod.Post, new { autocomplete = "off", id = "loginForm" })) {
+                @Html.ValidationSummary(true, "", new { @class = "alert auth-alert alert-danger mb-4" })
+
+                @using (Html.BeginForm("Login", "Account", new { tenant = tenantToken }, FormMethod.Post, new { autocomplete = "off", id = "loginForm" })) {
                     @Html.AntiForgeryToken()
 
-                    <div class="login-field-group">
-                        <label for="username">Username or Email</label>
-                        <div class="login-input-wrap">
-                            <span class="login-input-icon"><i class="fas fa-user"></i></span>
-                            <input class="login-input" id="username" name="username" type="text"
-                                   placeholder="Enter your username or email" required autocomplete="off" />
+                    <div class="row auth-login-fields">
+                        <div class="col-md-6 login-field-group">
+                            <label for="username">Username or Email</label>
+                            <div class="login-input-wrap">
+                                <span class="login-input-icon"><i class="fas fa-user"></i></span>
+                                <input class="login-input" id="username" name="username" type="text"
+                                       placeholder="Username or email" required autocomplete="off" />
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 login-field-group">
+                            <label for="password">Password</label>
+                            <div class="login-input-wrap">
+                                <span class="login-input-icon"><i class="fas fa-lock"></i></span>
+                                <input class="login-input" id="password" name="password" type="password"
+                                       placeholder="Password" required autocomplete="new-password" />
+                                <button class="login-toggle-pwd" type="button" id="togglePwd" tabindex="-1" title="Show/hide password">
+                                    <i class="fas fa-eye" id="togglePwdIcon"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="login-field-group mt-4">
-                        <label for="password">Password</label>
-                        <div class="login-input-wrap">
-                            <span class="login-input-icon"><i class="fas fa-lock"></i></span>
-                            <input class="login-input" id="password" name="password" type="password"
-                                   placeholder="Enter your password" required autocomplete="new-password" />
-                            <button class="login-toggle-pwd" type="button" id="togglePwd" tabindex="-1" title="Show/hide password">
-                                <i class="fas fa-eye" id="togglePwdIcon"></i>
-                            </button>
-                        </div>
+                    <div class="auth-login-captcha">
+                        @Html.Partial("_CaptchaPartial")
                     </div>
-
-                    @Html.Partial("_CaptchaPartial")
 
                     <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
 
-                    <div class="mt-5">
+                    <div class="auth-login-actions">
                         <button type="submit" class="btn-primary-mfa" id="loginSubmitBtn">
                             <i class="fas fa-sign-in-alt mr-2"></i> Sign In
                         </button>
-                    </div>
-
-                    <div class="mt-4 text-center">
-                        <a href="@Url.Action("ForgotPassword", "Account")" class="btn-link-mfa">
+                        <a href="@Url.Action("ForgotPassword", "Account")" class="btn-link-mfa auth-login-forgot">
                             <i class="fas fa-question-circle mr-1"></i> Forgot Password?
                         </a>
                     </div>
                 }
             </div>
 
-            <div class="mfa-footer">
-                <span class="text-muted" style="font-size: 0.85rem;">Don't have an account?</span>
-                <a href="@Url.Action("Register", "Account")" style="font-size: 0.85rem; font-weight: 600; color: var(--mfa-primary); text-decoration: none; margin-left: 6px;">Register here</a>
+            <div class="mfa-footer auth-login-footer">
+                <span class="text-muted small">Don't have an account?</span>
+                <a href="@Url.Action("Register", "Account", new { tenant = tenantToken, returnUrl = ViewBag.ReturnUrl as string })" class="btn-link-mfa ml-1">Register here</a>
+            </div>
             </div>
         </div>
     </div>
 </div>
+
+@if (showLegalModal)
+{
+    var termsLink = ViewBag.LegalTermsUrl as string;
+    var privacyLink = ViewBag.LegalPrivacyUrl as string;
+    var displayName = ViewBag.LegalConsentDisplayName as string;
+    <div class="modal fade legal-consent-modal" id="legalConsentModal" tabindex="-1" role="dialog" aria-labelledby="legalConsentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="legalConsentModalLabel">Updated policies</h5>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">Hello <strong>@(string.IsNullOrWhiteSpace(displayName) ? "there" : displayName)</strong>, one quick step before you continue.</p>
+                    <p class="mb-3">Please review the current <strong>Terms &amp; Conditions</strong> and <strong>Privacy Policy</strong>, then accept below to finish signing in.</p>
+                    <p class="mb-4">
+                        <a href="@privacyLink" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary me-2">View Privacy Policy</a>
+                        <a href="@termsLink" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">View Terms &amp; Conditions</a>
+                    </p>
+                    @using (Html.BeginForm("ConfirmLegalConsent", "Account", new { tenant = tenantToken }, FormMethod.Post, new { id = "legalConsentForm" }))
+                    {
+                        @Html.AntiForgeryToken()
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="acceptLegalTerms" id="legalConsentAccept" value="true" required />
+                            <label class="form-check-label small" for="legalConsentAccept">
+                                I have read and agree to the Terms &amp; Conditions and Privacy Policy.
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Continue</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -192,404 +263,36 @@
             });
         }
 
-        // Auto-focus username
+        // Auto-focus username (skip when policy modal is open)
         var uInput = document.getElementById('username');
-        if (uInput) uInput.focus();
+        @if (!showLegalModal)
+        {
+            <text>
+        if (uInput) { uInput.focus(); }
+            </text>
+        }
+
+        @if (showLegalModal)
+        {
+            <text>
+        var legalModalEl = document.getElementById('legalConsentModal');
+        if (legalModalEl && typeof jQuery !== 'undefined') {
+            if (legalModalEl.parentElement !== document.body) {
+                document.body.appendChild(legalModalEl);
+            }
+            var $legalModal = jQuery(legalModalEl);
+            $legalModal.off('shown.bs.modal.legalConsent');
+            $legalModal.on('shown.bs.modal.legalConsent', function () {
+                var backdrops = document.querySelectorAll('.modal-backdrop');
+                if (backdrops.length > 1) {
+                    for (var i = 0; i < backdrops.length - 1; i++) {
+                        backdrops[i].parentNode.removeChild(backdrops[i]);
+                    }
+                }
+            });
+            $legalModal.modal({ backdrop: 'static', keyboard: false, show: true });
+        }
+            </text>
+        }
     });
 </script>
-
-<style>
-    /*
-     * Do not vertically center html/body with align-items:center when content can exceed the viewport:
-     * the top of the page becomes unreachable (scroll is clamped at 0). Stack body children in a column
-     * and let the page scroll normally.
-     */
-    html {
-        height: auto;
-        min-height: 100%;
-    }
-
-    body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        justify-content: flex-start;
-        background: #f8f9fa;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        overflow-x: hidden;
-        overflow-y: auto;
-    }
-
-    body > .container {
-        flex: 1 0 auto;
-        width: 100%;
-    }
-    
-    /* Override any existing styles */
-    .container {
-        max-width: 100% !important;
-        padding-left: 12px !important;
-        padding-right: 12px !important;
-    }
-    
-    .row {
-        margin: 0 !important;
-        width: 100% !important;
-        display: flex !important;
-        justify-content: center !important;
-        align-items: flex-start !important;
-    }
-    
-    .mfa-setup-wrapper {
-        width: 100% !important;
-        max-width: 500px !important;
-        padding: 20px !important;
-        margin: 0 auto !important;
-        display: flex !important;
-        justify-content: flex-start !important;
-        align-items: stretch !important;
-    }
-    
-    .col-md-5 {
-        width: 100% !important;
-        max-width: 500px !important;
-        margin: 0 auto !important;
-        float: none !important;
-        flex: none !important;
-    }
-    
-    /* Ensure the login card is centered */
-    .mfa-card {
-        width: 100% !important;
-        margin: 0 auto !important;
-        position: relative !important;
-    }
-    
-    :root {
-        --mfa-primary: #4f46e5;
-        --mfa-primary-hover: #4338ca;
-        --mfa-bg: #f8fafc;
-        --mfa-text-main: #1e293b;
-        --mfa-text-muted: #64748b;
-        --mfa-border: #e2e8f0;
-        --mfa-success: #10b981;
-    }
-
-    .mfa-setup-wrapper {
-        padding: 24px 0 88px;
-        background: var(--mfa-bg);
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .mfa-card {
-        background: #ffffff;
-        border-radius: 16px;
-        box-shadow: 0 8px 32px rgba(79, 70, 229, 0.10), 0 1.5px 6px rgba(0,0,0,0.06);
-        overflow: visible;
-        border: 1px solid var(--mfa-border);
-        width: 100%;
-    }
-
-    .mfa-header {
-        padding: 28px 28px 18px;
-        text-align: center;
-        background: linear-gradient(135deg, #f8f9ff 0%, #eef0f8 100%);
-        border-bottom: 1px solid var(--mfa-border);
-    }
-
-    .login-icon-wrap {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 64px;
-        height: 64px;
-        background: linear-gradient(135deg, var(--mfa-primary), #818cf8);
-        border-radius: 50%;
-        margin-bottom: 14px;
-        box-shadow: 0 8px 20px rgba(79, 70, 229, 0.25);
-    }
-
-    .login-icon-wrap i {
-        font-size: 28px;
-        color: white;
-    }
-
-    .mfa-header h3 {
-        font-weight: 700;
-        color: var(--mfa-text-main);
-        margin-bottom: 5px;
-        font-size: 1.5rem;
-    }
-
-    .mfa-header p {
-        color: var(--mfa-text-muted);
-        font-size: 0.9rem;
-        margin: 0;
-    }
-
-    .mfa-body {
-        padding: 28px;
-    }
-
-    /* Field groups */
-    .login-field-group label {
-        display: block;
-        font-weight: 600;
-        color: var(--mfa-text-main);
-        font-size: 0.9rem;
-        margin-bottom: 8px;
-    }
-
-    .login-input-wrap {
-        position: relative;
-        display: flex;
-        align-items: center;
-    }
-
-    .login-input-icon {
-        position: absolute;
-        left: 14px;
-        color: var(--mfa-text-muted);
-        font-size: 0.95rem;
-        pointer-events: none;
-        z-index: 2;
-    }
-
-    .login-input {
-        width: 100%;
-        height: 50px;
-        padding: 0 44px 0 40px;
-        font-size: 1rem;
-        border-radius: 10px;
-        border: 2px solid var(--mfa-border);
-        color: var(--mfa-text-main);
-        background: #fff;
-        transition: border-color 0.2s, box-shadow 0.2s;
-        outline: none;
-    }
-
-    .login-input:focus {
-        border-color: var(--mfa-primary);
-        box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.10);
-    }
-
-    .login-toggle-pwd {
-        position: absolute;
-        right: 12px;
-        background: none;
-        border: none;
-        color: var(--mfa-text-muted);
-        cursor: pointer;
-        padding: 4px;
-        transition: color 0.2s;
-        z-index: 2;
-    }
-
-    .login-toggle-pwd:hover { color: var(--mfa-primary); }
-
-    /* Submit button — matches VerifyMFA exactly */
-    .btn-primary-mfa {
-        width: 100%;
-        height: 52px;
-        background: var(--mfa-primary);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        font-size: 1.05rem;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.2s;
-        box-shadow: 0 8px 20px -3px rgba(79, 70, 229, 0.30);
-        letter-spacing: 0.3px;
-    }
-
-    .btn-primary-mfa:hover:not(:disabled) {
-        background: var(--mfa-primary-hover);
-        transform: translateY(-2px);
-        box-shadow: 0 14px 24px -5px rgba(79, 70, 229, 0.35);
-    }
-
-    .btn-primary-mfa:active:not(:disabled) { transform: translateY(0); }
-    .btn-primary-mfa:disabled { opacity: 0.75; cursor: not-allowed; }
-
-    /* Forgot password link */
-    .btn-link-mfa {
-        background: none;
-        border: none;
-        color: var(--mfa-text-muted);
-        font-size: 0.9rem;
-        cursor: pointer;
-        transition: color 0.2s;
-        padding: 0;
-        text-decoration: none;
-    }
-
-    .btn-link-mfa:hover { color: var(--mfa-primary); text-decoration: none; }
-
-    /* Footer */
-    .mfa-footer {
-        padding: 14px 28px;
-        text-align: center;
-        border-top: 1px solid var(--mfa-border);
-        background: #fafbfc;
-    }
-
-    /* Company Discovery Improvements */
-    .company-welcome-card {
-        background: #f0f7ff;
-        border: 1px solid #cce3ff;
-        border-radius: 12px;
-        padding: 24px 20px;
-    }
-
-    .company-logo-mini {
-        width: 48px;
-        height: 48px;
-        background: #fff;
-        border-radius: 50%;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--mfa-primary);
-        font-size: 1.2rem;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    }
-
-    .multi-candidate-picker .list-group-item {
-        transition: all 0.2s;
-        cursor: pointer;
-        text-decoration: none;
-    }
-
-    .multi-candidate-picker .list-group-item:hover {
-        background: #f8fafc;
-        border-color: var(--mfa-primary) !important;
-        transform: translateX(4px);
-    }
-
-    /* Captcha image selector styles */
-    .captcha-images-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
-        gap: 12px;
-        justify-items: center;
-    }
-
-    .captcha-image-btn {
-        background: #fff;
-        border: 2px solid var(--mfa-border);
-        border-radius: 12px;
-        padding: 8px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-    .captcha-image-btn:hover {
-        border-color: var(--mfa-primary);
-        transform: scale(1.05);
-        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
-    }
-
-    .captcha-image-btn.selected {
-        border-color: var(--mfa-primary);
-        background: rgba(79, 70, 229, 0.08);
-        box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.2);
-    }
-
-    .captcha-thumb {
-        width: 48px;
-        height: 48px;
-        display: block;
-    }
-
-    /* Captcha Styling */
-    .captcha-container {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        background: #f1f5f9;
-        padding: 8px;
-        border-radius: 10px;
-        border: 1px dashed var(--mfa-border);
-    }
-
-    .captcha-img {
-        height: 42px;
-        border-radius: 6px;
-        background: #fff;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-
-    .btn-refresh-captcha {
-        background: #fff;
-        border: 1px solid var(--mfa-border);
-        width: 38px;
-        height: 38px;
-        border-radius: 50%;
-        color: var(--mfa-text-muted);
-        cursor: pointer;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .btn-refresh-captcha:hover {
-        color: var(--mfa-primary);
-        border-color: var(--mfa-primary);
-        background: var(--mfa-bg);
-    }
-/* Make company welcome section less congested */
-    .company-welcome-card {
-        padding: 30px !important;
-        margin-bottom: 35px !important;
-        background: white;
-        border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }
-    
-    .company-welcome-card h5 {
-        font-size: 1.1rem !important;
-        font-weight: 600 !important;
-        margin-bottom: 12px !important;
-    }
-    
-    .company-welcome-card p {
-        margin-bottom: 25px !important;
-        line-height: 1.6 !important;
-    }
-    
-    .company-welcome-card .btn {
-        margin-bottom: 20px !important;
-        padding: 12px 30px !important;
-    }
-    
-    .company-logo-mini {
-        font-size: 2.5rem !important;
-        color: #667eea !important;
-        margin-bottom: 20px !important;
-    }
-    
-    /* Add more spacing to login form */
-    .mfa-card {
-        padding: 35px !important;
-        margin-top: 20px !important;
-        margin-bottom: 20px !important;
-    }
-    
-    .form-group {
-        margin-bottom: 25px !important;
-    }
-    
-    .btn-primary-mfa {
-        margin-top: 15px !important;
-        padding: 12px 20px !important;
-    }
-</style>

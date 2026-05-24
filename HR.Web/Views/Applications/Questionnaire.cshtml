@@ -1,9 +1,11 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Application Questionnaire";
+    ViewBag.SuppressPageHero = true;
     var position = ViewBag.Position as HR.Web.Models.Position;
     var applicant = ViewBag.Applicant as HR.Web.Models.Applicant;
     var positionQuestions = ViewBag.PositionQuestions as IEnumerable<HR.Web.Models.PositionQuestion>;
+    var tenantToken = ViewContext.RouteData.Values["tenant"] as string;
 }
 <h3>Application Questionnaire</h3>
 @if (position != null)
@@ -116,6 +118,18 @@
             }
             
             <input type="hidden" name="positionId" value="@(position != null ? position.Id.ToString() : "")" />
+
+            <div class="form-group mt-3 mb-4">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="acceptLegalTerms" name="acceptLegalTerms" value="true" required />
+                    <label class="form-check-label small text-muted" for="acceptLegalTerms">
+                        I agree to the
+                        <a href="@Url.Action("Terms", "Home", new { tenant = tenantToken })" target="_blank" rel="noopener">Terms &amp; Conditions</a>
+                        and
+                        <a href="@Url.Action("Privacy", "Home", new { tenant = tenantToken })" target="_blank" rel="noopener">Privacy Policy</a>.
+                    </label>
+                </div>
+            </div>
             
             <button type="submit" class="btn btn-success btn-lg">Submit Application</button>
         }

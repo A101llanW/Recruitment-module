@@ -5,6 +5,7 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Email Templates";
+    ViewBag.SuppressPageHero = true;
 }
 <style>
     /* Keep footer above editor chrome on this full-page editor screen. */
@@ -61,6 +62,7 @@
                 return "Interview mode";
             case "InterviewerName":
                 return "Interviewer name";
+            case "QuestionnaireStageLink":
             case "StageTwoLink":
                 return "Questionnaire stage link";
             case "ResetLink":
@@ -95,6 +97,7 @@
                 return "fa-video";
             case "InterviewerName":
                 return "fa-user-tie";
+            case "QuestionnaireStageLink":
             case "StageTwoLink":
                 return "fa-link";
             case "ResetLink":
@@ -129,8 +132,9 @@
                 return "How the interview is held.";
             case "InterviewerName":
                 return "The interviewer's name.";
+            case "QuestionnaireStageLink":
             case "StageTwoLink":
-                return "Link to the next questionnaire stage.";
+                return "Link to the questionnaire stage HR opened for you.";
             case "ResetLink":
                 return "Password reset link (filled in by the system).";
             case "SecurityCode":
@@ -149,7 +153,8 @@
 
         var normalizedTemplateKey = HR.Web.Services.EmailTemplateCatalog.NormalizeTemplateKey(templateKey);
         if (string.Equals(normalizedTemplateKey, HR.Web.Services.EmailTemplateCatalog.SecondaryStageInvitation, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(tokenName.Trim(), "StageTwoLink", StringComparison.OrdinalIgnoreCase))
+            (string.Equals(tokenName.Trim(), HR.Web.Services.EmailTemplateCatalog.QuestionnaireStageLinkToken, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(tokenName.Trim(), HR.Web.Services.EmailTemplateCatalog.StageTwoLinkToken, StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }

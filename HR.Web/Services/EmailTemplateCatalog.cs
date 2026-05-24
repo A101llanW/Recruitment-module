@@ -13,6 +13,12 @@ namespace HR.Web.Services
         public const string InterviewerAssignedStandard = "interviewer_assigned_standard";
         public const string ApplicationReceivedStandard = "application_received_standard";
         public const string SecondaryStageInvitation = "secondary_stage_invitation";
+
+        /// <summary>Token for the questionnaire URL when HR opens a further stage (any stage after the first).</summary>
+        public const string QuestionnaireStageLinkToken = "QuestionnaireStageLink";
+
+        /// <summary>Legacy token name; always filled with the same value as <see cref="QuestionnaireStageLinkToken"/>.</summary>
+        public const string StageTwoLinkToken = "StageTwoLink";
         public const string PasswordResetStandard = "password_reset_standard";
         public const string MfaCodeStandard = "mfa_code_standard";
         public const string EmailVerificationStandard = "email_verification_standard";
@@ -85,10 +91,10 @@ namespace HR.Web.Services
             new TemplateDefinition
             {
                 Key = SecondaryStageInvitation,
-                DisplayName = "Secondary Stage Invitation",
-                Description = "Invitation to complete the next questionnaire stage.",
+                DisplayName = "Next questionnaire stage invitation",
+                Description = "Invitation to complete the next questionnaire stage (after HR opens it).",
                 Category = "Application Communication",
-                AvailableTokens = new[] { "CandidateName", "PositionTitle", "CompanyName", "StageTwoLink", "CustomMessageBlock" }
+                AvailableTokens = new[] { "CandidateName", "PositionTitle", "CompanyName", QuestionnaireStageLinkToken, "CustomMessageBlock" }
             },
             new TemplateDefinition
             {
@@ -185,7 +191,7 @@ namespace HR.Web.Services
                         "<p>Dear {{CandidateName}},</p>" +
                         "<p>Congratulations. You have progressed to the next step for <strong>{{PositionTitle}}</strong> at <strong>{{CompanyName}}</strong>.</p>" +
                         "<p>Please complete the next questionnaire stage using the link below:</p>" +
-                        "<p><a href='{{StageTwoLink}}'>Open questionnaire stage</a></p>" +
+                        "<p><a href='{{" + QuestionnaireStageLinkToken + "}}'>Open questionnaire stage</a></p>" +
                         "{{CustomMessageBlock}}" +
                         "<p>Regards,<br/>{{CompanyName}} Recruitment Team</p>";
                     return true;
@@ -254,11 +260,55 @@ namespace HR.Web.Services
 
         public static RenderedTemplate RenderRawTemplates(string subjectTemplate, string bodyTemplate, IDictionary<string, string> tokens)
         {
+            var effectiveTokens = WithQuestionnaireStageLinkAliases(tokens);
             return new RenderedTemplate
             {
-                Subject = ReplaceTokens(subjectTemplate, tokens),
-                BodyHtml = ReplaceTokens(bodyTemplate, tokens)
+                Subject = ReplaceTokens(subjectTemplate, effectiveTokens),
+                BodyHtml = ReplaceTokens(bodyTemplate, effectiveTokens)
             };
+        }
+
+        /// <summary>
+        /// Ensures both <see cref="QuestionnaireStageLinkToken"/> and legacy <see cref="StageTwoLinkToken"/> are populated when either is supplied.
+        /// </summary>
+        private static IDictionary<string, string> WithQuestionnaireStageLinkAliases(IDictionary<string, string> tokens)
+        {
+            if (tokens == null || tokens.Count == 0)
+            {
+                return tokens;
+            }
+
+            string questionnaireLinkValue;
+            string legacyStageTwoValue;
+            var hasQuestionnaire = tokens.TryGetValue(QuestionnaireStageLinkToken, out questionnaireLinkValue);
+            var hasLegacy = tokens.TryGetValue(StageTwoLinkToken, out legacyStageTwoValue);
+            if (hasQuestionnaire && hasLegacy)
+            {
+                return tokens;
+            }
+
+            if (!hasQuestionnaire && !hasLegacy)
+            {
+                return tokens;
+            }
+
+            var merged = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var pair in tokens)
+            {
+                merged[pair.Key] = pair.Value;
+            }
+
+            if (hasQuestionnaire && !merged.ContainsKey(StageTwoLinkToken))
+            {
+                merged[StageTwoLinkToken] = questionnaireLinkValue;
+            }
+
+            if (hasLegacy && !merged.ContainsKey(QuestionnaireStageLinkToken))
+            {
+                merged[QuestionnaireStageLinkToken] = legacyStageTwoValue;
+            }
+
+            return merged;
         }
 
         public static string NormalizeTemplateKey(string templateKey)

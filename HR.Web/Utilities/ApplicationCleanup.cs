@@ -14,7 +14,7 @@ namespace HR.Web.Utilities
                 try
                 {
                     // Get all applications
-                    var applications = uow.Applications.GetAll().ToList();
+                    var applications = uow.Applications.GetAll(a => a.Applicant, a => a.Position, a => a.Company).ToList();
                     
                     Console.WriteLine($"Found {applications.Count} applications:");
                     
@@ -42,7 +42,7 @@ namespace HR.Web.Utilities
             {
                 try
                 {
-                    var applications = uow.Applications.GetAll(a => a.Applicant, a => a.Position).ToList();
+                    var applications = uow.Applications.GetAll(a => a.Applicant, a => a.Position, a => a.Company).ToList();
                     
                     Console.WriteLine($"=== Current Applications ({applications.Count}) ===");
                     foreach (var app in applications)
@@ -50,7 +50,7 @@ namespace HR.Web.Utilities
                         Console.WriteLine($"ID: {app.Id}");
                         Console.WriteLine($"  Applicant: {app.Applicant?.FullName ?? "Unknown"} ({app.Applicant?.Email})");
                         Console.WriteLine($"  Position: {app.Position?.Title}");
-                        Console.WriteLine($"  Company: {app.Position?.Company?.Name}");
+                        Console.WriteLine($"  Company: {app.Company?.Name}");
                         Console.WriteLine($"  Applied: {app.AppliedOn:yyyy-MM-dd HH:mm}");
                         Console.WriteLine($"  Status: {app.Status}");
                         Console.WriteLine($"  Score: {app.Score}");

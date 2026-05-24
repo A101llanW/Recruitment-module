@@ -2,6 +2,7 @@
 @{
     ViewBag.Title = "Edit Company";
     Layout = "~/Views/Shared/_Layout.cshtml";
+    var hasLogo = !string.IsNullOrEmpty(Model.CurrentLogoUrl);
 }
 
 <style>
@@ -124,6 +125,30 @@
         color: #888;
         margin-top: 5px;
     }
+
+    .company-logo-preview {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 120px;
+        height: 120px;
+        border: 1px dashed var(--border-color);
+        border-radius: 8px;
+        background: #fff;
+        padding: 10px;
+        margin-bottom: 12px;
+    }
+
+    .company-logo-preview img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .company-logo-preview.is-empty {
+        color: #adb5bd;
+        font-size: 2rem;
+    }
 </style>
 
 <div class="edit-wrapper">
@@ -135,10 +160,11 @@
                         <h3><i class="fas fa-edit"></i> Edit Company Configuration</h3>
                     </div>
                     <div class="edit-body">
-                        @using (Html.BeginForm("EditCompany", "Companies", FormMethod.Post, new { id = "editCompanyForm" }))
+                        @using (Html.BeginForm("EditCompany", "Companies", FormMethod.Post, new { id = "editCompanyForm", enctype = "multipart/form-data" }))
                         {
                             @Html.AntiForgeryToken()
                             @Html.HiddenFor(m => m.Id)
+                            @Html.HiddenFor(m => m.CurrentLogoPath)
 
                             if (!ViewData.ModelState.IsValid)
                             {
@@ -147,6 +173,30 @@
                                     @Html.ValidationSummary(true, "", new { @class = "small m-0" })
                                 </div>
                             }
+
+                            <div class="form-group mb-4">
+                                <label class="control-label">Company logo</label>
+                                <div class="company-logo-preview @(hasLogo ? string.Empty : "is-empty")" id="logoPreviewBox">
+                                    @if (hasLogo)
+                                    {
+                                        <img src="@Model.CurrentLogoUrl" alt="@Model.Name logo" id="logoPreviewImage" />
+                                    }
+                                    else
+                                    {
+                                        <i class="fas fa-building" id="logoPreviewPlaceholder"></i>
+                                        <img src="" alt="" id="logoPreviewImage" style="display:none;" />
+                                    }
+                                </div>
+                                <input type="file" name="logoFile" id="logoFile" class="form-control-custom" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp" />
+                                <p class="help-hint">PNG, JPG, GIF, or WEBP. Shown in the tenant navbar and login portal.</p>
+                                @if (hasLogo)
+                                {
+                                    <label class="checkbox-custom mt-2">
+                                        <input type="checkbox" name="removeLogo" value="true" id="removeLogo" />
+                                        <span style="font-weight: 500;">Remove current logo</span>
+                                    </label>
+                                }
+                            </div>
 
                             <div class="form-group mb-4">
                                 <label class="control-label" for="Name">Display Name</label>
@@ -216,4 +266,36 @@
 
 @section Scripts {
     @Scripts.Render("~/bundles/jqueryval")
+    <script>
+        (function () {
+            var fileInput = document.getElementById('logoFile');
+            var previewImage = document.getElementById('logoPreviewImage');
+            var previewBox = document.getElementById('logoPreviewBox');
+            var placeholder = document.getElementById('logoPreviewPlaceholder');
+            var removeCheckbox = document.getElementById('removeLogo');
+
+            if (!fileInput || !previewImage || !previewBox) return;
+
+            fileInput.addEventListener('change', function () {
+                if (!fileInput.files || !fileInput.files.length) return;
+                if (removeCheckbox) removeCheckbox.checked = false;
+                var reader = new FileReader();
+                reader.onload = function (e) {
+                    previewImage.src = e.target.result;
+                    previewImage.style.display = 'block';
+                    previewBox.classList.remove('is-empty');
+                    if (placeholder) placeholder.style.display = 'none';
+                };
+                reader.readAsDataURL(fileInput.files[0]);
+            });
+
+            if (removeCheckbox) {
+                removeCheckbox.addEventListener('change', function () {
+                    if (removeCheckbox.checked) {
+                        fileInput.value = '';
+                    }
+                });
+            }
+        })();
+    </script>
 }

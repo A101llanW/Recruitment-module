@@ -5,6 +5,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HR Application Status</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
@@ -18,6 +19,12 @@
         .btn-success { background: #28a745; color: white; }
         .btn-secondary { background: #6c757d; color: white; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr !important; }
+            body { margin: 12px; }
+            .container { padding: 16px !important; }
+        }
     </style>
 </head>
 <body>

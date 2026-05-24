@@ -35,6 +35,8 @@ namespace HR.Web.Models
         // Saved resume file path
         public string ResumePath { get; set; }
 
+        public bool AcceptLegalTerms { get; set; }
+
         // Structured scoring fields (1-5 scale)
         public string InterestLevel { get; set; }
         public string CommunicationSkills { get; set; }

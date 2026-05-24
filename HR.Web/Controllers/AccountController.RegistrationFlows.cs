@@ -97,6 +97,12 @@ namespace HR.Web.Controllers
                 return ReturnRegisterView(model, isSuperAdmin, resolvedReturnUrl);
             }
 
+            if (!model.AcceptLegalTerms)
+            {
+                ModelState.AddModelError("AcceptLegalTerms", "You must agree to the candidate Terms & Conditions and Privacy Policy to continue.");
+                return ReturnRegisterView(model, isSuperAdmin, resolvedReturnUrl);
+            }
+
             var companyResolutionFailure = EnsureRegistrationCompanyContext(model, isSuperAdmin, resolvedReturnUrl);
             if (companyResolutionFailure != null)
             {
@@ -314,6 +320,8 @@ namespace HR.Web.Controllers
                 CompanyId = model.CompanyId
             };
 
+            LegalPolicyHelper.ApplyUserAcceptance(user, DateTime.UtcNow, LegalRelationshipKind.Applicant);
+
             _uow.Users.Add(user);
             _uow.Complete();
             return user;
@@ -328,6 +336,8 @@ namespace HR.Web.Controllers
                 Phone = model.Phone,
                 CompanyId = model.CompanyId
             };
+
+            LegalPolicyHelper.ApplyApplicantAcceptance(applicant, DateTime.UtcNow);
 
             _uow.Applicants.Add(applicant);
             _uow.Complete();

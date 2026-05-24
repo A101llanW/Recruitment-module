@@ -110,10 +110,9 @@ namespace HR.Web.Controllers
 
             var tenantToken = RouteData.Values["tenant"] as string;
             var resetUrl = Url.Action("ResetPassword", "Account", new { tenant = tenantToken, token = token }, Request.Url.Scheme);
+            DevDiagnostics.LogOneTimeCode("PASSWORD RESET TOKEN", user.Email, token);
             System.Diagnostics.Debug.WriteLine("=== PASSWORD RESET LINK ===");
             System.Diagnostics.Debug.WriteLine("Reset URL: " + resetUrl);
-            System.Diagnostics.Debug.WriteLine("Token: " + token);
-            System.Diagnostics.Debug.WriteLine("User Email: " + user.Email);
             System.Diagnostics.Debug.WriteLine("========================");
 
             if (EmailSvc != null)

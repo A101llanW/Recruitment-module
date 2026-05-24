@@ -1,0 +1,23 @@
+@{
+    var title = ViewBag.Title as string ?? "Page";
+    var eyebrow = ViewBag.PageEyebrow as string ?? HR.Web.Helpers.AppConfig.ProductName;
+    var lead = ViewBag.PageLead as string;
+    var statsHtml = ViewBag.PageStatsHtml as string;
+    var actionsHtml = ViewBag.PageActionsHtml as string;
+}
+<header class="app-page-hero">
+    <p class="app-page-hero__eyebrow">@eyebrow</p>
+    <h1 class="app-page-hero__title">@title</h1>
+    @if (!string.IsNullOrWhiteSpace(lead))
+    {
+        <p class="app-page-hero__lead">@lead</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(statsHtml))
+    {
+        <div class="app-page-hero__stats">@Html.Raw(statsHtml)</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(actionsHtml))
+    {
+        <div class="app-page-hero__actions">@Html.Raw(actionsHtml)</div>
+    }
+</header>

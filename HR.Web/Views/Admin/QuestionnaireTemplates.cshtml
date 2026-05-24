@@ -1,0 +1,92 @@
+@model IList<HR.Web.ViewModels.QuestionnaireTemplateListItemViewModel>
+@{
+    ViewBag.Title = "Questionnaire Templates";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">Questionnaire Templates</h2>
+            <p class="text-muted mb-0">Save reusable question sets and apply them when creating job positions.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary shadow-sm" href="@Url.Action("Questions", "Admin")">
+                <i class="fas fa-arrow-left mr-1"></i> Back to Questions
+            </a>
+            <a class="btn btn-success shadow-sm" href="@Url.Action("EditQuestionnaireTemplate", "Admin")">
+                <i class="fas fa-plus mr-1"></i> New Template
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["Message"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle mr-2"></i> @TempData["Message"]
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-circle mr-2"></i> @TempData["ErrorMessage"]
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+        </div>
+    }
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            @if (Model != null && Model.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="bg-dark text-white">
+                            <tr>
+                                <th class="pl-4">Template</th>
+                                <th>Questions</th>
+                                <th>Stages</th>
+                                <th class="text-right pr-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var template in Model)
+                            {
+                                <tr>
+                                    <td class="pl-4 align-middle">
+                                        <div class="font-weight-bold">@template.Name</div>
+                                        @if (!string.IsNullOrWhiteSpace(template.Description))
+                                        {
+                                            <div class="text-muted small">@template.Description</div>
+                                        }
+                                    </td>
+                                    <td class="align-middle">@template.QuestionCount</td>
+                                    <td class="align-middle">@template.StageCount</td>
+                                    <td class="text-right pr-4 align-middle">
+                                        <a class="btn btn-sm btn-light border" href="@Url.Action("EditQuestionnaireTemplate", "Admin", new { id = template.Id })" title="Edit">
+                                            <i class="fas fa-edit text-primary"></i>
+                                        </a>
+                                        <form method="post" action="@Url.Action("DeleteQuestionnaireTemplate", "Admin")" style="display:inline;" onsubmit="return confirm('Remove this template? Existing positions will not be changed.');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@template.Id" />
+                                            <button type="submit" class="btn btn-sm btn-light border" title="Remove">
+                                                <i class="fas fa-trash text-danger"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="p-4 text-center text-muted">
+                    <p class="mb-3">No questionnaire templates yet.</p>
+                    <a class="btn btn-primary" href="@Url.Action("EditQuestionnaireTemplate", "Admin")">Create your first template</a>
+                </div>
+            }
+        </div>
+    </div>
+</div>

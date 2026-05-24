@@ -37,6 +37,19 @@ namespace HR.Web.Models
 
         public DateTime? FailedCandidateEmailSentAt { get; set; }
 
+        /// <summary>Workflow stage (reserved for future use; default 1).</summary>
+        public int CurrentStage { get; set; }
+
+        /// <summary>Highest questionnaire stage the candidate has fully submitted (0 = none yet).</summary>
+        public int LastCompletedQuestionnaireStage { get; set; }
+
+        /// <summary>When set, candidate may complete this questionnaire stage (HR opened the next step).</summary>
+        public int? PendingQuestionnaireStage { get; set; }
+
+        public DateTime? QuestionnaireInvitedOn { get; set; }
+
+        public decimal? LastQuestionnaireScore { get; set; }
+
         public virtual Applicant Applicant { get; set; }
         public virtual Position Position { get; set; }
         public virtual ICollection<ApplicationAnswer> ApplicationAnswers { get; set; }

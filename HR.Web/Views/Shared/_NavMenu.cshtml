@@ -1,0 +1,180 @@
+@model HR.Web.Services.NavMenuModel
+@{
+    if (Model == null)
+    {
+        return;
+    }
+
+    var isTenantBranded = Model.Brand != null && Model.Brand.IsTenantBranded;
+    var hasTenantLogo = isTenantBranded && !string.IsNullOrEmpty(Model.Brand.LogoUrl);
+    var hasTenantName = isTenantBranded && !string.IsNullOrWhiteSpace(Model.Brand.Title);
+    var showTenantSubtitle = isTenantBranded && !string.IsNullOrWhiteSpace(Model.Brand.Subtitle);
+}
+
+<a class="navbar-brand d-flex align-items-center app-nav-brand" href="@Model.Brand.Url">
+    @if (isTenantBranded)
+    {
+        if (hasTenantLogo)
+        {
+            <img src="@Model.Brand.LogoUrl" alt="@(hasTenantName ? Model.Brand.Title + " logo" : "Company logo")" class="app-nav-brand-logo mr-2" height="40" onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='inline-flex');" />
+            <span class="app-nav-brand-mark mr-2 is-fallback" style="display:none;" aria-hidden="true">
+                <i class="fas fa-building fa-2x text-info app-nav-brand-fallback-icon" aria-hidden="true"></i>
+            </span>
+        }
+        else
+        {
+            <span class="app-nav-brand-mark mr-2 is-fallback">
+                <i class="fas fa-building fa-2x text-info app-nav-brand-fallback-icon" aria-hidden="true"></i>
+            </span>
+        }
+        <div class="d-flex flex-column ml-1 app-brand-divider">
+            @if (hasTenantName)
+            {
+                <span class="app-brand-title">@Model.Brand.Title</span>
+            }
+            @if (showTenantSubtitle)
+            {
+                <small class="app-brand-sub">@Model.Brand.Subtitle</small>
+            }
+        </div>
+    }
+    else
+    {
+        <img src="@Model.Brand.LogoUrl" alt="Nanosoft Technologies" height="40" class="mr-2 app-nav-brand-logo" style="max-height: 40px;" onerror="this.onerror=null; this.src='@Url.Content("~/Content/images/nanosoft-logo.jpg")';" />
+        <div class="d-flex flex-column ml-2 app-brand-divider">
+            <small class="app-brand-eyebrow">@HR.Web.Helpers.AppConfig.PublisherName</small>
+            <span class="app-brand-title">@Model.Brand.Title</span>
+            <small class="app-brand-sub d-none d-md-inline">@Model.Brand.Subtitle</small>
+        </div>
+    }
+</a>
+
+@if (Model.ShowImpersonationChip)
+{
+    <a class="app-nav-impersonation-chip d-none d-lg-inline-flex" href="@Model.StopImpersonatingUrl" title="Return to SuperAdmin role">
+        <i class="fas fa-user-secret" aria-hidden="true"></i>
+        <span>Viewing as <strong>@Model.ImpersonatedCompanyName</strong></span>
+        <i class="fas fa-times-circle app-nav-impersonation-chip__exit" aria-hidden="true"></i>
+    </a>
+}
+
+<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+</button>
+
+<div class="collapse navbar-collapse" id="navbarNav">
+    <ul class="navbar-nav app-nav-primary">
+        @if (Model.ShowImpersonationChip)
+        {
+            <li class="nav-item d-lg-none app-nav-drawer-section-start">
+                <a class="app-nav-impersonation-chip app-nav-impersonation-chip--mobile" href="@Model.StopImpersonatingUrl">
+                    <i class="fas fa-user-secret" aria-hidden="true"></i>
+                    <span>Viewing as <strong>@Model.ImpersonatedCompanyName</strong></span>
+                </a>
+            </li>
+        }
+
+        @if (Model.HomeLink != null)
+        {
+            <li class="nav-item app-nav-home @(Model.HomeLink.IsActive ? "active" : "")">
+                <a class="nav-link app-nav-top-link" href="@Model.HomeLink.Url" @(Model.HomeLink.IsActive ? Html.Raw("aria-current=\"page\"") : null)>
+                    <span class="d-lg-none"><i class="@Model.HomeLink.IconClass" aria-hidden="true"></i> </span>@Model.HomeLink.Label
+                </a>
+            </li>
+        }
+
+        @if (Model.SystemGroup != null)
+        {
+            <li class="nav-item d-lg-none app-nav-drawer-heading" aria-hidden="true">System</li>
+            <li class="nav-item dropdown @(Model.SystemGroup.IsActive ? "active" : "")">
+                <a class="nav-link dropdown-toggle nav-link-sa-system app-nav-top-link" href="#" id="@Model.SystemGroup.DropdownId" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" @(Model.SystemGroup.IsActive ? Html.Raw("aria-current=\"true\"") : null)>
+                    <span class="d-lg-none"><i class="fas fa-server" aria-hidden="true"></i> </span>@Model.SystemGroup.Label
+                </a>
+                <div class="dropdown-menu" aria-labelledby="@Model.SystemGroup.DropdownId">
+                    @foreach (var item in Model.SystemGroup.Items)
+                    {
+                        <a class="dropdown-item @(item.IsActive ? "active" : "")" href="@item.Url" @(item.IsActive ? Html.Raw("aria-current=\"page\"") : null)>
+                            <i class="@item.IconClass" aria-hidden="true"></i> @item.Label
+                        </a>
+                    }
+                </div>
+            </li>
+        }
+
+        @foreach (var group in Model.Groups)
+        {
+            if (string.IsNullOrEmpty(group.Label))
+            {
+                foreach (var item in group.Items)
+                {
+                    <li class="nav-item @(item.IsActive ? "active" : "")">
+                        <a class="nav-link app-nav-top-link" href="@item.Url" @(item.IsActive ? Html.Raw("aria-current=\"page\"") : null)>
+                            <i class="@item.IconClass d-lg-none" aria-hidden="true"></i> @item.Label
+                        </a>
+                    </li>
+                }
+            }
+            else if (Model.UseGroupedMenus)
+            {
+                <li class="nav-item d-lg-none app-nav-drawer-heading" aria-hidden="true">@group.Label</li>
+                <li class="nav-item dropdown app-nav-group @(group.IsActive ? "active" : "")" data-nav-section="@group.Key">
+                    <a class="nav-link dropdown-toggle app-nav-top-link" href="#" id="@group.DropdownId" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" @(group.IsActive ? Html.Raw("aria-current=\"true\"") : null)>
+                        @group.Label
+                    </a>
+                    <div class="dropdown-menu" aria-labelledby="@group.DropdownId">
+                        @foreach (var item in group.Items)
+                        {
+                            <a class="dropdown-item @(item.IsActive ? "active" : "")" href="@item.Url" @(item.IsActive ? Html.Raw("aria-current=\"page\"") : null)>
+                                <i class="@item.IconClass" aria-hidden="true"></i> @item.Label
+                            </a>
+                        }
+                    </div>
+                </li>
+            }
+            else
+            {
+                foreach (var item in group.Items)
+                {
+                    <li class="nav-item @(item.IsActive ? "active" : "")">
+                        <a class="nav-link app-nav-top-link" href="@item.Url" @(item.IsActive ? Html.Raw("aria-current=\"page\"") : null)>
+                            <i class="@item.IconClass d-lg-none" aria-hidden="true"></i> @item.Label
+                        </a>
+                    </li>
+                }
+            }
+        }
+    </ul>
+
+    <ul class="navbar-nav ml-auto app-nav-account">
+        <li class="nav-item d-lg-none app-nav-drawer-heading" aria-hidden="true">Account</li>
+        @if (Model.IsAuthenticated && Model.UserIdentity != null && Model.UserIdentity.ShowAccountMenu)
+        {
+            <li class="nav-item dropdown app-nav-user">
+                <a class="nav-link dropdown-toggle app-nav-user-trigger" href="#" id="userMenu" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <span class="app-nav-avatar" aria-hidden="true">@Model.UserIdentity.Initials</span>
+                    <span class="app-nav-user-meta d-none d-md-inline">
+                        <span class="app-nav-user-name">@Model.UserIdentity.DisplayName</span>
+                        <span class="app-nav-role @Model.UserIdentity.RoleBadgeClass">@Model.UserIdentity.RoleBadge</span>
+                    </span>
+                    <span class="d-md-none">@Model.UserIdentity.DisplayName</span>
+                </a>
+                <div class="dropdown-menu dropdown-menu-right" aria-labelledby="userMenu">
+                    <div class="dropdown-header d-md-none app-nav-user-dropdown-header">
+                        <span class="app-nav-avatar app-nav-avatar--sm">@Model.UserIdentity.Initials</span>
+                        <span>@Model.UserIdentity.DisplayName</span>
+                        <span class="app-nav-role @Model.UserIdentity.RoleBadgeClass">@Model.UserIdentity.RoleBadge</span>
+                    </div>
+                    <a class="dropdown-item" href="@Model.ProfileUrl"><i class="fas fa-user-circle" aria-hidden="true"></i> My Profile</a>
+                    <a class="dropdown-item" href="@Model.ChangePasswordUrl"><i class="fas fa-key" aria-hidden="true"></i> Change Password</a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" href="@Model.LogoutUrl"><i class="fas fa-sign-out-alt" aria-hidden="true"></i> Logout</a>
+                </div>
+            </li>
+        }
+        else
+        {
+            <li class="nav-item"><a class="nav-link app-nav-top-link" href="@Model.LoginUrl"><i class="fas fa-sign-in-alt d-lg-none" aria-hidden="true"></i> Login</a></li>
+            <li class="nav-item"><a class="nav-link app-nav-top-link" href="@Model.RegisterUrl"><i class="fas fa-user-plus d-lg-none" aria-hidden="true"></i> Register</a></li>
+        }
+    </ul>
+</div>

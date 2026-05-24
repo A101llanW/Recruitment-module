@@ -9,6 +9,17 @@ namespace HR.Web.Controllers
 {
     public partial class AdminController
     {
+        /// <summary>
+        /// Sends the user to global SuperAdmin user management when acting as platform admin,
+        /// or tenant-scoped user management when impersonating / acting as a company admin.
+        /// </summary>
+        private ActionResult RedirectToUserManagementHome()
+        {
+            return _tenantService.IsSuperAdmin()
+                ? RedirectToAction("GlobalUserManagement")
+                : RedirectToAction("UserManagement");
+        }
+
         private ActionResult BuildGlobalUserManagementView()
         {
             var allUsers = _uow.Users.GetAll(u => u.Company, u => u.RoleDefinition).ToList();
@@ -132,7 +143,7 @@ namespace HR.Web.Controllers
             if (IsDeletingCurrentUser(user.UserName))
             {
                 TempData["Message"] = "You cannot delete your own account.";
-                return RedirectToAction("GlobalUserManagement");
+                return RedirectToUserManagementHome();
             }
 
             var deletedUsername = user.UserName;
@@ -152,7 +163,7 @@ namespace HR.Web.Controllers
                 TempData["Message"] = "Error deleting user: " + ex.Message;
             }
 
-            return RedirectToAction("GlobalUserManagement");
+            return RedirectToUserManagementHome();
         }
 
         private bool IsDeletingCurrentUser(string targetUserName)

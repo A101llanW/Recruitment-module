@@ -14,6 +14,7 @@ namespace HR.Web.Data
     {
         public HrContext() : base(ResolveConnectionString())
         {
+            Configuration.LazyLoadingEnabled = false;
         }
 
         public DbSet<Company> Companies { get; set; }
@@ -29,6 +30,8 @@ namespace HR.Web.Data
         public DbSet<Question> Questions { get; set; }
         public DbSet<QuestionOption> QuestionOptions { get; set; }
         public DbSet<PositionQuestion> PositionQuestions { get; set; }
+        public DbSet<QuestionnaireTemplate> QuestionnaireTemplates { get; set; }
+        public DbSet<QuestionnaireTemplateQuestion> QuestionnaireTemplateQuestions { get; set; }
         public DbSet<RoleDefinition> RoleDefinitions { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
         public DbSet<ApplicationAnswer> ApplicationAnswers { get; set; }
@@ -120,6 +123,24 @@ namespace HR.Web.Data
                 .HasRequired(pqo => pqo.QuestionOption)
                 .WithMany(qo => qo.PositionQuestionOptions)
                 .HasForeignKey(pqo => pqo.QuestionOptionId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<QuestionnaireTemplate>()
+                .HasOptional(t => t.Company)
+                .WithMany()
+                .HasForeignKey(t => t.CompanyId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<QuestionnaireTemplateQuestion>()
+                .HasRequired(tq => tq.QuestionnaireTemplate)
+                .WithMany(t => t.TemplateQuestions)
+                .HasForeignKey(tq => tq.TemplateId)
+                .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<QuestionnaireTemplateQuestion>()
+                .HasRequired(tq => tq.Question)
+                .WithMany()
+                .HasForeignKey(tq => tq.QuestionId)
                 .WillCascadeOnDelete(false);
 
             modelBuilder.Entity<RoleDefinition>()

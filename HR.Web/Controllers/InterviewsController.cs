@@ -371,7 +371,11 @@ namespace HR.Web.Controllers
         [Authorize]
         public ActionResult Edit(int id)
         {
-            var interview = _uow.Interviews.Get(id);
+            var interview = _uow.Interviews.GetAll(
+                    i => i.Application.Applicant,
+                    i => i.Application.Position,
+                    i => i.Interviewer)
+                .FirstOrDefault(i => i.Id == id);
             if (interview == null)
             {
                 return HttpNotFound();
@@ -400,7 +404,7 @@ namespace HR.Web.Controllers
             }
 
             // Verify ownership
-            var existing = _uow.Interviews.Get(model.Id);
+            var existing = _uow.Interviews.GetAll(i => i.Application).FirstOrDefault(i => i.Id == model.Id);
             if (existing == null) return HttpNotFound();
 
             var companyId = _tenantService.GetCurrentUserCompanyId();
@@ -425,7 +429,10 @@ namespace HR.Web.Controllers
         [Authorize]
         public ActionResult Delete(int id)
         {
-            var interview = _uow.Interviews.Get(id);
+            var interview = _uow.Interviews.GetAll(
+                    i => i.Application.Applicant,
+                    i => i.Application.Position)
+                .FirstOrDefault(i => i.Id == id);
             if (interview == null)
             {
                 return HttpNotFound();

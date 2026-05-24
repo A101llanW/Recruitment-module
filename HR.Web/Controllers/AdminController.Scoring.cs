@@ -53,7 +53,10 @@ namespace HR.Web.Controllers
         /// </summary>
         public ActionResult ApplicationScoreDetails(int applicationId)
         {
-            var application = _uow.Applications.Get(applicationId);
+            var application = _uow.Applications.Get(
+                applicationId,
+                a => a.Applicant,
+                a => a.Position);
             if (application == null) return HttpNotFound();
 
             var breakdown = _scoringService.GetScoreBreakdown(applicationId);

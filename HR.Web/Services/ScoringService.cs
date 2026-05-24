@@ -53,12 +53,35 @@ namespace HR.Web.Services
         {
             var weightedScore = 0m;
 
-            // Get position questions and their order
-            var positionQuestions = _uow.Context.Set<PositionQuestion>()
+            var position = _uow.Positions.Get(application.PositionId);
+            var maxQuestionnaireStages = position != null ? Math.Max(1, position.QuestionnaireStageCount) : 1;
+
+            var positionQuestionsQuery = _uow.Context.Set<PositionQuestion>()
                 .Where(pq => pq.PositionId == application.PositionId)
-                .Include(pq => pq.Question)
-                .OrderBy(pq => pq.Order)
-                .ToList();
+                .Include(pq => pq.Question);
+
+            List<PositionQuestion> positionQuestions;
+            if (maxQuestionnaireStages > 1)
+            {
+                var completedCap = application.LastCompletedQuestionnaireStage;
+                if (completedCap <= 0)
+                {
+                    positionQuestions = new List<PositionQuestion>();
+                }
+                else
+                {
+                    positionQuestions = positionQuestionsQuery
+                        .Where(pq => Math.Max(1, pq.StageNumber) <= completedCap)
+                        .OrderBy(pq => pq.Order)
+                        .ToList();
+                }
+            }
+            else
+            {
+                positionQuestions = positionQuestionsQuery
+                    .OrderBy(pq => pq.Order)
+                    .ToList();
+            }
 
             if (!positionQuestions.Any())
             {

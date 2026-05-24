@@ -19,51 +19,15 @@ namespace HR.Web.Controllers
         private readonly AuditService _auditService = new AuditService();
         private readonly TenantService _tenantService = new TenantService();
 
-        public ActionResult Index(string sortOrder)
+        public ActionResult Index()
         {
-            ViewBag.ProficiencySortParam = string.IsNullOrEmpty(sortOrder) ? "proficiency_desc" : "";
-            
-            var itemsQuery = _uow.Context.Applicants.Include("Applications").AsQueryable();
+            var itemsQuery = _uow.Context.Applicants.AsQueryable();
             itemsQuery = _tenantService.ApplyTenantFilter(itemsQuery);
-            var items = itemsQuery.ToList();
-            
-            // Sort by proficiency (from latest application's WorkExperienceLevel)
-            switch (sortOrder)
-            {
-                case "proficiency_desc":
-                    items = items.OrderByDescending(a => GetProficiencyValue(a)).ToList();
-                    break;
-                case "proficiency_asc":
-                    items = items.OrderBy(a => GetProficiencyValue(a)).ToList();
-                    break;
-                default:
-                    items = items.OrderBy(a => a.FullName).ToList();
-                    break;
-            }
-            
-            // Get interviewers for booking (filtered by tenant)
-            var interviewersQuery = _uow.Context.Users.Where(u => u.Role == "Admin").AsQueryable();
-            interviewersQuery = _tenantService.ApplyTenantFilter(interviewersQuery);
-            ViewBag.Interviewers = interviewersQuery.ToList();
-            
-            // Get existing interview application IDs
-            var interviewedAppIds = _uow.Context.Interviews.Select(i => i.ApplicationId).ToList();
-            ViewBag.InterviewedAppIds = interviewedAppIds;
-            
+            var items = itemsQuery
+                .OrderBy(a => a.FullName)
+                .ToList();
+
             return View(items);
-        }
-        
-        private int GetProficiencyValue(Applicant applicant)
-        {
-            if (applicant.Applications == null || !applicant.Applications.Any())
-                return -1;
-            var latest = applicant.Applications.OrderByDescending(a => a.AppliedOn).FirstOrDefault();
-            if (latest == null || string.IsNullOrEmpty(latest.WorkExperienceLevel))
-                return -1;
-            int val;
-            if (int.TryParse(latest.WorkExperienceLevel, out val))
-                return val;
-            return -1;
         }
 
         public ActionResult Details(int id, int? selectedApplicationId = null)
@@ -104,7 +68,7 @@ namespace HR.Web.Controllers
 
         private List<Application> GetApplicantApplications(int applicantId)
         {
-            return _uow.Applications.GetAll()
+            return _uow.Applications.GetAll(a => a.Applicant, a => a.Position)
                 .Where(a => a.ApplicantId == applicantId)
                 .OrderByDescending(a => a.AppliedOn)
                 .ToList();
@@ -145,7 +109,7 @@ namespace HR.Web.Controllers
 
         private List<ApplicationAnswer> GetApplicationAnswers(int applicationId)
         {
-            return _uow.ApplicationAnswers.GetAll()
+            return _uow.ApplicationAnswers.GetAll(aa => aa.Question)
                 .Where(aa => aa.ApplicationId == applicationId)
                 .ToList();
         }
@@ -167,7 +131,7 @@ namespace HR.Web.Controllers
 
         private void LoadAnswerQuestion(ApplicationAnswer answer)
         {
-            if (answer.QuestionId > 0)
+            if (answer.QuestionId > 0 && answer.Question == null)
             {
                 answer.Question = _uow.Questions.Get(answer.QuestionId);
             }

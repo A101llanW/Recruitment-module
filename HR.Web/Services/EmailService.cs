@@ -1,14 +1,19 @@
 using System;
+using System.Collections.Generic;
 using System.Configuration;
+using System.Linq;
 using System.Net;
 using System.Net.Mail;
 using System.Threading.Tasks;
+using HR.Web.Helpers;
 
 namespace HR.Web.Services
 {
     public interface IEmailService
     {
         Task SendAsync(string to, string subject, string body);
+
+        Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients);
         Task SendPasswordResetEmailAsync(string to, string resetLink);
         Task SendMfaCodeEmailAsync(string to, string code);
         Task SendEmailVerificationOtpAsync(string to, string code);
@@ -38,54 +43,92 @@ namespace HR.Web.Services
             _smtpPass = _settingsService.GetSetting("SmtpPassword") ?? ConfigurationManager.AppSettings["SmtpPassword"] ?? "";
             _enableSsl = _settingsService.GetSetting<bool>("SmtpEnableSsl", bool.Parse(ConfigurationManager.AppSettings["SmtpEnableSsl"] ?? "true"));
             _fromEmail = _settingsService.GetSetting("FromEmail") ?? ConfigurationManager.AppSettings["FromEmail"] ?? "noreply@nanosoft.com";
-            _fromName = _settingsService.GetSetting("FromName") ?? ConfigurationManager.AppSettings["FromName"] ?? "Nanosoft HR System";
+            _fromName = _settingsService.GetSetting("FromName") ?? ConfigurationManager.AppSettings["FromName"] ?? AppConfig.ProductName;
         }
 
         public async Task SendAsync(string to, string subject, string body)
         {
+            await SendAsync(to, subject, body, null);
+        }
+
+        public async Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients)
+        {
             try
             {
-                using (var client = new SmtpClient(_smtpHost, _smtpPort))
-                {
-                    client.EnableSsl = _enableSsl;
-                    client.UseDefaultCredentials = false;
-                    
-                    if (!string.IsNullOrEmpty(_smtpUser) || !string.IsNullOrEmpty(_smtpPass))
-                    {
-                        client.Credentials = new NetworkCredential(_smtpUser, _smtpPass);
-                    }
-
-                    var mailMessage = new MailMessage
-                    {
-                        From = new MailAddress(_fromEmail, _fromName),
-                        Subject = subject,
-                        Body = body,
-                        IsBodyHtml = true
-                    };
-                    mailMessage.To.Add(to);
-
-                    await client.SendMailAsync(mailMessage);
-                }
+                await SendMailCoreAsync(to, subject, body, ccRecipients);
             }
             catch (Exception ex)
             {
-                // Log error to a file so we can see it
-                try 
-                {
-                    string logPath = AppDomain.CurrentDomain.BaseDirectory + "email_errors.txt";
-                    string logMessage = string.Format("[{0}] ERROR sending to {1}: {2}{3}Stack: {4}{3}", 
-                        DateTime.Now, to, ex.Message, Environment.NewLine, ex.StackTrace);
-                    System.IO.File.AppendAllText(logPath, logMessage);
-                }
-                catch { }
-                
-                System.Diagnostics.Debug.WriteLine("Email sending failed: " + ex.Message);
+                LogEmailFailure(to, ex);
             }
+        }
+
+        private async Task SendMailCoreAsync(string to, string subject, string body, IEnumerable<string> ccRecipients)
+        {
+            using (var client = new SmtpClient(_smtpHost, _smtpPort))
+            {
+                client.EnableSsl = _enableSsl;
+                client.UseDefaultCredentials = false;
+
+                if (!string.IsNullOrEmpty(_smtpUser) || !string.IsNullOrEmpty(_smtpPass))
+                {
+                    client.Credentials = new NetworkCredential(_smtpUser, _smtpPass);
+                }
+
+                var mailMessage = new MailMessage
+                {
+                    From = new MailAddress(_fromEmail, _fromName),
+                    Subject = subject,
+                    Body = body,
+                    IsBodyHtml = true
+                };
+                mailMessage.To.Add(to);
+
+                if (ccRecipients != null)
+                {
+                    foreach (var cc in ccRecipients.Where(e => !string.IsNullOrWhiteSpace(e)))
+                    {
+                        mailMessage.CC.Add(cc.Trim());
+                    }
+                }
+
+                await client.SendMailAsync(mailMessage);
+            }
+        }
+
+        private async Task SendCriticalAsync(string to, string subject, string body)
+        {
+            try
+            {
+                await SendMailCoreAsync(to, subject, body, null);
+            }
+            catch (Exception ex)
+            {
+                LogEmailFailure(to, ex);
+                throw;
+            }
+        }
+
+        private static void LogEmailFailure(string to, Exception ex)
+        {
+            try
+            {
+                string logPath = AppDomain.CurrentDomain.BaseDirectory + "email_errors.txt";
+                string logMessage = string.Format("[{0}] ERROR sending to {1}: {2}{3}Stack: {4}{3}",
+                    DateTime.Now, to, ex.Message, Environment.NewLine, ex.StackTrace);
+                System.IO.File.AppendAllText(logPath, logMessage);
+            }
+            catch
+            {
+            }
+
+            System.Diagnostics.Debug.WriteLine("Email sending failed: " + ex.Message);
+            System.Diagnostics.Trace.WriteLine("Email sending failed: " + ex.Message);
         }
 
         public async Task SendPasswordResetEmailAsync(string to, string resetLink)
         {
-            var subject = "Password Reset Request - Nanosoft HR System";
+            var subject = "Password Reset Request - " + AppConfig.ProductName;
             var body = string.Format(@"
 <!DOCTYPE html>
 <html>
@@ -105,12 +148,12 @@ namespace HR.Web.Services
 <body>
     <div class='container'>
         <div class='header'>
-            <h2>Nanosoft HR System</h2>
+            <h2>{1}</h2>
             <p>Password Reset Request</p>
         </div>
         <div class='content'>
             <p>Hello,</p>
-            <p>We received a request to reset your password for your Nanosoft HR System account.</p>
+            <p>We received a request to reset your password for your {1} account.</p>
             
             <div class='security-note'>
                 <strong>Security Notice:</strong> This password reset link will expire in 24 hours for your security.
@@ -126,18 +169,18 @@ namespace HR.Web.Services
             <p style='word-break: break-all; background: #f0f0f0; padding: 10px; border-radius: 4px;'>{0}</p>
         </div>
         <div class='footer'>
-            <p>&copy; 2026 Nanosoft Technologies. All rights reserved.</p>
+            <p>&copy; {2} {3}. All rights reserved.</p>
             <p>This is an automated message, please do not reply to this email.</p>
         </div>
     </div>
 </body>
-</html>", resetLink);
+</html>", resetLink, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
             await SendAsync(to, subject, body);
         }
         public async Task SendMfaCodeEmailAsync(string to, string code)
         {
-            var subject = "Your Verification Code - Nanosoft HR System";
+            var subject = "Your Verification Code - " + AppConfig.ProductName;
             var body = string.Format(@"
 <!DOCTYPE html>
 <html>
@@ -157,7 +200,7 @@ namespace HR.Web.Services
 <body>
     <div class='container'>
         <div class='header'>
-            <h2>Nanosoft HR System</h2>
+            <h2>{1}</h2>
             <p>Identity Verification</p>
         </div>
         <div class='content'>
@@ -170,31 +213,20 @@ namespace HR.Web.Services
             <p>If you did not attempt to sign in, please secure your account immediately.</p>
         </div>
         <div class='footer'>
-            <p>&copy; 2026 Nanosoft Technologies. All rights reserved.</p>
+            <p>&copy; {2} {3}. All rights reserved.</p>
         </div>
     </div>
 </body>
-</html>", code);
+</html>", code, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
-            // In development, log the code to the debug output so developers can see it without a real SMTP server
-            System.Diagnostics.Trace.WriteLine(string.Format("--- [MFA CODE] Sent to {0}: {1} ---", to, code));
-            System.Diagnostics.Debug.WriteLine(string.Format("--- [MFA CODE] Sent to {0}: {1} ---", to, code));
-            
-            // Also write to a local file in the app directory for easy access
-            try 
-            {
-                string logPath = AppDomain.CurrentDomain.BaseDirectory + "mfa_codes.txt";
-                string logMessage = string.Format("[{0}] MFA Code for {1}: {2}{3}", DateTime.Now, to, code, Environment.NewLine);
-                System.IO.File.AppendAllText(logPath, logMessage);
-            }
-            catch { }
+            LogSensitiveCodeForDevelopment("MFA CODE", to, code, "mfa_codes.txt");
 
-            await SendAsync(to, subject, body);
+            await SendCriticalAsync(to, subject, body);
         }
 
         public async Task SendEmailVerificationOtpAsync(string to, string code)
         {
-            var subject = "Email Verification - Nanosoft HR System";
+            var subject = "Email Verification - " + AppConfig.ProductName;
             var body = string.Format(@"
 <!DOCTYPE html>
 <html>
@@ -213,11 +245,11 @@ namespace HR.Web.Services
 <body>
     <div class='container'>
         <div class='header'>
-            <h2>Nanosoft HR System</h2>
+            <h2>{1}</h2>
             <p>Verify Your Email Address</p>
         </div>
         <div class='content'>
-            <p>Thank you for using Nanosoft HR. To complete your email verification, please use the following one-time password (OTP):</p>
+            <p>Thank you for using {1}. To complete your email verification, please use the following one-time password (OTP):</p>
             
             <div class='code'>{0}</div>
             
@@ -225,26 +257,35 @@ namespace HR.Web.Services
             <p>If you did not request this, please ignore this email.</p>
         </div>
         <div class='footer'>
-            <p>&copy; 2026 Nanosoft Technologies. All rights reserved.</p>
+            <p>&copy; {2} {3}. All rights reserved.</p>
         </div>
     </div>
 </body>
-</html>", code);
+</html>", code, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
-            // In development, log the code to the debug output so developers can see it without a real SMTP server
-            System.Diagnostics.Trace.WriteLine(string.Format("--- [EMAIL VERIFICATION OTP] Sent to {0}: {1} ---", to, code));
-            System.Diagnostics.Debug.WriteLine(string.Format("--- [EMAIL VERIFICATION OTP] Sent to {0}: {1} ---", to, code));
-            
-            // Log the code to a file for easy access during development/troubleshooting
-            try 
+            LogSensitiveCodeForDevelopment("EMAIL VERIFICATION OTP", to, code, "verification_codes.txt");
+
+            await SendCriticalAsync(to, subject, body);
+        }
+
+        private static void LogSensitiveCodeForDevelopment(string label, string to, string code, string fileName)
+        {
+            DevDiagnostics.LogOneTimeCode(label, to, code);
+
+            if (!DevDiagnostics.IsEnabled())
             {
-                string logPath = AppDomain.CurrentDomain.BaseDirectory + "verification_codes.txt";
-                string logMessage = string.Format("[{0}] Email Verification Code for {1}: {2}{3}", DateTime.Now, to, code, Environment.NewLine);
+                return;
+            }
+
+            try
+            {
+                string logPath = AppDomain.CurrentDomain.BaseDirectory + fileName;
+                string logMessage = string.Format("[{0}] {1} for {2}: {3}{4}", DateTime.Now, label, to, code, Environment.NewLine);
                 System.IO.File.AppendAllText(logPath, logMessage);
             }
-            catch { }
-
-            await SendAsync(to, subject, body);
+            catch
+            {
+            }
         }
     }
 }

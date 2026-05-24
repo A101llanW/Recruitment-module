@@ -136,6 +136,7 @@ namespace HR.Web.Helpers
                     return "Interview mode";
                 case "InterviewerName":
                     return "Interviewer name";
+                case "QuestionnaireStageLink":
                 case "StageTwoLink":
                     return "Questionnaire stage link";
                 case "ResetLink":
@@ -171,6 +172,7 @@ namespace HR.Web.Helpers
                     return "fa-video";
                 case "InterviewerName":
                     return "fa-user-tie";
+                case "QuestionnaireStageLink":
                 case "StageTwoLink":
                     return "fa-link";
                 case "ResetLink":
@@ -206,8 +208,9 @@ namespace HR.Web.Helpers
                     return "How the interview is held.";
                 case "InterviewerName":
                     return "The interviewer's name.";
+                case "QuestionnaireStageLink":
                 case "StageTwoLink":
-                    return "Link to the next questionnaire stage.";
+                    return "Link to the questionnaire stage HR opened for you.";
                 case "ResetLink":
                     return "Password reset link (filled in by the system).";
                 case "SecurityCode":

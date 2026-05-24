@@ -60,15 +60,15 @@ namespace HR.Web.Services
             "Delete",
             "DeleteConfirmed",
             "DeleteQuestion",
+            "DeleteQuestionnaireTemplate",
             "Edit",
+            "EditQuestionnaireTemplate",
             "GenerateQuestions",
             "GetDepartments",
             "LivePreview",
             "PositionQuestions",
             "ProcessDuplicateDecisions",
-            "PutOnHold",
             "RecalculateScores",
-            "ReleaseHold",
             "SaveBuilder",
             "SavePositionQuestions",
             "UnlockUserAccount",
@@ -127,6 +127,10 @@ namespace HR.Web.Services
                     case "AddGeneratedQuestionsToBank":
                     case "PositionQuestions":
                     case "SavePositionQuestions":
+                    case "QuestionnaireTemplates":
+                    case "EditQuestionnaireTemplate":
+                    case "DeleteQuestionnaireTemplate":
+                    case "GetQuestionnaireTemplateData":
                         return Questions;
 
                     case "CandidateRankings":

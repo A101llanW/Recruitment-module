@@ -34,6 +34,9 @@ namespace HR.Web.Models
         [Display(Name = "Company")]
         public int? CompanyId { get; set; }
 
+        [Display(Name = "I agree to the Terms & Conditions and Privacy Policy")]
+        public bool AcceptLegalTerms { get; set; }
+
         public System.Collections.Generic.List<Company> Companies { get; set; }
     }
 }

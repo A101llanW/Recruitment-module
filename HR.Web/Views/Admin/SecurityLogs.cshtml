@@ -2,12 +2,13 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Security Logs";
+    ViewBag.SuppressPageHero = true;
     var previewRowCount = 5;
     var loginRows = Model.LoginAttempts ?? new System.Collections.Generic.List<HR.Web.ViewModels.LoginAttemptLog>();
     var auditRows = Model.AuditLogs ?? new System.Collections.Generic.List<HR.Web.ViewModels.AuditLogEntry>();
 }
 
-<div class="container-fluid py-5" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; color: #f8fafc;">
+<div class="security-logs-page container-fluid py-5" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; color: #f8fafc;">
     <div class="d-flex justify-content-between align-items-center mb-5">
         <div>
             <h1 class="display-5 font-weight-bold mb-1">
@@ -286,6 +287,11 @@
 </div>
 
 <style>
+    /* Prevent global app-page theme from forcing light table surfaces / dark text */
+    .app-page .security-logs-page {
+        color: #f8fafc;
+    }
+
     :root {
         --info: #0ea5e9;
         --success: #10b981;
@@ -342,9 +348,49 @@
     .cyber-tabs .nav-link { color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem; }
     .cyber-tabs .nav-link.active { background: var(--slate-750) !important; color: var(--info) !important; }
 
-    .cyber-table { color: #f1f5f9; }
-    .cyber-table th { color: #64748b; font-size: 0.75rem; letter-spacing: 1px; padding: 1.25rem 1rem; }
-    .cyber-table td { padding: 1.25rem 1rem; vertical-align: middle; border-top: 1px solid rgba(255,255,255,0.05); }
+    /* Override global .app-page table styles (white bg + dark text) */
+    .security-logs-page .table,
+    .security-logs-page .cyber-table {
+        background: transparent !important;
+        color: #f1f5f9 !important;
+    }
+
+    .security-logs-page .cyber-table thead th {
+        background-color: var(--slate-900) !important;
+        color: #94a3b8 !important;
+        font-size: 0.75rem;
+        letter-spacing: 1px;
+        padding: 1.25rem 1rem;
+        border: none !important;
+    }
+
+    .security-logs-page .cyber-table tbody tr {
+        background-color: var(--slate-800) !important;
+    }
+
+    .security-logs-page .cyber-table tbody tr:hover {
+        background-color: #243147 !important;
+    }
+
+    .security-logs-page .cyber-table td {
+        color: #e2e8f0 !important;
+        padding: 1.25rem 1rem;
+        vertical-align: middle;
+        border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+        background-color: transparent !important;
+    }
+
+    .security-logs-page .cyber-table td.font-weight-bold {
+        color: #f8fafc !important;
+    }
+
+    .security-logs-page .text-slate-300 { color: #cbd5e1 !important; }
+    .security-logs-page .text-slate-400 { color: #94a3b8 !important; }
+    .security-logs-page .text-slate-500 { color: #64748b !important; }
+
+    .security-logs-page .cyber-table .text-info { color: #38bdf8 !important; }
+    .security-logs-page .cyber-table .text-success { color: #34d399 !important; }
+    .security-logs-page .cyber-table .text-danger { color: #f87171 !important; }
 
     .badge-soft-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
     .badge-soft-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; }

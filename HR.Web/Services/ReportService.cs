@@ -50,7 +50,11 @@ namespace HR.Web.Services
                     if (format.ToLower() == "pdf") html = GenerateInterviewPDF(generatedBy);
                     else 
                     {
-                        var q = _uow.Interviews.GetAll().AsQueryable();
+                        var q = _uow.Interviews.GetAll(
+                            i => i.Application,
+                            i => i.Application.Applicant,
+                            i => i.Application.Position,
+                            i => i.Interviewer).AsQueryable();
                         q = _tenantService.ApplyTenantFilter(q);
                         GenerateInterviewCSV(q.ToList(), filePath);
                     }
@@ -68,7 +72,7 @@ namespace HR.Web.Services
                     if (format.ToLower() == "pdf") html = GeneratePositionPDF(generatedBy);
                     else 
                     {
-                        var q = _uow.Positions.GetAll(p => p.Department).AsQueryable();
+                        var q = _uow.Positions.GetAll(p => p.Department, p => p.Applications).AsQueryable();
                         q = _tenantService.ApplyTenantFilter(q);
                         GeneratePositionCSV(q.ToList(), filePath);
                     }
@@ -320,10 +324,10 @@ namespace HR.Web.Services
         {
             return string.Format(@"
         <div class='report-footer'>
-            <p><strong>Recruitment Management System</strong></p>
+            <p><strong>{1}</strong></p>
             <p>This is a system-generated confidential document.</p>
-            <p>&copy; {0} Nanosoft Technologies. All rights reserved.</p>
-        </div>", DateTime.Now.Year);
+            <p>&copy; {0} {2}. All rights reserved.</p>
+        </div>", DateTime.Now.Year, HR.Web.Helpers.AppConfig.ProductName, HR.Web.Helpers.AppConfig.PublisherName);
         }
 
         private string GetReportFooter()
@@ -488,7 +492,11 @@ namespace HR.Web.Services
 
         private string GenerateInterviewPDF(string generatedBy)
         {
-            var query = _uow.Interviews.GetAll().AsQueryable();
+            var query = _uow.Interviews.GetAll(
+                i => i.Application,
+                i => i.Application.Applicant,
+                i => i.Application.Position,
+                i => i.Interviewer).AsQueryable();
             query = _tenantService.ApplyTenantFilter(query);
             var interviews = query.ToList();
             var html = GetReportHeader("Interviews Report", "Scheduled candidate assessments and feedback", "#9b59b6", "#8e44ad");

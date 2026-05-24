@@ -1,12 +1,19 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Web.Mvc;
+using System.Web.Security;
+using HR.Web.Data;
+using HR.Web.Helpers;
+using HR.Web.Models;
 
 namespace HR.Web.Controllers
 {
     public class HomeController : Controller
     {
+        private readonly UnitOfWork _legalDocUow = new UnitOfWork();
+
         public ActionResult Index()
         {
             return HttpNotFound();
@@ -14,12 +21,141 @@ namespace HR.Web.Controllers
 
         public ActionResult Debug()
         {
+            if (AppConfig.IsProduction)
+            {
+                return HttpNotFound();
+            }
+
             return View();
         }
 
         public ActionResult About()
         {
             return View();
+        }
+
+        [AllowAnonymous]
+        public ActionResult Privacy()
+        {
+            return BuildLegalDocumentView(true);
+        }
+
+        [AllowAnonymous]
+        public ActionResult Terms()
+        {
+            return BuildLegalDocumentView(false);
+        }
+
+        private ActionResult BuildLegalDocumentView(bool isPrivacyPage)
+        {
+            var kind = ResolveLegalDocumentRelationship();
+            ViewBag.HideNavbar = true;
+            ViewBag.LegalDocTenant = RouteData.Values["tenant"] as string;
+            ViewBag.LegalDocPage = isPrivacyPage ? "privacy" : "terms";
+            ViewBag.CompanyName = LegalPolicyHelper.CompanyName;
+            ViewBag.ContactEmail = LegalPolicyHelper.ContactEmail;
+            ViewBag.ContactAddress = LegalPolicyHelper.ContactAddress;
+            ViewBag.LastUpdated = "May 15, 2026";
+            ViewBag.LegalRelationship = kind;
+            if (isPrivacyPage)
+            {
+                ViewBag.PrivacyVersionLabel = LegalPolicyHelper.GetPrivacyVersion(kind);
+                return View("Privacy");
+            }
+
+            ViewBag.TermsVersionLabel = LegalPolicyHelper.GetTermsVersion(kind);
+            return View("Terms");
+        }
+
+        /// <summary>
+        /// Resolves which policy text applies: authenticated user from account role; else pending-login user from session; else applicant (public).
+        /// </summary>
+        private LegalRelationshipKind ResolveLegalDocumentRelationship()
+        {
+            if (User != null && User.Identity != null && User.Identity.IsAuthenticated && !string.IsNullOrWhiteSpace(User.Identity.Name))
+            {
+                var identityName = User.Identity.Name;
+                // Match AccountController.ResolveCurrentUserFromIdentity: EF6 cannot translate string.Equals(..., StringComparison) to SQL.
+                // Scope by company id from the forms ticket so the correct row is returned when usernames repeat across tenants.
+                var principalUser = FindPrincipalUserForLegalDocuments(identityName);
+                if (principalUser != null)
+                {
+                    return LegalPolicyHelper.ResolveUserLegalRelationship(principalUser);
+                }
+            }
+
+            var pendingId = LegalConsentSession.TryReadUserId(Session);
+            if (pendingId.HasValue && LegalConsentSession.IsFresh(Session))
+            {
+                var pendingUser = _legalDocUow.Users.Get(pendingId.Value);
+                if (pendingUser != null)
+                {
+                    return LegalPolicyHelper.ResolveUserLegalRelationship(pendingUser);
+                }
+            }
+
+            return LegalRelationshipKind.Applicant;
+        }
+
+        private int? TryReadCompanyIdFromFormsUserData()
+        {
+            var cookie = Request.Cookies[FormsAuthentication.FormsCookieName];
+            if (cookie == null || string.IsNullOrEmpty(cookie.Value))
+            {
+                return null;
+            }
+
+            FormsAuthenticationTicket ticket;
+            try
+            {
+                ticket = FormsAuthentication.Decrypt(cookie.Value);
+            }
+            catch
+            {
+                return null;
+            }
+
+            if (ticket == null || string.IsNullOrEmpty(ticket.UserData))
+            {
+                return null;
+            }
+
+            var props = ticket.UserData.Split('|');
+            if (props.Length < 2)
+            {
+                return null;
+            }
+
+            return int.TryParse(props[1], out var companyId) ? companyId : (int?)null;
+        }
+
+        /// <summary>
+        /// Resolves the Users row for the signed-in principal, mirroring AccountController.ResolveCurrentUserFromIdentity (forms UserData + username).
+        /// </summary>
+        private User FindPrincipalUserForLegalDocuments(string identityName)
+        {
+            var lowerUsername = identityName.ToLower();
+            var companyId = TryReadCompanyIdFromFormsUserData();
+            var dbUsers = _legalDocUow.Context.Users;
+
+            if (companyId.HasValue)
+            {
+                var scoped = dbUsers.FirstOrDefault(u => u.UserName != null && u.UserName.ToLower() == lowerUsername && u.CompanyId == companyId.Value);
+                if (scoped != null)
+                {
+                    return scoped;
+                }
+            }
+            else
+            {
+                var platformScoped = dbUsers.FirstOrDefault(u => u.UserName != null && u.UserName.ToLower() == lowerUsername && u.CompanyId == null);
+                if (platformScoped != null)
+                {
+                    return platformScoped;
+                }
+            }
+
+            return dbUsers.FirstOrDefault(u => u.UserName != null && u.UserName.ToLower() == lowerUsername);
         }
 
         /// <summary>

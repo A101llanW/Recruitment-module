@@ -3,97 +3,118 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Verify Your Email";
     ViewBag.HideNavbar = true;
-    string tenantToken = ViewContext.RouteData.Values["tenant"] as string;
+    ViewBag.SuppressPageHero = true;
+    var tenantToken = ViewContext.RouteData.Values["tenant"] as string;
+    var tenantContext = ViewBag.TenantContext as HR.Web.Models.Company;
+    var tenantCompanyName = tenantContext != null && !string.IsNullOrWhiteSpace(tenantContext.Name)
+        ? tenantContext.Name
+        : null;
+    var needsEmail = string.IsNullOrEmpty(Model.Email) || Model.Email.StartsWith("PENDING_");
 }
 
-<div class="row justify-content-center mfa-setup-wrapper animate-fadeIn">
-    <div class="col-md-5">
-        <div class="mfa-card shadow-lg border-0">
-            <div class="mfa-header text-white bg-primary p-4 rounded-top">
-                <div class="login-icon-wrap bg-white text-primary mb-3 mx-auto d-flex align-items-center justify-content-center shadow-sm" style="width: 70px; height: 70px; border-radius: 50%;">
-                    <i class="fas fa-envelope-open-text fa-2x"></i>
+<div class="mfa-setup-wrapper mfa-setup-wrapper-login animate-fadeIn">
+    <div class="mfa-card auth-login-card">
+        <div class="auth-login-layout">
+            <aside class="auth-login-aside">
+                <div class="login-icon-wrap">
+                    <i class="fas fa-envelope-open-text"></i>
                 </div>
-                <h3 class="font-weight-bold">Email Verification</h3>
-                <p class="mb-0 opacity-75">Secure your account by verifying your email address.</p>
-            </div>
-
-            <div class="mfa-body p-4 bg-white rounded-bottom">
-
-                @if (string.IsNullOrEmpty(Model.Email) || Model.Email.StartsWith("PENDING_"))
+                @if (!string.IsNullOrEmpty(tenantCompanyName))
                 {
-                    <div class="alert alert-warning border-0 shadow-sm mb-4" style="border-radius: 12px;">
-                        <i class="fas fa-exclamation-circle mr-2"></i>
-                        Please provide your official email address to continue.
-                    </div>
-
-                    using (Html.BeginForm("UpdateAndSendVerification", "Account", FormMethod.Post, new { id = "updateEmailForm" }))
-                    {
-                        @Html.AntiForgeryToken()
-                        <div class="login-field-group mb-4">
-                            <label for="newEmail" class="font-weight-bold text-muted small text-uppercase">Email Address</label>
-                            <div class="login-input-wrap position-relative">
-                                <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;">
-                                    <i class="fas fa-envelope"></i>
-                                </span>
-                                <input class="form-control form-control-lg" 
-                                       id="newEmail" name="newEmail" type="email" 
-                                       placeholder="your-email@company.com" required 
-                                       style="padding-left: 45px; height: 55px; border-radius: 12px; border: 2px solid #e9ecef;" />
-                            </div>
-                        </div>
-
-                        <div class="mt-4">
-                            <button type="submit" class="btn btn-primary btn-lg btn-block shadow-lg font-weight-bold" 
-                                    style="height: 55px; border-radius: 12px;" id="btnUpdateEmail">
-                                <i class="fas fa-magic mr-2"></i> Set Email & Send Code
-                            </button>
-                        </div>
-                    }
+                    <span class="auth-eyebrow">@tenantCompanyName</span>
+                    <h3>Verify your email</h3>
+                    <p class="auth-login-aside__lead">Confirm your email address to finish signing in to @tenantCompanyName.</p>
                 }
                 else
                 {
-                    <div class="alert alert-info border-0 shadow-sm mb-4" style="border-radius: 12px;">
-                        <i class="fas fa-info-circle mr-2"></i>
-                        We've sent a 6-digit verification code to <strong>@Model.Email</strong>. 
-                        Please enter it below to complete your login.
-                    </div>
-
-                    using (Html.BeginForm("VerifyEmailSubmit", "Account", FormMethod.Post, new { id = "verifyOtpForm" }))
+                    <span class="auth-eyebrow">Account security</span>
+                    <h3>Verify your email</h3>
+                    <p class="auth-login-aside__lead">Confirm your email address before you can access the portal.</p>
+                }
+                <ul class="auth-login-features">
+                    @if (needsEmail)
                     {
-                        @Html.AntiForgeryToken()
+                        <li><i class="fas fa-check-circle"></i> Use your official work email address</li>
+                        <li><i class="fas fa-check-circle"></i> We'll send a 6-digit verification code</li>
+                    }
+                    else
+                    {
+                        <li><i class="fas fa-check-circle"></i> Enter the 6-digit code from your inbox</li>
+                        <li><i class="fas fa-check-circle"></i> Codes expire after 15 minutes</li>
+                    }
+                    <li><i class="fas fa-check-circle"></i> Check spam if the message doesn't arrive</li>
+                </ul>
+            </aside>
 
-                        <div class="login-field-group mb-4">
-                            <label for="code" class="font-weight-bold text-muted small text-uppercase">Verification Code</label>
-                            <div class="login-input-wrap position-relative">
-                                <span class="login-input-icon position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%); color: #6c757d;">
-                                    <i class="fas fa-key"></i>
-                                </span>
-                                <input class="form-control form-control-lg text-center font-weight-bold" 
-                                       id="code" name="code" type="text" maxlength="6" 
-                                       placeholder="000000" required 
-                                       style="padding-left: 45px; height: 60px; border-radius: 12px; letter-spacing: 0.5rem; font-size: 1.5rem; border: 2px solid #e9ecef;" />
-                            </div>
+            <div class="auth-login-main">
+                <div class="mfa-body auth-login-body">
+                    @if (needsEmail)
+                    {
+                        <div class="alert auth-alert alert-warning mb-4">
+                            <i class="fas fa-exclamation-circle mr-2"></i>
+                            Please provide your official email address to continue.
                         </div>
 
-                        <div class="mt-4">
-                            <button type="submit" class="btn btn-primary btn-lg btn-block shadow-lg font-weight-bold" 
-                                    style="height: 55px; border-radius: 12px;" id="btnSubmit">
-                                <i class="fas fa-check-circle mr-2"></i> Verify & Continue
+                        using (Html.BeginForm("UpdateAndSendVerification", "Account", FormMethod.Post, new { id = "updateEmailForm" }))
+                        {
+                            @Html.AntiForgeryToken()
+                            <div class="login-field-group">
+                                <label for="newEmail">Email address</label>
+                                <div class="login-input-wrap">
+                                    <span class="login-input-icon"><i class="fas fa-envelope"></i></span>
+                                    <input class="login-input" id="newEmail" name="newEmail" type="email"
+                                           placeholder="your-email@company.com" required autocomplete="email" />
+                                </div>
+                            </div>
+
+                            <div class="auth-login-actions mt-4">
+                                <button type="submit" class="btn-primary-mfa" id="btnUpdateEmail">
+                                    <i class="fas fa-paper-plane mr-2"></i> Set email &amp; send code
+                                </button>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="alert auth-alert alert-info mb-4">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            We've sent a 6-digit verification code to <strong>@Model.Email</strong>.
+                            Please enter it below to complete your login.
+                        </div>
+
+                        using (Html.BeginForm("VerifyEmailSubmit", "Account", FormMethod.Post, new { id = "verifyOtpForm" }))
+                        {
+                            @Html.AntiForgeryToken()
+
+                            <div class="login-field-group mb-4">
+                                <label for="code">Verification code</label>
+                                <div class="login-input-wrap">
+                                    <span class="login-input-icon"><i class="fas fa-key"></i></span>
+                                    <input class="login-input mfa-verify-code-input"
+                                           id="code" name="code" type="text" maxlength="6"
+                                           placeholder="000000" required autocomplete="off" autofocus />
+                                </div>
+                            </div>
+
+                            <div class="auth-login-actions mt-4">
+                                <button type="submit" class="btn-primary-mfa" id="btnSubmit">
+                                    <i class="fas fa-check-circle mr-2"></i> Verify &amp; continue
+                                </button>
+                            </div>
+                        }
+
+                        <div class="mt-4 text-center">
+                            <p class="text-muted small mb-2 font-weight-bold">Didn't receive the code?</p>
+                            <button type="button" class="btn btn-outline-primary btn-sm rounded-pill font-weight-bold px-4 py-2 mt-1 shadow-sm" style="border-width: 2px;" onclick="resendOtp()">
+                                <i class="fas fa-sync-alt mr-1"></i> Resend verification code
                             </button>
+                            <div id="resendMessage" class="small mt-2 font-weight-bold"></div>
                         </div>
                     }
+                </div>
 
-                    <div class="mt-4 text-center">
-                        <p class="text-muted small mb-2 font-weight-bold">Didn't receive the code?</p>
-                        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill font-weight-bold px-4 py-2 mt-1 shadow-sm" style="border-width: 2px;" onclick="resendOtp()">
-                            <i class="fas fa-sync-alt mr-1"></i> Resend Verification Code
-                        </button>
-                        <div id="resendMessage" class="small mt-2 font-weight-bold"></div>
-                    </div>
-                }
-
-                <div class="mt-5 pt-3 border-top text-center">
-                    <a href="@Url.Action("Logout", "Account", new { tenant = tenantToken })" class="text-muted small">
+                <div class="mfa-footer auth-login-footer">
+                    <a href="@Url.Action("Logout", "Account", new { tenant = tenantToken })" class="btn-link-mfa">
                         <i class="fas fa-arrow-left mr-1"></i> Use a different account
                     </a>
                 </div>
@@ -105,24 +126,24 @@
 @section Scripts {
     <script>
         function resendOtp() {
-            const btn = event.target.closest('button');
-            const originalHtml = btn.innerHTML;
+            var btn = event.target.closest('button');
+            var originalHtml = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Sending...';
 
-            const token = $('input[name="__RequestVerificationToken"]').val();
-            
+            var token = $('input[name="__RequestVerificationToken"]').val();
+
             $.post('@Url.Action("SendVerificationEmail", "Account", new { tenant = tenantToken })', { __RequestVerificationToken: token }, function(response) {
                 if (response.success) {
                     $('#resendMessage').removeClass('text-danger').addClass('text-success').text(response.message);
                 } else {
                     $('#resendMessage').removeClass('text-success').addClass('text-danger').text(response.message);
                 }
-                
-                setTimeout(() => {
+
+                setTimeout(function() {
                     btn.disabled = false;
                     btn.innerHTML = originalHtml;
-                    setTimeout(() => $('#resendMessage').fadeOut(), 3000);
+                    setTimeout(function() { $('#resendMessage').fadeOut(); }, 3000);
                 }, 1000);
             }).fail(function() {
                 $('#resendMessage').removeClass('text-success').addClass('text-danger').text('Failed to connect to server.');
@@ -131,15 +152,20 @@
             });
         }
 
-        // Auto-focus input
         $(document).ready(function() {
-            $('#code').focus();
-            
+            if ($('#code').length) {
+                $('#code').focus();
+            } else if ($('#newEmail').length) {
+                $('#newEmail').focus();
+            }
+
             $('#verifyOtpForm').submit(function() {
                 $('#btnSubmit').html('<i class="fas fa-circle-notch fa-spin mr-2"></i> Verifying...').prop('disabled', true);
+            });
+
+            $('#updateEmailForm').submit(function() {
+                $('#btnUpdateEmail').html('<i class="fas fa-circle-notch fa-spin mr-2"></i> Sending...').prop('disabled', true);
             });
         });
     </script>
 }
-
-@Html.Partial("_AuthStyles")

@@ -1,6 +1,9 @@
 @model HR.Web.Models.Application
 @{
     ViewBag.Title = "Application Details";
+    var questionnaireStageCount = ViewBag.QuestionnaireStageCountForDetails as int? ?? 1;
+    var canOpenNextQuestionnaireStage = ViewBag.CanOpenNextQuestionnaireStage as bool? ?? false;
+    var showQuestionnaireHiringPanel = ViewBag.ShowQuestionnaireHiringPanel as bool? ?? false;
 }
 <h3>Application</h3>
 <dl class="row">
@@ -9,7 +12,31 @@
     <dt class="col-sm-3">Status</dt><dd class="col-sm-9">@Model.Status</dd>
     <dt class="col-sm-3">Applied</dt><dd class="col-sm-9">@Model.AppliedOn</dd>
     <dt class="col-sm-3">Resume</dt><dd class="col-sm-9">@Model.ResumePath</dd>
+    @if (showQuestionnaireHiringPanel)
+    {
+        <dt class="col-sm-3">Questionnaire (hiring)</dt>
+        <dd class="col-sm-9">
+            @Math.Max(0, Model.LastCompletedQuestionnaireStage) of @questionnaireStageCount stage(s) completed
+            @if (Model.PendingQuestionnaireStage.HasValue)
+            {
+                <span class="badge badge-warning text-dark">Stage @Model.PendingQuestionnaireStage.Value open for candidate</span>
+            }
+        </dd>
+    }
 </dl>
+@if (canOpenNextQuestionnaireStage)
+{
+    <div class="mb-3">
+        @using (Html.BeginForm("InviteNextQuestionnaireStage", "Applications", FormMethod.Post))
+        {
+            @Html.AntiForgeryToken()
+            @Html.Hidden("applicationId", Model.Id)
+            <button type="submit" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-door-open"></i> Open next questionnaire stage
+            </button>
+        }
+    </div>
+}
 @using (Html.BeginForm("UpdateStatus","Applications", FormMethod.Post)) {
     @Html.AntiForgeryToken()
     @Html.Hidden("id", Model.Id)

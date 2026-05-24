@@ -38,3 +38,9 @@ Web.config
 HR.Web/App_Data/Resumes/
 HR.Web/Reports/
 backups/
+
+# Runtime / dev logs (must not ship to production)
+HR.Web/mfa_codes.txt
+HR.Web/verification_codes.txt
+HR.Web/email_errors.txt
+HR.Web/disk_files_utf8.txt

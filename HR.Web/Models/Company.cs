@@ -29,6 +29,9 @@ namespace HR.Web.Models
 
         public DateTime CreatedDate { get; set; }
 
+        [StringLength(260)]
+        public string LogoPath { get; set; }
+
         // Navigation properties
         public virtual ICollection<User> Users { get; set; }
         public virtual ICollection<Department> Departments { get; set; }

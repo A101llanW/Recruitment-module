@@ -8,41 +8,42 @@
 {
     <a class="btn btn-primary mb-2" href="@Url.Action("Create")">New Department</a>
 }
-<table class="table table-bordered table-striped">
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Description</th>
-            <th>Overview</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var item in Model)
-    {
-        <tr>
-            <td>@item.Name</td>
-            <td>@item.Description</td>
-            <td>
-                @if (item.Positions != null && item.Positions.Any())
-                {
-                    <span>@item.Positions.Count() position(s): @string.Join(", ", item.Positions.Select(p => p.Title))</span>
-                }
-                else
-                {
-                    <span>No positions in this department.</span>
-                }
-            </td>
-            <td>
-                @if (canManageDepartments || (User != null && User.Identity != null && User.IsInRole("HR")))
-                {
-                    @Html.ActionLink("Details","Details", new { id=item.Id }, new { @class="btn btn-sm btn-info"}) @:|
-                    @Html.ActionLink("Edit","Edit", new { id=item.Id }, new { @class="btn btn-sm btn-secondary"}) @:|
-                    @Html.ActionLink("Delete","Delete", new { id=item.Id }, new { @class="btn btn-sm btn-danger"})
-                }
-            </td>
-        </tr>
-    }
-    </tbody>
-</table>
-
+<div class="table-responsive">
+    <table class="table table-bordered table-striped mb-0">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Overview</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td>@item.Name</td>
+                <td>@item.Description</td>
+                <td>
+                    @if (item.Positions != null && item.Positions.Any())
+                    {
+                        <span>@item.Positions.Count() position(s): @string.Join(", ", item.Positions.Select(p => p.Title))</span>
+                    }
+                    else
+                    {
+                        <span>No positions in this department.</span>
+                    }
+                </td>
+                <td>
+                    @if (canManageDepartments || (User != null && User.Identity != null && User.IsInRole("HR")))
+                    {
+                        @Html.ActionLink("Details","Details", new { id=item.Id }, new { @class="btn btn-sm btn-info"}) @:|
+                        @Html.ActionLink("Edit","Edit", new { id=item.Id }, new { @class="btn btn-sm btn-secondary"}) @:|
+                        @Html.ActionLink("Delete","Delete", new { id=item.Id }, new { @class="btn btn-sm btn-danger"})
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

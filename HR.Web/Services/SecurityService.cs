@@ -139,11 +139,11 @@ namespace HR.Web.Services
         public string GetQrCodeBase64(string username, string secret)
         {
             var authenticator = new TwoFactorAuthenticator();
-            var setupInfo = authenticator.GenerateSetupCode("HR System", username, secret, false, 3);
+            var setupInfo = authenticator.GenerateSetupCode(HR.Web.Helpers.AppConfig.ProductName, username, secret, false, 3);
             
             // Format: otpauth://totp/Issuer:Account?secret=Secret&issuer=Issuer
             string otpAuthUrl = string.Format("otpauth://totp/{0}:{1}?secret={2}&issuer={0}", 
-                HttpUtility.UrlEncode("HR System"), 
+                HttpUtility.UrlEncode(HR.Web.Helpers.AppConfig.ProductName), 
                 HttpUtility.UrlEncode(username), 
                 secret);
 

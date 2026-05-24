@@ -15,7 +15,7 @@ namespace HR.Web.Controllers
 
         public ActionResult Index()
         {
-            var itemsQuery = _uow.Departments.GetAll().AsQueryable();
+            var itemsQuery = _uow.Departments.GetAll(d => d.Positions).AsQueryable();
             itemsQuery = _tenantService.ApplyTenantFilter(itemsQuery);
             var items = itemsQuery.ToList();
             ViewBag.CanManageDepartments = Request.IsAuthenticated &&

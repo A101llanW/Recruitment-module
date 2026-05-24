@@ -110,7 +110,7 @@ namespace HR.Web.Controllers
             return null;
         }
 
-        private List<PositionQuestion> GetPositionQuestions(int positionId, bool includeOptions)
+        private List<PositionQuestion> GetPositionQuestions(int positionId, bool includeOptions, int? questionnaireStageNumber = null)
         {
             var query = _uow.Context.Set<PositionQuestion>()
                 .Where(pq => pq.PositionId == positionId)
@@ -121,9 +121,75 @@ namespace HR.Web.Controllers
                 query = query.Include(pq => pq.Question.QuestionOptions);
             }
 
+            if (questionnaireStageNumber.HasValue)
+            {
+                var stage = questionnaireStageNumber.Value;
+                query = query.Where(pq => pq.StageNumber == stage);
+            }
+
             return query
                 .OrderBy(pq => pq.Order)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Validates whether the applicant may open the questionnaire for this position and which stage is active.
+        /// </summary>
+        private ActionResult TryValidateQuestionnaireWorkflow(int positionId, Applicant applicant, out Position position, out int activeQuestionnaireStage, out Application existingApplication)
+        {
+            position = null;
+            activeQuestionnaireStage = 1;
+            existingApplication = null;
+
+            if (applicant == null)
+            {
+                TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
+                return RedirectToAction("Index", "Positions");
+            }
+
+            position = GetPositionWithQuestions(positionId);
+            if (position == null)
+            {
+                return HttpNotFound();
+            }
+
+            var closedPositionRedirect = GetClosedPositionRedirect(position);
+            if (closedPositionRedirect != null)
+            {
+                return closedPositionRedirect;
+            }
+
+            existingApplication = _uow.Applications.GetAll()
+                .FirstOrDefault(a => a.ApplicantId == applicant.Id && a.PositionId == positionId);
+
+            var maxStages = Math.Max(1, position.QuestionnaireStageCount);
+
+            if (existingApplication == null)
+            {
+                activeQuestionnaireStage = 1;
+                return null;
+            }
+
+            if (maxStages <= 1)
+            {
+                TempData["ErrorMessage"] = "You have already applied for this position.";
+                return RedirectToAction("Index", "Positions");
+            }
+
+            if (existingApplication.LastCompletedQuestionnaireStage >= maxStages)
+            {
+                TempData["ErrorMessage"] = "You have already completed the questionnaire for this position.";
+                return RedirectToAction("Index", "Positions");
+            }
+
+            if (existingApplication.PendingQuestionnaireStage.HasValue)
+            {
+                activeQuestionnaireStage = existingApplication.PendingQuestionnaireStage.Value;
+                return null;
+            }
+
+            TempData["ErrorMessage"] = "You cannot access the questionnaire for this application right now. If the employer contacts you with a link to continue, use that link when you receive it.";
+            return RedirectToAction("Index", "Positions");
         }
 
         private ApplicationReviewViewModel BuildQuestionnaireReviewModel(Position position, IEnumerable<PositionQuestion> positionQuestions, FormCollection form)
@@ -228,11 +294,13 @@ namespace HR.Web.Controllers
             }
         }
 
-        private void StoreQuestionnaireSession(int positionId, List<QuestionAnswerViewModel> questionAnswers, string resumePath)
+        private void StoreQuestionnaireSession(int positionId, List<QuestionAnswerViewModel> questionAnswers, string resumePath, int activeQuestionnaireStage, bool acceptLegalTerms)
         {
             Session["QuestionnaireAnswers"] = questionAnswers;
             Session["PositionId"] = positionId;
             Session["ResumePath"] = resumePath;
+            Session["QuestionnaireActiveStage"] = activeQuestionnaireStage;
+            Session["LegalTermsAcceptedForApplication"] = acceptLegalTerms;
         }
 
         private ActionResult ValidateQuestionnaireSubmissionAccess(Position position)
@@ -353,7 +421,10 @@ namespace HR.Web.Controllers
                 Status = "Interviewing",
                 AppliedOn = DateTime.UtcNow,
                 WorkExperienceLevel = model.YearsInRole ?? "Not specified",
-                ResumePath = resumePath ?? model.ResumePath
+                ResumePath = resumePath ?? model.ResumePath,
+                CurrentStage = 1,
+                LastCompletedQuestionnaireStage = 0,
+                PendingQuestionnaireStage = null
             };
 
             _uow.Applications.Add(application);
@@ -369,11 +440,27 @@ namespace HR.Web.Controllers
                 return questionAnswers;
             }
 
-            var positionQuestions = GetPositionQuestions(positionId, false);
+            var stage = Session["QuestionnaireActiveStage"] as int?;
+            if (!stage.HasValue)
+            {
+                var rawStage = Session["QuestionnaireActiveStage"] as string;
+                int parsedStage;
+                if (!string.IsNullOrEmpty(rawStage) && int.TryParse(rawStage, out parsedStage))
+                {
+                    stage = parsedStage;
+                }
+            }
+
+            if (!stage.HasValue)
+            {
+                stage = 1;
+            }
+
+            var positionQuestions = GetPositionQuestions(positionId, false, stage);
             return BuildQuestionAnswers(positionQuestions, form);
         }
 
-        private void SaveApplicationAnswers(int applicationId, IEnumerable<QuestionAnswerViewModel> questionAnswers)
+        private void SaveApplicationAnswers(int applicationId, IEnumerable<QuestionAnswerViewModel> questionAnswers, int questionnaireStageNumber)
         {
             if (questionAnswers == null)
             {
@@ -391,7 +478,8 @@ namespace HR.Web.Controllers
                 {
                     ApplicationId = applicationId,
                     QuestionId = qa.QuestionId,
-                    AnswerText = qa.Answer
+                    AnswerText = qa.Answer,
+                    StageNumber = questionnaireStageNumber
                 };
                 _uow.ApplicationAnswers.Add(answer);
             }
@@ -429,6 +517,8 @@ namespace HR.Web.Controllers
             Session.Remove("QuestionnaireAnswers");
             Session.Remove("PositionId");
             Session.Remove("ResumePath");
+            Session.Remove("QuestionnaireActiveStage");
+            Session.Remove("LegalTermsAcceptedForApplication");
         }
 
         private bool IsManagementUser(User user)
@@ -646,6 +736,41 @@ namespace HR.Web.Controllers
                     model.EducationDegree = resolvedValue;
                     break;
             }
+        }
+
+        private ActionResult TryGetManagedApplication(int id, out Application application)
+        {
+            application = _uow.Applications.Get(id);
+            if (application == null)
+            {
+                return HttpNotFound();
+            }
+
+            return ValidateApplicationTenantAccess(application, "Access Denied");
+        }
+
+        private ActionResult RequireApplicantForPosition(int? companyId, out Applicant applicant)
+        {
+            applicant = FindOrCreateApplicantForPosition(companyId);
+            if (applicant != null)
+            {
+                return null;
+            }
+
+            TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
+            return RedirectToAction("Index", "Positions");
+        }
+
+        private ActionResult RequireCompleteApplicantProfile(Applicant applicant, Position position)
+        {
+            var profile = GetApplicantProfile(applicant.Id);
+            if (IsApplicantProfileComplete(profile, position.IsTechnical == true))
+            {
+                return null;
+            }
+
+            TempData["ErrorMessage"] = "Please complete your profile before taking the questionnaire.";
+            return RedirectToAction("ProfileDetails", new { positionId = position.Id });
         }
 
         private static bool IsApplicationBelowPassMark(Application application, Position position)

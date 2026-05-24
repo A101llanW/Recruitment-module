@@ -1,12 +1,17 @@
 @model IEnumerable<HR.Web.Models.Application>
+@using System.Collections.Generic
+@using HR.Web.ViewModels
 
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Applications";
+    ViewBag.SuppressPageHero = true;
+    ViewBag.PageEyebrow = "Hiring pipeline";
 
     var interviewers = ViewBag.Interviewers as List<HR.Web.Models.User>;
     var interviewedAppIds = ViewBag.InterviewedAppIds as List<int> ?? new List<int>();
     var canManageApplications = ViewBag.CanManageApplications != null ? (bool)ViewBag.CanManageApplications : false;
+    var canInviteQuestionnaireSecondaryStage = ViewBag.CanInviteQuestionnaireSecondaryStage != null && (bool)ViewBag.CanInviteQuestionnaireSecondaryStage;
     var returnTo = Request != null ? Request.QueryString["returnTo"] : null;
     var shouldReturnToInterviewsAfterBooking = string.Equals(returnTo, "interviews", StringComparison.OrdinalIgnoreCase);
 
@@ -22,28 +27,463 @@
         int.TryParse(Request.QueryString["resumeEmailApplicationId"], out resumeEmailApplicationId);
     }
 
+    var targetApplicationId = 0;
+    if (Request != null)
+    {
+        int.TryParse(Request.QueryString["targetApplicationId"], out targetApplicationId);
+    }
+
+    var panelistsForCc = ViewBag.EmailCcPanelists as List<HR.Web.Models.User> ?? new List<HR.Web.Models.User>();
+    var hrContactsForCc = ViewBag.EmailCcHrContacts as List<HR.Web.Models.CompanyHrCcEmail> ?? new List<HR.Web.Models.CompanyHrCcEmail>();
+    var manageHrCcUrl = Url.Action("HrCcEmails", "Admin");
+    var failedCandidateEmailApplicationIds = ViewBag.FailedCandidateEmailApplicationIds as HashSet<int>
+        ?? new HashSet<int>();
+
+    var totalApplications = Model.Count();
+    var openPositionCount = Model
+        .Where(a => a.Position != null)
+        .Select(a => a.PositionId)
+        .Distinct()
+        .Count();
 }
 
 <style>
+    .applications-hub {
+        margin: 0 -4px;
+        padding-bottom: 1rem;
+    }
+
+    .applications-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+        padding: 1rem 1.1rem;
+        background: var(--app-surface);
+        border: 1px solid var(--app-border);
+        border-radius: var(--app-radius);
+        box-shadow: 0 4px 18px rgba(13, 44, 74, 0.05);
+    }
+
+    .applications-toolbar label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--app-muted);
+        margin-bottom: 0.35rem;
+        display: block;
+    }
+
+    .applications-toolbar select {
+        min-width: 220px;
+        border-radius: 8px;
+        border-color: var(--app-border);
+        font-weight: 500;
+    }
+
+    .applications-toolbar select:focus {
+        border-color: var(--app-accent-deep);
+        box-shadow: 0 0 0 3px rgba(111, 184, 220, 0.25);
+    }
+
+    .applications-flash {
+        border-radius: var(--app-radius);
+        border: none;
+        padding: 0.85rem 1.1rem;
+        font-weight: 500;
+        margin-bottom: 1rem;
+    }
+
+    .applications-flash--success {
+        background: var(--app-success-soft);
+        color: var(--app-success);
+    }
+
+    .applications-flash--error {
+        background: var(--app-danger-soft);
+        color: var(--app-danger);
+    }
+
+    .applications-empty {
+        text-align: center;
+        padding: 3rem 1.5rem;
+        border-radius: var(--app-radius);
+        background: var(--app-paper);
+        border: 1px dashed var(--app-border);
+    }
+
+    .applications-empty i {
+        font-size: 2rem;
+        color: var(--app-accent-deep);
+        margin-bottom: 0.75rem;
+        display: block;
+    }
+
+    .position-panel {
+        border: 1px solid var(--app-border) !important;
+        background: var(--app-paper) !important;
+        border-radius: calc(var(--app-radius) + 2px);
+        box-shadow: var(--app-shadow);
+        animation: applicationsPanelIn 0.55s ease both;
+    }
+
+    @@keyframes applicationsPanelIn {
+        from {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .position-panel__header {
+        margin-bottom: 1.25rem;
+        padding-bottom: 1.1rem;
+        border-bottom: 1px solid var(--app-border);
+    }
+
+    .position-panel__title {
+        font-family: "Fraunces", Georgia, serif;
+        font-size: 1.45rem;
+        font-weight: 700;
+        color: var(--app-ink);
+        margin: 0 0 0.65rem;
+        letter-spacing: -0.02em;
+    }
+
+    .position-panel__meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .position-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.3rem 0.7rem;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        background: var(--app-surface);
+        border: 1px solid var(--app-border);
+        color: var(--app-muted);
+    }
+
+    .position-chip--count {
+        background: rgba(111, 184, 220, 0.2);
+        border-color: rgba(111, 184, 220, 0.45);
+        color: var(--app-ink);
+    }
+
+    .passmark-control {
+        max-width: 520px;
+        margin-top: 1rem;
+        padding: 1rem 1.1rem;
+        background: var(--app-surface);
+        border-radius: var(--app-radius);
+        border: 1px solid var(--app-border);
+    }
+
+    .passmark-control label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--app-muted);
+    }
+
+    .passmark-control .custom-range::-webkit-slider-thumb {
+        background: var(--app-accent-deep);
+    }
+
+    .passmark-control .position-passmark-label {
+        font-variant-numeric: tabular-nums;
+    }
+
+    .needs-review-toggle {
+        border-radius: 999px;
+        font-weight: 600;
+        padding: 0.4rem 1rem;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .needs-review-toggle:hover {
+        transform: translateY(-1px);
+    }
+
+    .pipeline-column {
+        border: 1px solid var(--app-border) !important;
+        border-radius: var(--app-radius);
+        padding: 1.1rem 1.15rem !important;
+        background: var(--app-surface) !important;
+        height: 100%;
+    }
+
+    .pipeline-column__head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        padding-bottom: 0.65rem;
+        border-bottom: 2px solid var(--app-border);
+    }
+
+    .pipeline-column__head h5 {
+        font-family: "Fraunces", Georgia, serif;
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .pipeline-column--passed .pipeline-column__head {
+        border-bottom-color: rgba(26, 122, 74, 0.35);
+    }
+
+    .pipeline-column--passed .pipeline-column__head h5 {
+        color: var(--app-success);
+    }
+
+    .pipeline-column--review .pipeline-column__head {
+        border-bottom-color: rgba(184, 58, 47, 0.35);
+    }
+
+    .pipeline-column--review .pipeline-column__head h5 {
+        color: var(--app-danger);
+    }
+
+    .pipeline-count {
+        font-size: 0.8rem;
+        font-weight: 700;
+        padding: 0.25rem 0.65rem;
+        border-radius: 999px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pipeline-count--passed {
+        background: var(--app-success-soft);
+        color: var(--app-success);
+    }
+
+    .pipeline-count--review {
+        background: var(--app-danger-soft);
+        color: var(--app-danger);
+    }
+
+    .applications-hub .application-card .card {
+        border: 1px solid var(--app-border);
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(13, 44, 74, 0.06);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        overflow: hidden;
+    }
+
+    .applications-hub .application-card .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 28px rgba(13, 44, 74, 0.1);
+        border-color: rgba(111, 184, 220, 0.5);
+    }
+
+    .applications-hub .application-card .card-body {
+        padding: 1.1rem 1.15rem;
+    }
+
+    .applications-hub .application-card h5 {
+        font-weight: 700;
+        font-size: 1.02rem;
+        color: var(--app-ink);
+    }
+
+    .score-pill {
+        display: inline-block;
+        padding: 0.2rem 0.55rem;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        background: rgba(111, 184, 220, 0.22);
+        color: var(--app-ink);
+    }
+
+    .rank-pill {
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 0.2rem 0.5rem;
+        border-radius: 6px;
+        background: var(--app-ink);
+        color: #fff;
+    }
+
+    .applications-hub .btn-info {
+        background: var(--app-accent);
+        border-color: var(--app-accent);
+        color: var(--app-ink);
+        font-weight: 600;
+    }
+
+    .applications-hub .btn-info:hover {
+        background: var(--app-accent-deep);
+        border-color: var(--app-accent-deep);
+        color: #fff;
+    }
+
+    .applications-hub .book-interview-row .form-control {
+        border-radius: 8px;
+        border-color: var(--app-border);
+        font-size: 0.85rem;
+    }
+
+    .applications-hub .book-interview-row .btn-success {
+        background: var(--app-success);
+        border-color: var(--app-success);
+        font-weight: 600;
+        border-radius: 8px;
+    }
+
+    .applications-column-empty {
+        padding: 1.25rem;
+        text-align: center;
+        color: var(--app-muted);
+        font-size: 0.9rem;
+        background: var(--app-paper);
+        border-radius: 10px;
+        border: 1px dashed var(--app-border);
+        margin: 0;
+    }
+
     .force-capitalize {
         text-transform: capitalize;
     }
 
-    .target-application {
-        border: 2px solid #dc3545 !important;
-        box-shadow: 0 0 0 0.15rem rgba(220, 53, 69, 0.25);
+    .target-application .card {
+        border: 2px solid var(--app-danger) !important;
+        box-shadow: 0 0 0 4px rgba(184, 58, 47, 0.18), 0 12px 32px rgba(184, 58, 47, 0.15) !important;
+        animation: targetPulse 1.2s ease 2;
     }
 
-    .passmark-control {
-        max-width: 460px;
+    @@keyframes targetPulse {
+        0%, 100% { box-shadow: 0 0 0 4px rgba(184, 58, 47, 0.18), 0 12px 32px rgba(184, 58, 47, 0.15); }
+        50% { box-shadow: 0 0 0 8px rgba(184, 58, 47, 0.12), 0 12px 32px rgba(184, 58, 47, 0.2); }
+    }
+
+    .email-workflow-modal .modal-dialog {
+        width: 96vw;
+        max-width: 920px;
+        margin: 1.5vh auto;
+    }
+
+    .email-workflow-modal .modal-content {
+        display: flex;
+        flex-direction: column;
+        max-height: 92vh;
+        min-height: 0;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .email-workflow-modal .modal-content > form {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: 92vh;
+        overflow: hidden;
+    }
+
+    .email-workflow-modal .modal-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        position: relative;
+    }
+
+    .email-workflow-modal .modal-header,
+    .email-workflow-modal .modal-footer {
+        flex-shrink: 0;
+    }
+
+    .email-choice-card {
+        border: 1px solid var(--app-border, #dbe5f0);
+        border-radius: 12px;
+        padding: 18px;
+        background: var(--app-paper, #f8fbff);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .email-choice-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(13, 44, 74, 0.08);
+    }
+
+    .failed-email-template-compose {
+        border: 1px solid #dbe5f0;
+        border-radius: 10px;
+        background: #fff;
+    }
+
+    .email-workflow-modal .tox-tinymce {
+        z-index: 10050 !important;
+    }
+
+    .email-editor-body {
+        min-height: 300px;
+    }
+
+    .failed-single-email-editor,
+    .failed-bulk-email-editor {
+        min-height: 320px;
+    }
+
+    .tox-silver-sink,
+    .tox-tinymce-aux {
+        z-index: 200000 !important;
     }
 </style>
 
+<div class="applications-hub">
+    <header class="app-page-hero applications-hero">
+        <p class="app-page-hero__eyebrow applications-hero__eyebrow">Hiring pipeline</p>
+        <h1 class="app-page-hero__title applications-hero__title">Applications</h1>
+        <p class="app-page-hero__lead applications-hero__lead">
+            @if (canManageApplications)
+            {
+                @:Review scored candidates by role, adjust passmarks, and move top talent toward interviews.
+            }
+            else
+            {
+                @:Track every application you have submitted across open positions.
+            }
+        </p>
+        @if (totalApplications > 0)
+        {
+            <div class="app-page-hero__stats applications-hero__stats">
+                <span class="app-stat-chip applications-stat">
+                    <i class="fas fa-file-alt" aria-hidden="true"></i>
+                    @totalApplications application@(totalApplications != 1 ? "s" : "")
+                </span>
+                @if (openPositionCount > 0)
+                {
+                    <span class="app-stat-chip applications-stat">
+                        <i class="fas fa-briefcase" aria-hidden="true"></i>
+                        @openPositionCount position@(openPositionCount != 1 ? "s" : "")
+                    </span>
+                }
+            </div>
+        }
+    </header>
+
 @if (canManageApplications)
 {
-    <div class="d-flex flex-wrap align-items-center mb-3">
-        <div class="form-inline mb-2">
-            <label class="mr-2 font-weight-bold">Sort by:</label>
+    <div class="applications-toolbar">
+        <div>
+            <label for="sortBy">Sort candidates</label>
             <select id="sortBy" class="form-control">
                 <option value="score">Score (Highest First)</option>
                 <option value="date">Date (Oldest First)</option>
@@ -57,22 +497,26 @@
         @Html.AntiForgeryToken()
     }
 
-    <div id="passmarkUpdateError" class="alert alert-danger d-none"></div>
+    <div id="passmarkUpdateError" class="alert applications-flash applications-flash--error d-none" role="alert"></div>
 }
 
 @if (TempData["ApplicationEmailSuccess"] != null)
 {
-    <div class="alert alert-success">@TempData["ApplicationEmailSuccess"]</div>
+    <div class="alert applications-flash applications-flash--success" role="status">@TempData["ApplicationEmailSuccess"]</div>
 }
 
 @if (TempData["ApplicationEmailError"] != null)
 {
-    <div class="alert alert-danger">@TempData["ApplicationEmailError"]</div>
+    <div class="alert applications-flash applications-flash--error" role="alert">@TempData["ApplicationEmailError"]</div>
 }
 
 @if (!Model.Any())
 {
-    <div class="alert alert-info">No applications yet.</div>
+    <div class="applications-empty">
+        <i class="fas fa-inbox" aria-hidden="true"></i>
+        <p class="mb-0 font-weight-bold">No applications yet</p>
+        <p class="small text-muted mb-0 mt-1">New submissions will appear here grouped by position.</p>
+    </div>
 }
 else
 {
@@ -82,9 +526,11 @@ else
         .OrderBy(g => g.Key.Title)
         .ToList();
 
+    var panelIndex = 0;
     foreach (var positionGroup in applicationsByPosition)
     {
         var position = positionGroup.Key;
+        panelIndex++;
         var passMark = position.PassMark;
         var passMarkRounded = (int)Math.Round(passMark, MidpointRounding.AwayFromZero);
         passMarkRounded = Math.Max(0, Math.Min(100, passMarkRounded));
@@ -105,26 +551,26 @@ else
     ? position.Department.Name
     : null;
 
-        <div class="mb-5 p-4 rounded shadow-sm"
+        <div class="position-panel mb-5 p-4"
              data-position-container-id="@position.Id"
-             style="border:2px solid #6fb8dc;background:#f8fbff">
+             style="animation-delay: @((panelIndex - 1) * 90)ms">
 
-            <div class="mb-3 border-bottom pb-3">
-                <h3 class="mb-2 font-weight-bold text-primary">
-                    @position.Title
-                </h3>
+            <div class="position-panel__header">
+                <h2 class="position-panel__title">@position.Title</h2>
 
-                <span class="badge badge-info mr-2">
-                    <i class="fas fa-users"></i>
-                    @positionApplications.Count applicant@(positionApplications.Count != 1 ? "s" : "")
-                </span>
-
-                @if (!string.IsNullOrEmpty(departmentName))
-                {
-                    <span class="badge badge-secondary">
-                        <i class="fas fa-building"></i> @departmentName
+                <div class="position-panel__meta">
+                    <span class="position-chip position-chip--count">
+                        <i class="fas fa-users" aria-hidden="true"></i>
+                        @positionApplications.Count applicant@(positionApplications.Count != 1 ? "s" : "")
                     </span>
-                }
+
+                    @if (!string.IsNullOrEmpty(departmentName))
+                    {
+                        <span class="position-chip">
+                            <i class="fas fa-building" aria-hidden="true"></i> @departmentName
+                        </span>
+                    }
+                </div>
 
                 @if (canManageApplications)
                 {
@@ -153,7 +599,7 @@ else
                             </span>
                         </div>
                         <small class="text-muted">
-                            Applicants above/equal passmark appear on the left. Below passmark appear on the right.
+                            Top candidates at or above the passmark are shown first. Use &quot;Show Needs Review&quot; to view applicants below the passmark.
                         </small>
                     </div>
                 }
@@ -162,39 +608,57 @@ else
             @if (canManageApplications)
             {
                 var passedContainerId = "passedApplicationsContainer-" + position.Id;
-                var passedToggleLabelId = "passedApplicationsToggleLabel-" + position.Id;
-                var passedToggleIconId = "passedApplicationsToggleIcon-" + position.Id;
+                var passedMetaId = "passedApplicationsMeta-" + position.Id;
+                var passedShowMoreId = "passedApplicationsShowMore-" + position.Id;
                 var failedContainerId = "failedApplicationsContainer-" + position.Id;
-                var failedToggleLabelId = "failedApplicationsToggleLabel-" + position.Id;
-                var failedToggleIconId = "failedApplicationsToggleIcon-" + position.Id;
-                <div class="row">
-                    <div class="col-12 col-lg-6 mb-3">
-                        <div class="border rounded p-3 h-100 bg-white">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h5 class="mb-0 text-success">Top Candidates</h5>
-                                <span class="badge badge-success">@passedApplications.Count</span>
+                var failedMetaId = "failedApplicationsMeta-" + position.Id;
+                var failedShowMoreId = "failedApplicationsShowMore-" + position.Id;
+                var needsReviewColumnId = "needsReviewColumn-" + position.Id;
+                var needsReviewToggleId = "needsReviewToggle-" + position.Id;
+                var topCandidatesColumnId = "topCandidatesColumn-" + position.Id;
+                if (failedApplications.Count > 0)
+                {
+                    <div class="mb-3">
+                        <button type="button"
+                                id="@needsReviewToggleId"
+                                class="btn btn-sm btn-outline-danger needs-review-toggle"
+                                data-position-id="@position.Id"
+                                data-failed-count="@failedApplications.Count"
+                                onclick="toggleNeedsReviewColumn(@position.Id)">
+                            Show Needs Review (@failedApplications.Count)
+                        </button>
+                    </div>
+                }
+                <div class="row applications-columns-row"
+                     data-position-id="@position.Id"
+                     data-needs-review-visible="false">
+                    <div class="col-12 mb-3 applications-top-column"
+                         id="@topCandidatesColumnId">
+                        <div class="pipeline-column pipeline-column--passed h-100">
+                            <div class="pipeline-column__head">
+                                <h5>Top Candidates</h5>
+                                <span class="pipeline-count pipeline-count--passed">@passedApplications.Count</span>
                             </div>
-                            @if (passedApplications.Count > compactRecordLimit)
-                            {
-                                <div class="mb-2">
-                                    <button type="button"
-                                            class="btn btn-sm btn-link p-0 text-success"
-                                            onclick="toggleApplicationsCompact('@passedContainerId', '@passedToggleLabelId', '@passedToggleIconId')">
-                                        <span id="@passedToggleLabelId">Show All (@passedApplications.Count)</span>
-                                        <i id="@passedToggleIconId" class="fas fa-chevron-down ml-1"></i>
-                                    </button>
-                                </div>
-                            }
+                            <div class="d-flex flex-wrap align-items-center justify-content-between mb-2 applications-compact-controls d-none">
+                                <small class="text-muted applications-compact-meta" id="@passedMetaId"></small>
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-success applications-show-more-btn"
+                                        id="@passedShowMoreId"
+                                        onclick="showMoreApplications('@passedContainerId')">
+                                    Show 5 more
+                                </button>
+                            </div>
                             <div id="@passedContainerId"
                                  class="applications-column-cards"
                                  data-position-id="@position.Id"
                                  data-compact-limit="@compactRecordLimit"
-                                 data-expanded="false"
-                                 data-toggle-label-id="@passedToggleLabelId"
-                                 data-toggle-icon-id="@passedToggleIconId">
+                                 data-page-size="@compactRecordLimit"
+                                 data-visible-count="@compactRecordLimit"
+                                 data-meta-id="@passedMetaId"
+                                 data-show-more-id="@passedShowMoreId">
                                 @if (!passedApplications.Any())
                                 {
-                                    <div class="alert alert-light border mb-0">
+                                    <div class="applications-column-empty">
                                         No applicants are at or above the passmark.
                                     </div>
                                 }
@@ -223,7 +687,7 @@ else
                                                             <div class="d-flex align-items-center">
                                                                 @if (item.Score.HasValue)
                                                                 {
-                                                                    <span class="badge badge-primary mr-2">#@rank</span>
+                                                                    <span class="rank-pill mr-2">#@rank</span>
                                                                 }
                                                                 <h5 class="mb-0 force-capitalize">
                                                                     @applicantName
@@ -237,8 +701,8 @@ else
                                                             @if (item.Score.HasValue)
                                                             {
                                                                 <div class="mt-1">
-                                                                    <span class="badge badge-info">
-                                                                        Score: @item.Score.Value.ToString("F1")
+                                                                    <span class="score-pill">
+                                                                        Score @item.Score.Value.ToString("F1")
                                                                     </span>
                                                                 </div>
                                                             }
@@ -251,6 +715,34 @@ else
                                                                 <i class="fas fa-user"></i> Profile
                                                             </a>
                                                         </div>
+                                                        @{
+                                                            var questionnaireStageCountPassed = Math.Max(1, position.QuestionnaireStageCount);
+                                                            var canInviteNextQuestionnairePassed = questionnaireStageCountPassed > 1
+                                                                && item.LastCompletedQuestionnaireStage > 0
+                                                                && item.LastCompletedQuestionnaireStage < questionnaireStageCountPassed
+                                                                && !item.PendingQuestionnaireStage.HasValue;
+                                                        }
+                                                        @if (questionnaireStageCountPassed > 1)
+                                                        {
+                                                            <div class="mb-2 small text-muted">
+                                                                Questionnaire: @Math.Max(0, item.LastCompletedQuestionnaireStage) of @questionnaireStageCountPassed stage(s) completed
+                                                                @if (item.PendingQuestionnaireStage.HasValue)
+                                                                {
+                                                                    <span class="badge badge-warning text-dark">Stage @item.PendingQuestionnaireStage.Value open for candidate</span>
+                                                                }
+                                                            </div>
+                                                        }
+                                                        @if (canInviteNextQuestionnairePassed && canInviteQuestionnaireSecondaryStage)
+                                                        {
+                                                            using (Html.BeginForm("InviteNextQuestionnaireStage", "Applications", FormMethod.Post))
+                                                            {
+                                                                @Html.AntiForgeryToken()
+                                                                @Html.Hidden("applicationId", item.Id)
+                                                                <button type="submit" class="btn btn-sm btn-outline-primary mb-2">
+                                                                    <i class="fas fa-door-open"></i> Open next questionnaire stage
+                                                                </button>
+                                                            }
+                                                        }
                                                         @if (hasInterview)
                                                         {
                                                             <span class="badge badge-success">
@@ -269,7 +761,7 @@ else
                                                                     @Html.Hidden("resumeEmailApplicationId", resumeEmailApplicationId > 0 ? resumeEmailApplicationId : item.Id)
                                                                 }
 
-                                                                <div class="form-row">
+                                                                <div class="form-row book-interview-row">
                                                                     <div class="col-12 col-md-4 mb-2">
                                                                         <select name="interviewerId"
                                                                                 class="form-control form-control-sm"
@@ -319,80 +811,50 @@ else
                             </div>
                         </div>
                     </div>
-                    <div class="col-12 col-lg-6 mb-3">
-                        <div class="border rounded p-3 h-100 bg-white">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h5 class="mb-0 text-danger">Needs Review</h5>
-                                <span class="badge badge-danger">@failedApplications.Count</span>
+                    <div class="col-12 col-lg-6 mb-3 d-none"
+                         id="@needsReviewColumnId">
+                        <div class="pipeline-column pipeline-column--review h-100">
+                            <div class="pipeline-column__head">
+                                <h5>Needs Review</h5>
+                                <span class="pipeline-count pipeline-count--review">@failedApplications.Count</span>
                             </div>
                             @if (failedApplications.Any())
                             {
-                                var bulkFormId = "bulkFailedEmailForm-" + position.Id;
+                                var bulkDefaultFailedSubject = string.Format(
+                                    "Update on your application for {0}",
+                                    string.IsNullOrWhiteSpace(position.Title) ? "this position" : position.Title);
                                 <div class="mb-3">
                                     <button type="button"
                                             class="btn btn-sm btn-outline-danger"
-                                            onclick="toggleElementById('@bulkFormId')">
+                                            onclick="openFailedBulkEmailChoice(this)"
+                                            data-position-id="@position.Id"
+                                            data-position-title="@(string.IsNullOrWhiteSpace(position.Title) ? "this position" : position.Title)"
+                                            data-failed-count="@failedApplications.Count"
+                                            data-default-subject="@bulkDefaultFailedSubject">
                                         <i class="fas fa-envelope"></i> Email All Failed Candidates
                                     </button>
                                 </div>
-                                <div id="@bulkFormId" class="border rounded p-2 bg-light mb-3 d-none">
-                                    @using (Html.BeginForm("SendFailedCandidatesBulkEmail", "Applications", FormMethod.Post))
-                                    {
-                                        var defaultFailedSubject = string.Format(
-                                            "Update on your application for {0}",
-                                            string.IsNullOrWhiteSpace(position.Title) ? "this position" : position.Title);
-
-                                        @Html.AntiForgeryToken()
-                                        @Html.Hidden("positionId", position.Id)
-                                        <label class="font-weight-bold mb-1">Email subject</label>
-                                        <input type="text"
-                                               name="subject"
-                                               class="form-control form-control-sm mb-2"
-                                               maxlength="255"
-                                               required
-                                               value="@defaultFailedSubject"
-                                               placeholder="Type the email subject." />
-                                        <label class="font-weight-bold mb-1">Email body for all failed candidates</label>
-                                        <textarea name="body"
-                                                  class="form-control form-control-sm mb-2"
-                                                  rows="4"
-                                                  maxlength="4000"
-                                                  required
-                                                  placeholder="Type the email body to send to all failed candidates for this position."></textarea>
-                                        <div class="d-flex">
-                                            <button type="submit" class="btn btn-sm btn-danger mr-2">
-                                                Send to All Failed
-                                            </button>
-                                            <button type="button"
-                                                    class="btn btn-sm btn-secondary"
-                                                    onclick="hideElementById('@bulkFormId')">
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    }
-                                </div>
                             }
-                            @if (failedApplications.Count > compactRecordLimit)
-                            {
-                                <div class="mb-2">
-                                    <button type="button"
-                                            class="btn btn-sm btn-link p-0 text-danger"
-                                            onclick="toggleApplicationsCompact('@failedContainerId', '@failedToggleLabelId', '@failedToggleIconId')">
-                                        <span id="@failedToggleLabelId">Show All (@failedApplications.Count)</span>
-                                        <i id="@failedToggleIconId" class="fas fa-chevron-down ml-1"></i>
-                                    </button>
-                                </div>
-                            }
+                            <div class="d-flex flex-wrap align-items-center justify-content-between mb-2 applications-compact-controls d-none">
+                                <small class="text-muted applications-compact-meta" id="@failedMetaId"></small>
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-danger applications-show-more-btn"
+                                        id="@failedShowMoreId"
+                                        onclick="showMoreApplications('@failedContainerId')">
+                                    Show 5 more
+                                </button>
+                            </div>
                             <div id="@failedContainerId"
                                  class="applications-column-cards"
                                  data-position-id="@position.Id"
                                  data-compact-limit="@compactRecordLimit"
-                                 data-expanded="false"
-                                 data-toggle-label-id="@failedToggleLabelId"
-                                 data-toggle-icon-id="@failedToggleIconId">
+                                 data-page-size="@compactRecordLimit"
+                                 data-visible-count="@compactRecordLimit"
+                                 data-meta-id="@failedMetaId"
+                                 data-show-more-id="@failedShowMoreId">
                                 @if (!failedApplications.Any())
                                 {
-                                    <div class="alert alert-light border mb-0">
+                                    <div class="applications-column-empty">
                                         No applicants are below the passmark.
                                     </div>
                                 }
@@ -421,11 +883,15 @@ else
                                                             <div class="d-flex align-items-center">
                                                                 @if (item.Score.HasValue)
                                                                 {
-                                                                    <span class="badge badge-secondary mr-2">#@rank</span>
+                                                                    <span class="rank-pill mr-2" style="background:#5a6b7d;">#@rank</span>
                                                                 }
                                                                 <h5 class="mb-0 force-capitalize">
                                                                     @applicantName
                                                                 </h5>
+                                                                @if (failedCandidateEmailApplicationIds.Contains(item.Id))
+                                                                {
+                                                                    <span class="badge badge-secondary ml-2 align-middle" title="Failed-candidate notification email sent">Emailed</span>
+                                                                }
                                                             </div>
                                                             <small class="text-muted">
                                                                 Applied @item.AppliedOn.ToShortDateString()
@@ -435,8 +901,8 @@ else
                                                             @if (item.Score.HasValue)
                                                             {
                                                                 <div class="mt-1">
-                                                                    <span class="badge badge-info">
-                                                                        Score: @item.Score.Value.ToString("F1")
+                                                                    <span class="score-pill">
+                                                                        Score @item.Score.Value.ToString("F1")
                                                                     </span>
                                                                 </div>
                                                             }
@@ -450,50 +916,43 @@ else
                                                             </a>
                                                         </div>
                                                         @{
-                                                            var itemEmailFormId = "failedEmailForm-" + item.Id;
+                                                            var questionnaireStageCountFailed = Math.Max(1, position.QuestionnaireStageCount);
+                                                            var canInviteNextQuestionnaireFailed = questionnaireStageCountFailed > 1
+                                                                && item.LastCompletedQuestionnaireStage > 0
+                                                                && item.LastCompletedQuestionnaireStage < questionnaireStageCountFailed
+                                                                && !item.PendingQuestionnaireStage.HasValue;
+                                                        }
+                                                        @if (questionnaireStageCountFailed > 1)
+                                                        {
+                                                            <div class="mb-2 small text-muted">
+                                                                Questionnaire: @Math.Max(0, item.LastCompletedQuestionnaireStage) of @questionnaireStageCountFailed stage(s) completed
+                                                                @if (item.PendingQuestionnaireStage.HasValue)
+                                                                {
+                                                                    <span class="badge badge-warning text-dark">Stage @item.PendingQuestionnaireStage.Value open for candidate</span>
+                                                                }
+                                                            </div>
+                                                        }
+                                                        @if (canInviteNextQuestionnaireFailed && canInviteQuestionnaireSecondaryStage)
+                                                        {
+                                                            using (Html.BeginForm("InviteNextQuestionnaireStage", "Applications", FormMethod.Post))
+                                                            {
+                                                                @Html.AntiForgeryToken()
+                                                                @Html.Hidden("applicationId", item.Id)
+                                                                <button type="submit" class="btn btn-sm btn-outline-primary mb-2">
+                                                                    <i class="fas fa-door-open"></i> Open next questionnaire stage
+                                                                </button>
+                                                            }
                                                         }
                                                         <div class="mb-2">
                                                             <button type="button"
                                                                     class="btn btn-sm btn-outline-danger"
-                                                                    onclick="toggleElementById('@itemEmailFormId')">
+                                                                    onclick="openFailedCandidateEmailChoice(this)"
+                                                                    data-application-id="@item.Id"
+                                                                    data-candidate-name="@applicantName"
+                                                                    data-position-title="@(string.IsNullOrWhiteSpace(position.Title) ? "this position" : position.Title)"
+                                                                    data-default-subject="@string.Format("Update on your application for {0}", string.IsNullOrWhiteSpace(position.Title) ? "this position" : position.Title)">
                                                                 <i class="fas fa-envelope"></i> Email Candidate
                                                             </button>
-                                                        </div>
-                                                        <div id="@itemEmailFormId" class="border rounded p-2 bg-light mb-2 d-none">
-                                                            @using (Html.BeginForm("SendFailedCandidateEmail", "Applications", FormMethod.Post))
-                                                            {
-                                                                var defaultFailedSubject = string.Format(
-                                                                    "Update on your application for {0}",
-                                                                    string.IsNullOrWhiteSpace(position.Title) ? "this position" : position.Title);
-
-                                                                @Html.AntiForgeryToken()
-                                                                @Html.Hidden("applicationId", item.Id)
-                                                                <label class="font-weight-bold mb-1">Email subject</label>
-                                                                <input type="text"
-                                                                       name="subject"
-                                                                       class="form-control form-control-sm mb-2"
-                                                                       maxlength="255"
-                                                                       required
-                                                                       value="@defaultFailedSubject"
-                                                                       placeholder="Type the email subject." />
-                                                                <label class="font-weight-bold mb-1">Email body</label>
-                                                                <textarea name="body"
-                                                                          class="form-control form-control-sm mb-2"
-                                                                          rows="3"
-                                                                          maxlength="4000"
-                                                                          required
-                                                                          placeholder="Type the email body to send to this candidate."></textarea>
-                                                                <div class="d-flex">
-                                                                    <button type="submit" class="btn btn-sm btn-danger mr-2">
-                                                                        Send Email
-                                                                    </button>
-                                                                    <button type="button"
-                                                                            class="btn btn-sm btn-secondary"
-                                                                            onclick="hideElementById('@itemEmailFormId')">
-                                                                        Cancel
-                                                                    </button>
-                                                                </div>
-                                                            }
                                                         </div>
                                                         @if (hasInterview)
                                                         {
@@ -513,7 +972,7 @@ else
                                                                     @Html.Hidden("resumeEmailApplicationId", resumeEmailApplicationId > 0 ? resumeEmailApplicationId : item.Id)
                                                                 }
 
-                                                                <div class="form-row">
+                                                                <div class="form-row book-interview-row">
                                                                     <div class="col-12 col-md-4 mb-2">
                                                                         <select name="interviewerId"
                                                                                 class="form-control form-control-sm"
@@ -572,11 +1031,11 @@ else
                 var publicToggleIconId = "allApplicationsToggleIcon-" + position.Id;
                 if (positionApplications.Count > compactRecordLimit)
                 {
-                    <div class="mb-2">
+                    <div class="mb-3">
                         <button type="button"
-                                class="btn btn-sm btn-link p-0 text-primary"
+                                class="btn btn-sm btn-outline-primary needs-review-toggle"
                                 onclick="toggleApplicationsCompact('@publicContainerId', '@publicToggleLabelId', '@publicToggleIconId')">
-                            <span id="@publicToggleLabelId">Show All (@positionApplications.Count)</span>
+                            <span id="@publicToggleLabelId">Show all @positionApplications.Count</span>
                             <i id="@publicToggleIconId" class="fas fa-chevron-down ml-1"></i>
                         </button>
                     </div>
@@ -606,16 +1065,24 @@ else
                              data-name="@applicantName">
                             <div class="card h-100 shadow-sm">
                                 <div class="card-body d-flex flex-column">
-                                    <div class="d-flex justify-content-between mb-2">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
                                         <div>
-                                            <h5 class="mb-0 force-capitalize">
-                                                @applicantName
-                                            </h5>
-                                            <small class="text-muted">
+                                            <h5 class="mb-1 force-capitalize">@applicantName</h5>
+                                            <small class="text-muted d-block">
                                                 Applied @item.AppliedOn.ToShortDateString()
                                             </small>
                                         </div>
+                                        @if (!string.IsNullOrWhiteSpace(item.Status))
+                                        {
+                                            <span class="position-chip">@item.Status</span>
+                                        }
                                     </div>
+                                    @if (item.Score.HasValue)
+                                    {
+                                        <div class="mt-auto">
+                                            <span class="score-pill">Score @item.Score.Value.ToString("F1")</span>
+                                        </div>
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -627,13 +1094,786 @@ else
     }
 }
 
+</div>
+
+@if (canManageApplications)
+{
+    <div class="modal fade email-workflow-modal" id="failedEmailChoiceModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title mb-0"><i class="fas fa-envelope mr-2"></i>Email Failed Candidate</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3 text-center text-md-left">
+                        <div class="font-weight-bold" id="failedEmailChoiceCandidateLabel"></div>
+                        <div class="text-muted small" id="failedEmailChoicePositionLabel"></div>
+                    </div>
+                    <div class="d-flex flex-column flex-md-row justify-content-center align-items-stretch mx-auto" style="gap: 1rem; max-width: 820px;">
+                        <div class="email-choice-card flex-fill" style="max-width: 400px; margin-left: auto; margin-right: auto;">
+                            <h6 class="font-weight-bold mb-2 text-center">Use Template</h6>
+                            <p class="text-muted small mb-3 text-center">Load the wording from <strong>Admin &rarr; Email wording</strong> (already filled in for this candidate), edit in the same style as there, then send.</p>
+                            <div class="text-center">
+                                <button type="button" class="btn btn-outline-primary px-4" onclick="openFailedCandidateTemplateEditor()">
+                                    <i class="fas fa-file-alt mr-2"></i>Use Template
+                                </button>
+                            </div>
+                        </div>
+                        <div class="email-choice-card flex-fill" style="max-width: 400px; margin-left: auto; margin-right: auto;">
+                            <h6 class="font-weight-bold mb-2 text-center">Compose from Scratch</h6>
+                            <p class="text-muted small mb-3 text-center">Write a fully custom subject and message with rich formatting (bold, lists, links) for this candidate.</p>
+                            <div class="text-center">
+                                <button type="button" class="btn btn-outline-secondary px-4" onclick="openFailedCandidateScratchEditor()">
+                                    <i class="fas fa-pen mr-2"></i>Compose from Scratch
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade email-workflow-modal" id="failedEmailEditorModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <form action="@Url.Action("SendFailedCandidateEmail", "Applications")" method="post" id="failedEmailEditorForm">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title mb-0" id="failedEmailEditorTitle">Compose Email</h5>
+                        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="applicationId" id="failedEmailEditorApplicationId" />
+                        <input type="hidden" name="composeMode" id="failedEmailEditorComposeMode" value="template_edit" />
+                        <input type="hidden" name="templateKey" value="failed_candidate_standard" />
+
+                        <div class="mb-3">
+                            <div class="font-weight-bold" id="failedEmailEditorCandidateLabel"></div>
+                            <div class="text-muted small" id="failedEmailEditorPositionLabel"></div>
+                        </div>
+
+                        <div class="mb-3 d-none" id="failedEmailTemplateSelectorSection">
+                            <label class="font-weight-bold mb-1">Template</label>
+                            <div class="form-control bg-light">Failed candidate - standard (from Email wording)</div>
+                        </div>
+
+                        <div class="mb-3 failed-email-template-compose p-3">
+                            <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Compose this email</h6>
+                            <p class="small text-muted mb-3">Editor matches <strong>Admin &rarr; Email wording</strong> (toolbar and formatting). Scroll this window to reach CC options and <strong>Send</strong>.</p>
+                            <label class="font-weight-bold mb-1" for="failedEmailEditorSubject">Subject line</label>
+                            <input type="text" id="failedEmailEditorSubject" name="subject" class="form-control mb-3" maxlength="255" />
+                            <label class="font-weight-bold mb-1" for="failedEmailEditorBody">Message</label>
+                            <textarea id="failedEmailEditorBody"
+                                      name="body"
+                                      class="form-control failed-single-email-editor"
+                                      rows="12"></textarea>
+                            <small class="text-muted d-block mb-3">Use the toolbar for formatting. Maximum length 20,000 characters (including HTML).</small>
+
+                            <div id="failedSingleTemplateComposeExtra" class="d-none border-top pt-3 mt-2">
+                                <div class="d-flex flex-wrap justify-content-end align-items-center mb-2" style="gap: 8px;">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="failedSingleTemplateEditBtn" title="Focus subject and message">
+                                        <i class="fas fa-edit mr-1"></i>Edit
+                                    </button>
+                                    <button type="button" class="btn btn-success btn-sm" id="failedSingleTemplateSaveBtn" title="Apply edits to the form before sending">
+                                        <i class="fas fa-save mr-1"></i>Save
+                                    </button>
+                                </div>
+                                <div id="failedSingleTemplateSaveAck" class="alert alert-success py-2 px-3 small d-none" role="status">Edits saved in this form. Choose CC options below, then press Send.</div>
+                            </div>
+                        </div>
+
+                        <hr class="my-3" />
+                        <p class="small font-weight-bold text-muted mb-2">Copy on send (optional)</p>
+                        @Html.Partial("_CandidateEmailCcFields", new CandidateEmailCcFieldsModel
+                        {
+                            Prefix = "failedEmailEditor",
+                            Panelists = panelistsForCc,
+                            HrContacts = hrContactsForCc,
+                            ManageHrCcUrl = manageHrCcUrl
+                        })
+                    </div>
+                    <div class="modal-footer flex-shrink-0 border-top">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-paper-plane mr-1"></i>Send
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade email-workflow-modal" id="failedBulkEmailChoiceModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title mb-0"><i class="fas fa-envelope-open-text mr-2"></i>Email All Failed Candidates</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3 text-center text-md-left">
+                        <div class="font-weight-bold" id="failedBulkEmailChoicePositionLabel"></div>
+                        <div class="text-muted small" id="failedBulkEmailChoiceCountLabel"></div>
+                    </div>
+                    <div class="d-flex flex-column flex-md-row justify-content-center align-items-stretch mx-auto" style="gap: 1rem; max-width: 820px;">
+                        <div class="email-choice-card flex-fill" style="max-width: 400px; margin-left: auto; margin-right: auto;">
+                            <h6 class="font-weight-bold mb-2 text-center">Use Template</h6>
+                            <p class="text-muted small mb-3 text-center">Load the wording from <strong>Admin &rarr; Email wording</strong>, edit like there, then send to every failed candidate for this position.</p>
+                            <div class="text-center">
+                                <button type="button" class="btn btn-outline-primary px-4" onclick="openFailedBulkTemplateEditor()">
+                                    <i class="fas fa-file-alt mr-2"></i>Use Template
+                                </button>
+                            </div>
+                        </div>
+                        <div class="email-choice-card flex-fill" style="max-width: 400px; margin-left: auto; margin-right: auto;">
+                            <h6 class="font-weight-bold mb-2 text-center">Compose from Scratch</h6>
+                            <p class="text-muted small mb-3 text-center">Write a custom subject and message to send to all failed candidates.</p>
+                            <div class="text-center">
+                                <button type="button" class="btn btn-outline-secondary px-4" onclick="openFailedBulkScratchEditor()">
+                                    <i class="fas fa-pen mr-2"></i>Compose from Scratch
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade email-workflow-modal" id="failedBulkEmailEditorModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <form action="@Url.Action("SendFailedCandidatesBulkEmail", "Applications")" method="post" id="failedBulkEmailEditorForm">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title mb-0" id="failedBulkEmailEditorTitle">Compose Bulk Email</h5>
+                        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="positionId" id="failedBulkEmailEditorPositionId" />
+                        <input type="hidden" name="composeMode" id="failedBulkEmailEditorComposeMode" value="scratch" />
+                        <input type="hidden" name="templateKey" value="failed_candidate_standard" />
+
+                        <div class="mb-3">
+                            <div class="font-weight-bold" id="failedBulkEmailEditorPositionLabel"></div>
+                            <div class="text-muted small" id="failedBulkEmailEditorCountLabel"></div>
+                        </div>
+
+                        <div class="mb-3 d-none" id="failedBulkTemplateSelectorSection">
+                            <label class="font-weight-bold mb-1">Template</label>
+                            <div class="form-control bg-light">Failed candidate - standard (from Email wording)</div>
+                        </div>
+
+                        <div class="mb-3 failed-email-template-compose p-3">
+                            <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Compose this email</h6>
+                            <p class="small text-muted mb-3">Editor matches <strong>Admin &rarr; Email wording</strong>. For bulk sends, each candidate's name is merged when the message is sent. Scroll to CC and <strong>Send to All Failed</strong>.</p>
+                            <label class="font-weight-bold mb-1" for="failedBulkEmailEditorSubject">Subject line</label>
+                            <input type="text" id="failedBulkEmailEditorSubject" name="subject" class="form-control mb-3" maxlength="255" />
+                            <label class="font-weight-bold mb-1" for="failedBulkEmailEditorBody">Message</label>
+                            <textarea id="failedBulkEmailEditorBody"
+                                      name="body"
+                                      class="form-control email-editor-body failed-bulk-email-editor"
+                                      rows="12"
+                                      maxlength="20000"></textarea>
+                            <small class="text-muted d-block mb-3">Use the toolbar for formatting. Maximum length 20,000 characters (including HTML).</small>
+
+                            <div id="failedBulkTemplateComposeExtra" class="d-none border-top pt-3 mt-2">
+                                <div class="d-flex flex-wrap justify-content-end align-items-center mb-2" style="gap: 8px;">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="failedBulkTemplateEditBtn" title="Focus subject and message">
+                                        <i class="fas fa-edit mr-1"></i>Edit
+                                    </button>
+                                    <button type="button" class="btn btn-success btn-sm" id="failedBulkTemplateSaveBtn" title="Apply edits to the form before sending">
+                                        <i class="fas fa-save mr-1"></i>Save
+                                    </button>
+                                </div>
+                                <div id="failedBulkTemplateSaveAck" class="alert alert-success py-2 px-3 small d-none" role="status">Edits saved in this form. Choose CC below, then send.</div>
+                            </div>
+                        </div>
+
+                        <hr class="my-3" />
+                        <p class="small font-weight-bold text-muted mb-2">Copy on send (optional)</p>
+                        @Html.Partial("_CandidateEmailCcFields", new CandidateEmailCcFieldsModel
+                        {
+                            Prefix = "failedBulkEmailEditor",
+                            Panelists = panelistsForCc,
+                            HrContacts = hrContactsForCc,
+                            ManageHrCcUrl = manageHrCcUrl
+                        })
+                    </div>
+                    <div class="modal-footer flex-shrink-0 border-top">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-paper-plane mr-1"></i>Send to All Failed
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
 @section Scripts {
+    @if (canManageApplications)
+    {
+        <script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.4/tinymce.min.js" referrerpolicy="origin"></script>
+        <script>
+            function getFailedSingleBodyTextarea() {
+                return document.getElementById('failedEmailEditorBody');
+            }
+
+            function setFailedSingleEditorHtml(html) {
+                var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedEmailEditorBody') : null;
+                if (ed) {
+                    ed.setContent(html || '');
+                } else {
+                    var ta = getFailedSingleBodyTextarea();
+                    if (ta) {
+                        ta.value = html || '';
+                    }
+                }
+            }
+
+            function getFailedBulkBodyTextarea() {
+                return document.getElementById('failedBulkEmailEditorBody');
+            }
+
+            function setFailedBulkEditorHtml(html) {
+                var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedBulkEmailEditorBody') : null;
+                if (ed) {
+                    ed.setContent(html || '');
+                } else {
+                    var ta = getFailedBulkBodyTextarea();
+                    if (ta) {
+                        ta.value = html || '';
+                    }
+                }
+            }
+
+            function ensureFailedSingleTinyMce(done) {
+                if (typeof tinymce === 'undefined') {
+                    if (done) done();
+                    return;
+                }
+                if (tinymce.get('failedBulkEmailEditorBody')) {
+                    tinymce.remove(tinymce.get('failedBulkEmailEditorBody'));
+                }
+                if (tinymce.get('failedEmailEditorBody')) {
+                    if (done) done();
+                    return;
+                }
+                tinymce.init({
+                    selector: '#failedEmailEditorBody',
+                    height: 320,
+                    menubar: false,
+                    plugins: 'link lists autoresize',
+                    toolbar: 'undo redo | styles | bold italic underline | bullist numlist | link removeformat',
+                    branding: false,
+                    license_key: 'gpl',
+                    setup: function (editor) {
+                        editor.on('init', function () {
+                            if (done) done();
+                        });
+                    }
+                });
+            }
+
+            function ensureFailedBulkTinyMce(done) {
+                if (typeof tinymce === 'undefined') {
+                    if (done) done();
+                    return;
+                }
+                if (tinymce.get('failedEmailEditorBody')) {
+                    tinymce.remove(tinymce.get('failedEmailEditorBody'));
+                }
+                if (tinymce.get('failedBulkEmailEditorBody')) {
+                    if (done) done();
+                    return;
+                }
+                tinymce.init({
+                    selector: '#failedBulkEmailEditorBody',
+                    height: 320,
+                    menubar: false,
+                    plugins: 'link lists autoresize',
+                    toolbar: 'undo redo | styles | bold italic underline | bullist numlist | link removeformat',
+                    branding: false,
+                    license_key: 'gpl',
+                    setup: function (editor) {
+                        editor.on('init', function () {
+                            if (done) done();
+                        });
+                    }
+                });
+            }
+
+            function syncFailedSingleDraftToForm(showAck) {
+                var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedEmailEditorBody') : null;
+                if (ed) {
+                    ed.save();
+                }
+                var ack = document.getElementById('failedSingleTemplateSaveAck');
+                if (showAck && ack) {
+                    ack.classList.remove('d-none');
+                }
+            }
+
+            function syncFailedBulkDraftToForm(showAck) {
+                var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedBulkEmailEditorBody') : null;
+                if (ed) {
+                    ed.save();
+                }
+                var ack = document.getElementById('failedBulkTemplateSaveAck');
+                if (showAck && ack) {
+                    ack.classList.remove('d-none');
+                }
+            }
+
+            var failedEmailWorkflowContext = {
+                applicationId: 0,
+                candidateName: '',
+                positionTitle: '',
+                defaultSubject: ''
+            };
+
+            function openFailedCandidateEmailChoice(button) {
+                if (!button) return;
+
+                failedEmailWorkflowContext.applicationId = parseInt(button.getAttribute('data-application-id') || '0', 10) || 0;
+                failedEmailWorkflowContext.candidateName = button.getAttribute('data-candidate-name') || 'Candidate';
+                failedEmailWorkflowContext.positionTitle = button.getAttribute('data-position-title') || 'this position';
+                failedEmailWorkflowContext.defaultSubject = button.getAttribute('data-default-subject') || ('Update on your application for ' + failedEmailWorkflowContext.positionTitle);
+
+                var candidateLabel = document.getElementById('failedEmailChoiceCandidateLabel');
+                var positionLabel = document.getElementById('failedEmailChoicePositionLabel');
+                if (candidateLabel) candidateLabel.textContent = failedEmailWorkflowContext.candidateName;
+                if (positionLabel) positionLabel.textContent = 'Position: ' + failedEmailWorkflowContext.positionTitle;
+
+                $('#failedEmailChoiceModal').modal('show');
+            }
+
+            function resetFailedEmailEditorCcState() {
+                var pToggle = document.getElementById('failedEmailEditorCcPanelistsToggle');
+                var pContainer = document.getElementById('failedEmailEditorCcPanelistsContainer');
+                var hToggle = document.getElementById('failedEmailEditorCcHrToggle');
+                var hContainer = document.getElementById('failedEmailEditorCcHrContainer');
+                if (pToggle) pToggle.checked = false;
+                if (hToggle) hToggle.checked = false;
+                if (pContainer) {
+                    pContainer.classList.add('d-none');
+                    Array.prototype.forEach.call(pContainer.querySelectorAll('input[type="checkbox"][name="selectedPanelistIds"]'), function (box) {
+                        box.checked = false;
+                    });
+                }
+                if (hContainer) {
+                    hContainer.classList.add('d-none');
+                    Array.prototype.forEach.call(hContainer.querySelectorAll('input[type="checkbox"][name="selectedHrCcIds"]'), function (box) {
+                        box.checked = false;
+                    });
+                }
+            }
+
+            function openFailedCandidateTemplateEditor() {
+                if (!failedEmailWorkflowContext.applicationId) return;
+
+                var title = document.getElementById('failedEmailEditorTitle');
+                var appId = document.getElementById('failedEmailEditorApplicationId');
+                var mode = document.getElementById('failedEmailEditorComposeMode');
+                var candidateLabel = document.getElementById('failedEmailEditorCandidateLabel');
+                var positionLabel = document.getElementById('failedEmailEditorPositionLabel');
+                var templateSection = document.getElementById('failedEmailTemplateSelectorSection');
+                var composeExtra = document.getElementById('failedSingleTemplateComposeExtra');
+                var ack = document.getElementById('failedSingleTemplateSaveAck');
+
+                if (title) title.textContent = 'Template Email Editor';
+                if (appId) appId.value = failedEmailWorkflowContext.applicationId;
+                if (mode) mode.value = 'template_edit';
+                if (candidateLabel) candidateLabel.textContent = failedEmailWorkflowContext.candidateName;
+                if (positionLabel) positionLabel.textContent = 'Position: ' + failedEmailWorkflowContext.positionTitle;
+                if (templateSection) templateSection.classList.remove('d-none');
+                if (composeExtra) composeExtra.classList.remove('d-none');
+                if (ack) ack.classList.add('d-none');
+
+                resetFailedEmailEditorCcState();
+                $('#failedEmailEditorModal').data('failedSingleLoadPreview', true);
+                $('#failedEmailChoiceModal').modal('hide');
+                $('#failedEmailEditorModal').modal('show');
+            }
+
+            function openFailedCandidateScratchEditor() {
+                if (!failedEmailWorkflowContext.applicationId) return;
+
+                var title = document.getElementById('failedEmailEditorTitle');
+                var appId = document.getElementById('failedEmailEditorApplicationId');
+                var mode = document.getElementById('failedEmailEditorComposeMode');
+                var subject = document.getElementById('failedEmailEditorSubject');
+                var body = document.getElementById('failedEmailEditorBody');
+                var candidateLabel = document.getElementById('failedEmailEditorCandidateLabel');
+                var positionLabel = document.getElementById('failedEmailEditorPositionLabel');
+                var templateSection = document.getElementById('failedEmailTemplateSelectorSection');
+                var composeExtra = document.getElementById('failedSingleTemplateComposeExtra');
+                var ack = document.getElementById('failedSingleTemplateSaveAck');
+
+                if (title) title.textContent = 'Compose Email from Scratch';
+                if (appId) appId.value = failedEmailWorkflowContext.applicationId;
+                if (mode) mode.value = 'scratch';
+                if (candidateLabel) candidateLabel.textContent = failedEmailWorkflowContext.candidateName;
+                if (positionLabel) positionLabel.textContent = 'Position: ' + failedEmailWorkflowContext.positionTitle;
+                if (templateSection) templateSection.classList.add('d-none');
+                if (composeExtra) composeExtra.classList.add('d-none');
+                if (ack) ack.classList.add('d-none');
+                if (subject) subject.value = failedEmailWorkflowContext.defaultSubject;
+                if (body) body.value = '';
+
+                resetFailedEmailEditorCcState();
+                $('#failedEmailEditorModal').data('failedSingleLoadPreview', false);
+                $('#failedEmailChoiceModal').modal('hide');
+                $('#failedEmailEditorModal').modal('show');
+            }
+
+            $(function () {
+                $('#failedEmailEditorModal').on('shown.bs.modal', function () {
+                    var loadPreview = $('#failedEmailEditorModal').data('failedSingleLoadPreview') === true;
+                    ensureFailedSingleTinyMce(function () {
+                        if (loadPreview) {
+                            $('#failedEmailEditorModal').data('failedSingleLoadPreview', false);
+                            reloadFailedCandidateTemplatePreview();
+                        } else {
+                            var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedEmailEditorBody') : null;
+                            if (ed) {
+                                var ta = document.getElementById('failedEmailEditorBody');
+                                var starter = (ta && ta.value) ? ta.value : '';
+                                if (!starter || !starter.trim()) {
+                                    starter = '<p></p>';
+                                }
+                                ed.setContent(starter);
+                            }
+                        }
+                    });
+                });
+                $('#failedEmailEditorModal').on('hidden.bs.modal', function () {
+                    var ack = document.getElementById('failedSingleTemplateSaveAck');
+                    if (ack) ack.classList.add('d-none');
+                    if (typeof tinymce === 'undefined') {
+                        return;
+                    }
+                    var ed = tinymce.get('failedEmailEditorBody');
+                    if (ed) {
+                        tinymce.remove(ed);
+                    }
+                });
+
+                var failedSingleEditBtn = document.getElementById('failedSingleTemplateEditBtn');
+                if (failedSingleEditBtn) {
+                    failedSingleEditBtn.addEventListener('click', function () {
+                        var subj = document.getElementById('failedEmailEditorSubject');
+                        if (subj) {
+                            subj.focus();
+                        }
+                        var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedEmailEditorBody') : null;
+                        if (ed) {
+                            ed.focus();
+                            var host = ed.getContainer();
+                            if (host && host.scrollIntoView) {
+                                host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }
+                        }
+                    });
+                }
+                var failedSingleSaveBtn = document.getElementById('failedSingleTemplateSaveBtn');
+                if (failedSingleSaveBtn) {
+                    failedSingleSaveBtn.addEventListener('click', function () {
+                        syncFailedSingleDraftToForm(true);
+                    });
+                }
+                $('#failedEmailEditorForm').on('submit', function () {
+                    var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedEmailEditorBody') : null;
+                    if (ed) {
+                        ed.save();
+                    }
+                    var ta = document.getElementById('failedEmailEditorBody');
+                    if (ta && ta.value && ta.value.length > 20000) {
+                        alert('Email body is too long (maximum 20000 characters).');
+                        return false;
+                    }
+                });
+
+                $('#failedBulkEmailEditorModal').on('shown.bs.modal', function () {
+                    var loadPreview = $('#failedBulkEmailEditorModal').data('failedBulkLoadPreview') === true;
+                    ensureFailedBulkTinyMce(function () {
+                        if (loadPreview) {
+                            $('#failedBulkEmailEditorModal').data('failedBulkLoadPreview', false);
+                            reloadFailedBulkTemplatePreview();
+                        } else {
+                            var bulkEd = typeof tinymce !== 'undefined' ? tinymce.get('failedBulkEmailEditorBody') : null;
+                            if (bulkEd) {
+                                var bulkTa = document.getElementById('failedBulkEmailEditorBody');
+                                var bulkStarter = (bulkTa && bulkTa.value) ? bulkTa.value : '';
+                                if (!bulkStarter || !bulkStarter.trim()) {
+                                    bulkStarter = '<p></p>';
+                                }
+                                bulkEd.setContent(bulkStarter);
+                            }
+                        }
+                    });
+                });
+                $('#failedBulkEmailEditorModal').on('hidden.bs.modal', function () {
+                    var bulkAck = document.getElementById('failedBulkTemplateSaveAck');
+                    if (bulkAck) bulkAck.classList.add('d-none');
+                    if (typeof tinymce === 'undefined') {
+                        return;
+                    }
+                    var bulkEditor = tinymce.get('failedBulkEmailEditorBody');
+                    if (bulkEditor) {
+                        tinymce.remove(bulkEditor);
+                    }
+                });
+
+                var failedBulkEditBtn = document.getElementById('failedBulkTemplateEditBtn');
+                if (failedBulkEditBtn) {
+                    failedBulkEditBtn.addEventListener('click', function () {
+                        var subj = document.getElementById('failedBulkEmailEditorSubject');
+                        if (subj) subj.focus();
+                        var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedBulkEmailEditorBody') : null;
+                        if (ed) {
+                            ed.focus();
+                            var host = ed.getContainer();
+                            if (host && host.scrollIntoView) {
+                                host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }
+                        }
+                    });
+                }
+                var failedBulkSaveBtn = document.getElementById('failedBulkTemplateSaveBtn');
+                if (failedBulkSaveBtn) {
+                    failedBulkSaveBtn.addEventListener('click', function () {
+                        syncFailedBulkDraftToForm(true);
+                    });
+                }
+                $('#failedBulkEmailEditorForm').on('submit', function () {
+                    var bulkEdSubmit = typeof tinymce !== 'undefined' ? tinymce.get('failedBulkEmailEditorBody') : null;
+                    if (bulkEdSubmit) {
+                        bulkEdSubmit.save();
+                    }
+                    var bulkTaSubmit = document.getElementById('failedBulkEmailEditorBody');
+                    if (bulkTaSubmit && bulkTaSubmit.value && bulkTaSubmit.value.length > 20000) {
+                        alert('Email body is too long (maximum 20000 characters).');
+                        return false;
+                    }
+                });
+            });
+
+            function reloadFailedCandidateTemplatePreview() {
+                if (!failedEmailWorkflowContext.applicationId) return;
+
+                var subjectInput = document.getElementById('failedEmailEditorSubject');
+                if (!subjectInput) return;
+
+                var templateKey = 'failed_candidate_standard';
+                setFailedSingleEditorHtml('<p><em>Loading template...</em></p>');
+
+                var previewUrl = '@Url.Action("GetFailedCandidateTemplatePreview", "Applications")'
+                    + '?applicationId=' + encodeURIComponent(failedEmailWorkflowContext.applicationId)
+                    + '&templateKey=' + encodeURIComponent(templateKey);
+
+                fetch(previewUrl, {
+                    method: 'GET',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin'
+                })
+                    .then(function (response) {
+                        if (!response.ok) throw new Error('Unable to load template preview.');
+                        return response.json();
+                    })
+                    .then(function (result) {
+                        if (!result || result.success !== true) {
+                            throw new Error(result && result.message ? result.message : 'Unable to load template preview.');
+                        }
+
+                        subjectInput.value = result.subject || failedEmailWorkflowContext.defaultSubject;
+                        setFailedSingleEditorHtml(result.bodyHtml || '');
+                    })
+                    .catch(function (error) {
+                        subjectInput.value = failedEmailWorkflowContext.defaultSubject;
+                        setFailedSingleEditorHtml('');
+                        alert(error && error.message ? error.message : 'Unable to load template preview.');
+                    });
+            }
+
+            var failedBulkEmailWorkflowContext = {
+                positionId: 0,
+                positionTitle: '',
+                failedCount: 0,
+                defaultSubject: ''
+            };
+
+            function openFailedBulkEmailChoice(button) {
+                if (!button) return;
+
+                failedBulkEmailWorkflowContext.positionId = parseInt(button.getAttribute('data-position-id') || '0', 10) || 0;
+                failedBulkEmailWorkflowContext.positionTitle = button.getAttribute('data-position-title') || 'this position';
+                failedBulkEmailWorkflowContext.failedCount = parseInt(button.getAttribute('data-failed-count') || '0', 10) || 0;
+                failedBulkEmailWorkflowContext.defaultSubject = button.getAttribute('data-default-subject') || ('Update on your application for ' + failedBulkEmailWorkflowContext.positionTitle);
+
+                var positionLabel = document.getElementById('failedBulkEmailChoicePositionLabel');
+                var countLabel = document.getElementById('failedBulkEmailChoiceCountLabel');
+                if (positionLabel) positionLabel.textContent = 'Position: ' + failedBulkEmailWorkflowContext.positionTitle;
+                if (countLabel) countLabel.textContent = 'Failed candidates: ' + failedBulkEmailWorkflowContext.failedCount;
+
+                $('#failedBulkEmailChoiceModal').modal('show');
+            }
+
+            function resetFailedBulkEmailEditorCcState() {
+                var pToggle = document.getElementById('failedBulkEmailEditorCcPanelistsToggle');
+                var pContainer = document.getElementById('failedBulkEmailEditorCcPanelistsContainer');
+                var hToggle = document.getElementById('failedBulkEmailEditorCcHrToggle');
+                var hContainer = document.getElementById('failedBulkEmailEditorCcHrContainer');
+                if (pToggle) pToggle.checked = false;
+                if (hToggle) hToggle.checked = false;
+                if (pContainer) {
+                    pContainer.classList.add('d-none');
+                    Array.prototype.forEach.call(pContainer.querySelectorAll('input[type="checkbox"][name="selectedPanelistIds"]'), function (box) {
+                        box.checked = false;
+                    });
+                }
+                if (hContainer) {
+                    hContainer.classList.add('d-none');
+                    Array.prototype.forEach.call(hContainer.querySelectorAll('input[type="checkbox"][name="selectedHrCcIds"]'), function (box) {
+                        box.checked = false;
+                    });
+                }
+            }
+
+            function openFailedBulkTemplateEditor() {
+                if (!failedBulkEmailWorkflowContext.positionId) return;
+
+                var title = document.getElementById('failedBulkEmailEditorTitle');
+                var posId = document.getElementById('failedBulkEmailEditorPositionId');
+                var mode = document.getElementById('failedBulkEmailEditorComposeMode');
+                var positionLabel = document.getElementById('failedBulkEmailEditorPositionLabel');
+                var countLabel = document.getElementById('failedBulkEmailEditorCountLabel');
+                var templateSection = document.getElementById('failedBulkTemplateSelectorSection');
+                var composeExtra = document.getElementById('failedBulkTemplateComposeExtra');
+                var ack = document.getElementById('failedBulkTemplateSaveAck');
+
+                if (title) title.textContent = 'Template Bulk Email Editor';
+                if (posId) posId.value = failedBulkEmailWorkflowContext.positionId;
+                if (mode) mode.value = 'template_edit';
+                if (positionLabel) positionLabel.textContent = 'Position: ' + failedBulkEmailWorkflowContext.positionTitle;
+                if (countLabel) countLabel.textContent = 'Recipients: ' + failedBulkEmailWorkflowContext.failedCount + ' failed candidate(s)';
+                if (templateSection) templateSection.classList.remove('d-none');
+                if (composeExtra) composeExtra.classList.remove('d-none');
+                if (ack) ack.classList.add('d-none');
+
+                resetFailedBulkEmailEditorCcState();
+                $('#failedBulkEmailChoiceModal').modal('hide');
+                $('#failedBulkEmailEditorModal').data('failedBulkLoadPreview', true);
+                $('#failedBulkEmailEditorModal').modal('show');
+            }
+
+            function openFailedBulkScratchEditor() {
+                if (!failedBulkEmailWorkflowContext.positionId) return;
+
+                var title = document.getElementById('failedBulkEmailEditorTitle');
+                var posId = document.getElementById('failedBulkEmailEditorPositionId');
+                var mode = document.getElementById('failedBulkEmailEditorComposeMode');
+                var subject = document.getElementById('failedBulkEmailEditorSubject');
+                var body = document.getElementById('failedBulkEmailEditorBody');
+                var positionLabel = document.getElementById('failedBulkEmailEditorPositionLabel');
+                var countLabel = document.getElementById('failedBulkEmailEditorCountLabel');
+                var templateSection = document.getElementById('failedBulkTemplateSelectorSection');
+                var composeExtra = document.getElementById('failedBulkTemplateComposeExtra');
+                var ack = document.getElementById('failedBulkTemplateSaveAck');
+
+                if (title) title.textContent = 'Compose Bulk Email from Scratch';
+                if (posId) posId.value = failedBulkEmailWorkflowContext.positionId;
+                if (mode) mode.value = 'scratch';
+                if (positionLabel) positionLabel.textContent = 'Position: ' + failedBulkEmailWorkflowContext.positionTitle;
+                if (countLabel) countLabel.textContent = 'Recipients: ' + failedBulkEmailWorkflowContext.failedCount + ' failed candidate(s)';
+                if (templateSection) templateSection.classList.add('d-none');
+                if (composeExtra) composeExtra.classList.add('d-none');
+                if (ack) ack.classList.add('d-none');
+                if (subject) subject.value = failedBulkEmailWorkflowContext.defaultSubject;
+                if (body) body.value = '';
+
+                resetFailedBulkEmailEditorCcState();
+                $('#failedBulkEmailChoiceModal').modal('hide');
+                $('#failedBulkEmailEditorModal').data('failedBulkLoadPreview', false);
+                $('#failedBulkEmailEditorModal').modal('show');
+            }
+
+            function reloadFailedBulkTemplatePreview() {
+                if (!failedBulkEmailWorkflowContext.positionId) return;
+
+                var subjectInput = document.getElementById('failedBulkEmailEditorSubject');
+                if (!subjectInput) return;
+
+                var templateKey = 'failed_candidate_standard';
+                setFailedBulkEditorHtml('<p><em>Loading template...</em></p>');
+
+                var previewUrl = '@Url.Action("GetFailedCandidatesBulkTemplatePreview", "Applications")'
+                    + '?positionId=' + encodeURIComponent(failedBulkEmailWorkflowContext.positionId)
+                    + '&templateKey=' + encodeURIComponent(templateKey);
+
+                fetch(previewUrl, {
+                    method: 'GET',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin'
+                })
+                    .then(function (response) {
+                        if (!response.ok) throw new Error('Unable to load template preview.');
+                        return response.json();
+                    })
+                    .then(function (result) {
+                        if (!result || result.success !== true) {
+                            throw new Error(result && result.message ? result.message : 'Unable to load template preview.');
+                        }
+
+                        subjectInput.value = result.subject || failedBulkEmailWorkflowContext.defaultSubject;
+                        setFailedBulkEditorHtml(result.bodyHtml || '');
+                    })
+                    .catch(function (error) {
+                        subjectInput.value = failedBulkEmailWorkflowContext.defaultSubject;
+                        setFailedBulkEditorHtml('');
+                        alert(error && error.message ? error.message : 'Unable to load template preview.');
+                    });
+            }
+
+            function toggleOptionalCcSection(toggleId, containerId, checkboxName) {
+                var toggle = document.getElementById(toggleId);
+                var container = document.getElementById(containerId);
+                if (!toggle || !container) return;
+
+                if (toggle.checked) {
+                    container.classList.remove('d-none');
+                } else {
+                    container.classList.add('d-none');
+                    var selector = 'input[type="checkbox"][name="' + checkboxName + '"]';
+                    var selectedBoxes = container.querySelectorAll(selector);
+                    Array.prototype.forEach.call(selectedBoxes, function (box) {
+                        box.checked = false;
+                    });
+                }
+            }
+        </script>
+    }
     <script>
         (function () {
-            var targetApplicationId = @bookInterviewApplicationId;
-            if (!targetApplicationId) return;
+            var highlightedApplicationId = @targetApplicationId;
+            if (!highlightedApplicationId) {
+                highlightedApplicationId = @bookInterviewApplicationId;
+            }
+            if (!highlightedApplicationId) return;
 
-            var card = document.getElementById('application-card-' + targetApplicationId);
+            var card = document.getElementById('application-card-' + highlightedApplicationId);
             if (!card) return;
 
             card.classList.add('target-application');
@@ -657,15 +1897,42 @@ else
             element.classList.add('d-none');
         }
 
+        function getApplicationsPageSize(container) {
+            var pageSize = parseInt(container.getAttribute('data-page-size'), 10);
+            if (isNaN(pageSize) || pageSize <= 0) {
+                pageSize = parseInt(container.getAttribute('data-compact-limit'), 10) || 5;
+            }
+            return pageSize;
+        }
+
+        function getApplicationsVisibleCount(container) {
+            var limit = parseInt(container.getAttribute('data-compact-limit'), 10) || 5;
+            var visibleCount = parseInt(container.getAttribute('data-visible-count'), 10);
+            if (isNaN(visibleCount) || visibleCount <= 0) {
+                visibleCount = limit;
+                container.setAttribute('data-visible-count', String(visibleCount));
+            }
+            return visibleCount;
+        }
+
         function applyCompactState(container) {
             if (!container) return;
+
+            if (container.hasAttribute('data-visible-count')) {
+                var visibleCount = getApplicationsVisibleCount(container);
+                var cards = Array.prototype.slice.call(container.querySelectorAll('.application-card'));
+                cards.forEach(function (card, index) {
+                    card.classList.toggle('d-none', index >= visibleCount);
+                });
+                return;
+            }
 
             var limit = parseInt(container.getAttribute('data-compact-limit'), 10);
             if (isNaN(limit) || limit <= 0) return;
 
-            var cards = Array.prototype.slice.call(container.querySelectorAll('.application-card'));
+            var legacyCards = Array.prototype.slice.call(container.querySelectorAll('.application-card'));
             var expanded = container.getAttribute('data-expanded') === 'true';
-            cards.forEach(function (card, index) {
+            legacyCards.forEach(function (card, index) {
                 card.classList.toggle('d-none', !expanded && index >= limit);
             });
         }
@@ -673,16 +1940,54 @@ else
         function updateCompactToggleUi(container) {
             if (!container) return;
 
+            if (container.hasAttribute('data-visible-count')) {
+                var pageSize = getApplicationsPageSize(container);
+                var visibleCount = getApplicationsVisibleCount(container);
+                var cards = Array.prototype.slice.call(container.querySelectorAll('.application-card'));
+                var metaId = container.getAttribute('data-meta-id');
+                var showMoreId = container.getAttribute('data-show-more-id');
+                var meta = metaId ? document.getElementById(metaId) : null;
+                var showMoreBtn = showMoreId ? document.getElementById(showMoreId) : null;
+                var controlsWrapper = showMoreBtn ? showMoreBtn.closest('.applications-compact-controls') : null;
+
+                if (cards.length === 0) {
+                    if (controlsWrapper) {
+                        controlsWrapper.classList.add('d-none');
+                    }
+                    return;
+                }
+
+                var showing = Math.min(visibleCount, cards.length);
+                if (meta) {
+                    meta.textContent = 'Showing ' + showing + ' of ' + cards.length;
+                }
+
+                if (visibleCount >= cards.length) {
+                    if (controlsWrapper) {
+                        controlsWrapper.classList.add('d-none');
+                    }
+                } else {
+                    if (controlsWrapper) {
+                        controlsWrapper.classList.remove('d-none');
+                    }
+                    if (showMoreBtn) {
+                        var nextBatch = Math.min(pageSize, cards.length - visibleCount);
+                        showMoreBtn.textContent = 'Show ' + nextBatch + ' more';
+                    }
+                }
+                return;
+            }
+
             var limit = parseInt(container.getAttribute('data-compact-limit'), 10);
             if (isNaN(limit) || limit <= 0) return;
 
-            var cards = Array.prototype.slice.call(container.querySelectorAll('.application-card'));
+            var legacyCards = Array.prototype.slice.call(container.querySelectorAll('.application-card'));
             var labelId = container.getAttribute('data-toggle-label-id');
             var iconId = container.getAttribute('data-toggle-icon-id');
             var label = labelId ? document.getElementById(labelId) : null;
             var icon = iconId ? document.getElementById(iconId) : null;
 
-            if (cards.length <= limit) {
+            if (legacyCards.length <= limit) {
                 if (label && label.parentElement) {
                     label.parentElement.style.display = 'none';
                 }
@@ -691,7 +1996,7 @@ else
 
             var expanded = container.getAttribute('data-expanded') === 'true';
             if (label) {
-                label.textContent = expanded ? ('Show Top ' + limit) : ('Show All (' + cards.length + ')');
+                label.textContent = expanded ? ('Show Top ' + limit) : ('Show All (' + legacyCards.length + ')');
             }
             if (icon) {
                 icon.classList.toggle('fa-chevron-down', !expanded);
@@ -702,8 +2007,91 @@ else
         function initializeCompactContainers(scope) {
             var root = scope || document;
             root.querySelectorAll('.applications-column-cards[data-compact-limit]').forEach(function (container) {
+                if (container.hasAttribute('data-visible-count')) {
+                    var limit = parseInt(container.getAttribute('data-compact-limit'), 10) || 5;
+                    if (!container.hasAttribute('data-page-size')) {
+                        container.setAttribute('data-page-size', String(limit));
+                    }
+                }
                 applyCompactState(container);
                 updateCompactToggleUi(container);
+            });
+        }
+
+        function showMoreApplications(containerId) {
+            var container = document.getElementById(containerId);
+            if (!container || !container.hasAttribute('data-visible-count')) return;
+
+            var pageSize = getApplicationsPageSize(container);
+            var visibleCount = getApplicationsVisibleCount(container);
+            var cards = container.querySelectorAll('.application-card');
+            var newCount = Math.min(visibleCount + pageSize, cards.length);
+            container.setAttribute('data-visible-count', String(newCount));
+            applyCompactState(container);
+            updateCompactToggleUi(container);
+        }
+
+        function toggleNeedsReviewColumn(positionId) {
+            var column = document.getElementById('needsReviewColumn-' + positionId);
+            var topColumn = document.getElementById('topCandidatesColumn-' + positionId);
+            var toggleBtn = document.getElementById('needsReviewToggle-' + positionId);
+            var row = document.querySelector('.applications-columns-row[data-position-id="' + positionId + '"]');
+            if (!column || !toggleBtn) return;
+
+            var isVisible = !column.classList.contains('d-none');
+            if (isVisible) {
+                column.classList.add('d-none');
+                if (topColumn) {
+                    topColumn.classList.remove('col-lg-6');
+                    topColumn.classList.add('col-12');
+                }
+                if (row) {
+                    row.setAttribute('data-needs-review-visible', 'false');
+                }
+                toggleBtn.textContent = 'Show Needs Review (' + (toggleBtn.getAttribute('data-failed-count') || '0') + ')';
+                toggleBtn.classList.remove('btn-danger');
+                toggleBtn.classList.add('btn-outline-danger');
+                return;
+            }
+
+            column.classList.remove('d-none');
+            if (topColumn) {
+                topColumn.classList.add('col-lg-6');
+            }
+            if (row) {
+                row.setAttribute('data-needs-review-visible', 'true');
+            }
+            toggleBtn.textContent = 'Hide Needs Review';
+            toggleBtn.classList.add('btn-danger');
+            toggleBtn.classList.remove('btn-outline-danger');
+
+            var failedContainer = column.querySelector('.applications-column-cards');
+            if (failedContainer) {
+                applyCompactState(failedContainer);
+                updateCompactToggleUi(failedContainer);
+            }
+        }
+
+        function initializeNeedsReviewColumns(scope) {
+            var root = scope || document;
+            root.querySelectorAll('.needs-review-toggle').forEach(function (btn) {
+                var positionId = btn.getAttribute('data-position-id');
+                var column = document.getElementById('needsReviewColumn-' + positionId);
+                var topColumn = document.getElementById('topCandidatesColumn-' + positionId);
+                var row = root.querySelector('.applications-columns-row[data-position-id="' + positionId + '"]');
+                if (column) {
+                    column.classList.add('d-none');
+                }
+                if (topColumn) {
+                    topColumn.classList.remove('col-lg-6');
+                    topColumn.classList.add('col-12');
+                }
+                if (row) {
+                    row.setAttribute('data-needs-review-visible', 'false');
+                }
+                btn.textContent = 'Show Needs Review (' + (btn.getAttribute('data-failed-count') || '0') + ')';
+                btn.classList.remove('btn-danger');
+                btn.classList.add('btn-outline-danger');
             });
         }
 
@@ -748,6 +2136,7 @@ else
         })();
 
         initializeCompactContainers(document);
+        initializeNeedsReviewColumns(document);
 
         (function () {
             var tokenInput = document.querySelector('#positionPassMarkTokenForm input[name="__RequestVerificationToken"]');
@@ -824,6 +2213,7 @@ else
                         currentContainer.replaceWith(replacement);
                         bindPassmarkControl(replacement.querySelector('.passmark-control'));
                         initializeCompactContainers(replacement);
+                        initializeNeedsReviewColumns(replacement);
                         applyApplicationsSort();
                     });
             }

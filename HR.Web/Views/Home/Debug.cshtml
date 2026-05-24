@@ -1,10 +1,12 @@
 @{
+    ViewBag.SuppressPageHero = true;
     Layout = null;
 }
 
 <!DOCTYPE html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tenant Routing Debug</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
@@ -16,6 +18,12 @@
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
         .test-link { display: inline-block; margin: 5px; padding: 10px; background: #007bff; color: white; text-decoration: none; border-radius: 3px; }
+    
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr !important; }
+            body { margin: 12px; }
+            .container { padding: 16px !important; }
+        }
     </style>
 </head>
 <body>
@@ -31,7 +39,8 @@
 
     <h2>Route Data Analysis</h2>
     @{
-        var routeData = RouteData.Values;
+    ViewBag.SuppressPageHero = true;
+        var routeData = ViewContext.RouteData.Values;
         <table>
             <tr><th>Parameter</th><th>Value</th></tr>
             @foreach (var key in routeData.Keys)
@@ -46,6 +55,7 @@
 
     <h2>Database Companies Test</h2>
     @{
+    ViewBag.SuppressPageHero = true;
         try
         {
             using (var uow = new HR.Web.Data.UnitOfWork())
@@ -88,6 +98,7 @@
 
     <h2>Tenant Constraint Test</h2>
     @{
+    ViewBag.SuppressPageHero = true;
         try
         {
             var constraint = new HR.Web.Helpers.TenantRouteConstraint();

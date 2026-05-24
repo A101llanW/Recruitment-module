@@ -30,7 +30,7 @@ namespace HR.Web.Controllers
         // GET: Admin/Index - Default admin dashboard
         public ActionResult Index()
         {
-            if (_tenantService.IsActualSuperAdmin() || User.IsInRole("SuperAdmin"))
+            if (_tenantService.IsSuperAdmin())
             {
                 return RedirectToAction("GlobalUserManagement");
             }
@@ -82,7 +82,10 @@ namespace HR.Web.Controllers
         /// </summary>
         public ActionResult ViewApplicationDetails(int applicationId)
         {
-            var application = _uow.Applications.Get(applicationId);
+            var application = _uow.Applications.Get(
+                applicationId,
+                a => a.Applicant,
+                a => a.Position);
             if (application == null)
             {
                 return HttpNotFound();
@@ -154,7 +157,7 @@ namespace HR.Web.Controllers
                     }).ToList()
                 }).ToList();
             // Ensure positions are available for consolidated AI generation modal
-            ViewBag.Positions = _uow.Positions.GetAll().ToList();
+            ViewBag.Positions = _uow.Positions.GetAll(p => p.Department, p => p.Company).ToList();
             // Use the combined AI-enhanced questions view
             return View("QuestionsWithMCP", list);
         }
@@ -534,9 +537,9 @@ namespace HR.Web.Controllers
                 IsCurrentFullAdmin = _rolePermissionService.IsFullCompanyAdmin(user),
                 RequirePasswordChange = user.RequirePasswordChange,
                 CurrentRequirePasswordChange = user.RequirePasswordChange,
-                Companies = _tenantService.IsActualSuperAdmin() ? _uow.Companies.GetAll().OrderBy(c => c.Name).ToList() : null,
+                Companies = _tenantService.IsSuperAdmin() ? _uow.Companies.GetAll().OrderBy(c => c.Name).ToList() : null,
                 AvailableRoleOptions = BuildAvailableRoleOptions(
-                    _tenantService.IsActualSuperAdmin(),
+                    _tenantService.IsSuperAdmin(),
                     _tenantService.GetCurrentUserCompanyId(),
                     user.CompanyId,
                     false,
@@ -595,12 +598,7 @@ namespace HR.Web.Controllers
 
             TempData["SuccessMessage"] = string.Format("User {0} account has been unlocked", user.UserName);
             
-            if (_tenantService.IsActualSuperAdmin() || User.IsInRole("SuperAdmin"))
-            {
-                return RedirectToAction("GlobalUserManagement");
-            }
-
-            return RedirectToAction("UserManagement");
+            return RedirectToUserManagementHome();
         }
 
         #endregion

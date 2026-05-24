@@ -67,6 +67,15 @@ namespace HR.Web.Models
         public string TwoFactorCode { get; set; }
 
         public System.DateTime? TwoFactorExpiry { get; set; }
+
+        public System.DateTime? PrivacyAcceptedAt { get; set; }
+        public System.DateTime? TermsAcceptedAt { get; set; }
+
+        [StringLength(20)]
+        public string PrivacyVersion { get; set; }
+
+        [StringLength(20)]
+        public string TermsVersion { get; set; }
         
         // Email Verification
         public bool IsEmailVerified { get; set; }

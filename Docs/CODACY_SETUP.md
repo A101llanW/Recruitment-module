@@ -4,6 +4,36 @@ This repository now includes:
 
 - GitHub workflow: `.github/workflows/codacy-analysis.yml`
 - Windows launcher for Codacy CLI v2: `.codacy/cli.ps1`
+- Cursor MCP example config: `Docs/cursor-mcp.codacy.example.json`
+
+## Cursor MCP (Codacy)
+
+1. Create a Codacy **Account API token** in Codacy → Account → API Tokens.
+2. Set it as a Windows user environment variable:
+
+```powershell
+[System.Environment]::SetEnvironmentVariable('CODACY_ACCOUNT_TOKEN', '<your-token>', 'User')
+```
+
+3. Ensure MCP config exists at `.cursor/mcp.json` (project) or `%USERPROFILE%\.cursor\mcp.json` (global). On Windows, Cursor currently expects the token value inline in `env.CODACY_ACCOUNT_TOKEN` (not `${env:...}` substitution).
+
+Quick setup script:
+
+```powershell
+.\tools\dev\Set-CodacyMcpToken.ps1 -Token '<your-account-api-token>'
+```
+
+4. Restart Cursor.
+5. Verify in **Cursor Settings → MCP** that `codacy` is connected and tools are listed.
+
+### MCP troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `Unauthorized` on API tools | Regenerate Account API token and update `CODACY_ACCOUNT_TOKEN` |
+| MCP tools not visible to agent | Restart Cursor; check Settings → MCP connection status |
+| Local analyze works, API fails | Token issue — local CLI does not need API for basic scans |
+| Agent says MCP unavailable | Server identifier is `user-codacy`; config name is `codacy` |
 
 ## What you still need to connect
 

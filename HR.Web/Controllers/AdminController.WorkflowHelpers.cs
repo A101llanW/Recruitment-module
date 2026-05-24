@@ -373,7 +373,7 @@ namespace HR.Web.Controllers
                 LogCreatedUser(user);
 
                 TempData["SuccessMessage"] = string.Format("User {0} has been created successfully.", user.UserName);
-                return RedirectToAction("GlobalUserManagement");
+                return RedirectToUserManagementHome();
             }
             catch (Exception ex)
             {

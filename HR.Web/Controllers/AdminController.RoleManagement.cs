@@ -20,6 +20,64 @@ namespace HR.Web.Controllers
             public string ErrorMessage { get; set; }
         }
 
+        private sealed class RoleManagementScopeContext
+        {
+            public bool IsGlobalSuperAdmin { get; set; }
+            public bool IsImpersonating { get; set; }
+            public int? CompanyId { get; set; }
+        }
+
+        private RoleManagementScopeContext GetRoleManagementScopeContext()
+        {
+            return new RoleManagementScopeContext
+            {
+                IsGlobalSuperAdmin = _tenantService.IsSuperAdmin(),
+                IsImpersonating = _tenantService.IsImpersonating(),
+                CompanyId = _tenantService.GetCurrentUserCompanyId()
+            };
+        }
+
+        private static IQueryable<RoleDefinition> ApplyRoleDefinitionScopeFilter(
+            IQueryable<RoleDefinition> query,
+            RoleManagementScopeContext scope,
+            int? catalogCompanyId = null)
+        {
+            if (scope.IsGlobalSuperAdmin)
+            {
+                if (catalogCompanyId.HasValue)
+                {
+                    var companyId = catalogCompanyId.Value;
+                    return query.Where(r => !r.CompanyId.HasValue || r.CompanyId == companyId);
+                }
+
+                return query;
+            }
+
+            if (scope.IsImpersonating)
+            {
+                return query.Where(r => r.CompanyId == scope.CompanyId);
+            }
+
+            return query.Where(r => !r.CompanyId.HasValue || r.CompanyId == scope.CompanyId);
+        }
+
+        private static bool CanManageRoleDefinition(RoleDefinition role, RoleManagementScopeContext scope)
+        {
+            if (role == null)
+            {
+                return false;
+            }
+
+            if (scope.IsGlobalSuperAdmin)
+            {
+                return true;
+            }
+
+            return role.CompanyId.HasValue &&
+                   scope.CompanyId.HasValue &&
+                   role.CompanyId.Value == scope.CompanyId.Value;
+        }
+
         [Authorize(Roles = "Admin, SuperAdmin")]
         public ActionResult RoleManagement(int? editRoleId)
         {
@@ -28,11 +86,10 @@ namespace HR.Web.Controllers
                 return new HttpStatusCodeResult(403, "Access Denied: Only full company admins and superadmins can manage role templates.");
             }
 
-            var isActualSuperAdmin = _tenantService.IsActualSuperAdmin();
-            var currentCompanyId = _tenantService.GetCurrentUserCompanyId();
+            var scope = GetRoleManagementScopeContext();
             var model = new RoleManagementPageViewModel
             {
-                CompanyId = isActualSuperAdmin ? (int?)null : currentCompanyId
+                CompanyId = scope.IsGlobalSuperAdmin ? (int?)null : scope.CompanyId
             };
 
             if (editRoleId.HasValue)
@@ -45,12 +102,12 @@ namespace HR.Web.Controllers
                     return HttpNotFound();
                 }
 
-                if (!CanEditRoleDefinition(role, isActualSuperAdmin, currentCompanyId))
+                if (!CanManageRoleDefinition(role, scope))
                 {
                     return new HttpStatusCodeResult(403, "Access Denied");
                 }
 
-                model = PopulateRoleEditModel(role, model, isActualSuperAdmin, currentCompanyId);
+                model = PopulateRoleEditModel(role, model, scope);
             }
 
             return View(BuildRoleManagementPageViewModel(model));
@@ -66,11 +123,11 @@ namespace HR.Web.Controllers
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
 
-            var isActualSuperAdmin = _tenantService.IsActualSuperAdmin();
-            var actorCompanyId = _tenantService.GetCurrentUserCompanyId();
-            var scopedCompanyId = isActualSuperAdmin ? model.CompanyId : actorCompanyId;
+            var scope = GetRoleManagementScopeContext();
+            var actorCompanyId = scope.CompanyId;
+            var scopedCompanyId = scope.IsGlobalSuperAdmin ? model.CompanyId : actorCompanyId;
 
-            NormalizeRolePermissionSelections(model, isActualSuperAdmin);
+            NormalizeRolePermissionSelections(model);
             ValidateRoleDefinitionModel(model, scopedCompanyId, null);
 
             if (!ModelState.IsValid)
@@ -133,8 +190,8 @@ namespace HR.Web.Controllers
             }
 
             var roleId = model.EditingRoleId.Value;
-            var isActualSuperAdmin = _tenantService.IsActualSuperAdmin();
-            var actorCompanyId = _tenantService.GetCurrentUserCompanyId();
+            var scope = GetRoleManagementScopeContext();
+            var actorCompanyId = scope.CompanyId;
             var role = _uow.Context.RoleDefinitions
                 .Include(r => r.RolePermissions)
                 .FirstOrDefault(r => r.Id == roleId && r.IsActive);
@@ -144,13 +201,13 @@ namespace HR.Web.Controllers
                 return HttpNotFound();
             }
 
-            if (!CanEditRoleDefinition(role, isActualSuperAdmin, actorCompanyId))
+            if (!CanManageRoleDefinition(role, scope))
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
 
-            var scopedCompanyId = isActualSuperAdmin ? model.CompanyId : actorCompanyId;
-            NormalizeRolePermissionSelections(model, isActualSuperAdmin);
+            var scopedCompanyId = scope.IsGlobalSuperAdmin ? model.CompanyId : actorCompanyId;
+            NormalizeRolePermissionSelections(model);
             ValidateRoleDefinitionModel(model, scopedCompanyId, roleId);
 
             if (!ModelState.IsValid)
@@ -201,8 +258,8 @@ namespace HR.Web.Controllers
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
 
-            var isActualSuperAdmin = _tenantService.IsActualSuperAdmin();
-            var actorCompanyId = _tenantService.GetCurrentUserCompanyId();
+            var scope = GetRoleManagementScopeContext();
+            var actorCompanyId = scope.CompanyId;
             var role = _uow.Context.RoleDefinitions
                 .Include(r => r.Company)
                 .Include(r => r.RolePermissions)
@@ -214,7 +271,7 @@ namespace HR.Web.Controllers
                 return HttpNotFound();
             }
 
-            if (!CanDeleteRoleDefinition(role, isActualSuperAdmin, actorCompanyId))
+            if (!CanManageRoleDefinition(role, scope))
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
@@ -245,17 +302,16 @@ namespace HR.Web.Controllers
 
         private RoleManagementPageViewModel BuildRoleManagementPageViewModel(RoleManagementPageViewModel model)
         {
-            var isActualSuperAdmin = _tenantService.IsActualSuperAdmin();
-            var currentCompanyId = _tenantService.GetCurrentUserCompanyId();
+            var scope = GetRoleManagementScopeContext();
 
-            model.IsActualSuperAdmin = isActualSuperAdmin;
-            model.CurrentCompanyId = currentCompanyId;
-            model.Companies = isActualSuperAdmin
+            model.IsActualSuperAdmin = scope.IsGlobalSuperAdmin;
+            model.CurrentCompanyId = scope.CompanyId;
+            model.Companies = scope.IsGlobalSuperAdmin
                 ? _uow.Companies.GetAll().OrderBy(c => c.Name).ToList()
                 : new List<Company>();
-            model.CompanyId = isActualSuperAdmin ? model.CompanyId : currentCompanyId;
+            model.CompanyId = scope.IsGlobalSuperAdmin ? model.CompanyId : scope.CompanyId;
             model.ModulePermissions = BuildModulePermissionInputs(model.ModulePermissions);
-            model.ExistingRoles = BuildRoleDefinitionSummaries(isActualSuperAdmin, currentCompanyId);
+            model.ExistingRoles = BuildRoleDefinitionSummaries(scope);
 
             return model;
         }
@@ -275,7 +331,7 @@ namespace HR.Web.Controllers
             return modules;
         }
 
-        private List<RoleDefinitionSummaryViewModel> BuildRoleDefinitionSummaries(bool isActualSuperAdmin, int? currentCompanyId)
+        private List<RoleDefinitionSummaryViewModel> BuildRoleDefinitionSummaries(RoleManagementScopeContext scope)
         {
             var query = _uow.Context.RoleDefinitions
                 .Include(r => r.Company)
@@ -284,10 +340,7 @@ namespace HR.Web.Controllers
                 .Where(r => r.IsActive)
                 .AsQueryable();
 
-            if (!isActualSuperAdmin)
-            {
-                query = query.Where(r => !r.CompanyId.HasValue || r.CompanyId == currentCompanyId);
-            }
+            query = ApplyRoleDefinitionScopeFilter(query, scope);
 
             var roles = query
                 .OrderBy(r => r.CompanyId.HasValue)
@@ -304,7 +357,7 @@ namespace HR.Web.Controllers
                 IsGlobal = !role.CompanyId.HasValue,
                 CreatedDate = role.CreatedDate,
                 CreatedByUserName = role.CreatedByUserName,
-                CanDelete = CanDeleteRoleDefinition(role, isActualSuperAdmin, currentCompanyId),
+                CanDelete = CanManageRoleDefinition(role, scope),
                 AssignedUsersCount = role.Users != null ? role.Users.Count : 0,
                 Permissions = role.RolePermissions
                     .OrderBy(p => p.ModuleKey)
@@ -330,12 +383,12 @@ namespace HR.Web.Controllers
             return company != null ? company.Name : "Global";
         }
 
-        private RoleManagementPageViewModel PopulateRoleEditModel(RoleDefinition role, RoleManagementPageViewModel model, bool isActualSuperAdmin, int? currentCompanyId)
+        private RoleManagementPageViewModel PopulateRoleEditModel(RoleDefinition role, RoleManagementPageViewModel model, RoleManagementScopeContext scope)
         {
             model.EditingRoleId = role.Id;
             model.Name = role.Name;
             model.Description = role.Description;
-            model.CompanyId = isActualSuperAdmin ? role.CompanyId : currentCompanyId;
+            model.CompanyId = scope.IsGlobalSuperAdmin ? role.CompanyId : scope.CompanyId;
 
             model.ModulePermissions = RoleModuleCatalog.All
                 .Select(module =>
@@ -358,27 +411,7 @@ namespace HR.Web.Controllers
             return model;
         }
 
-        private bool CanEditRoleDefinition(RoleDefinition role, bool isActualSuperAdmin, int? currentCompanyId)
-        {
-            return CanDeleteRoleDefinition(role, isActualSuperAdmin, currentCompanyId);
-        }
-
-        private bool CanDeleteRoleDefinition(RoleDefinition role, bool isActualSuperAdmin, int? currentCompanyId)
-        {
-            if (role == null)
-            {
-                return false;
-            }
-
-            if (isActualSuperAdmin)
-            {
-                return true;
-            }
-
-            return role.CompanyId.HasValue && currentCompanyId.HasValue && role.CompanyId.Value == currentCompanyId.Value;
-        }
-
-        private void NormalizeRolePermissionSelections(RoleManagementPageViewModel model, bool isActualSuperAdmin)
+        private void NormalizeRolePermissionSelections(RoleManagementPageViewModel model)
         {
             model.ModulePermissions = BuildModulePermissionInputs(model.ModulePermissions);
 
@@ -440,7 +473,8 @@ namespace HR.Web.Controllers
 
         private void ValidateRoleDefinitionModel(RoleManagementPageViewModel model, int? scopedCompanyId, int? editingRoleId)
         {
-            if (!scopedCompanyId.HasValue && !_tenantService.IsActualSuperAdmin())
+            var scope = GetRoleManagementScopeContext();
+            if (!scopedCompanyId.HasValue && !scope.IsGlobalSuperAdmin)
             {
                 ModelState.AddModelError("CompanyId", "Company context is required to create a role template.");
             }
@@ -465,9 +499,10 @@ namespace HR.Web.Controllers
 
         private List<SelectListItem> BuildAvailableRoleOptions(bool isActualSuperAdmin, int? actorCompanyId, int? selectedCompanyId, bool restrictToFullAdmin, string selectedRoleKey)
         {
+            var scope = GetRoleManagementScopeContext();
             var options = new List<SelectListItem>();
 
-            if (restrictToFullAdmin && !isActualSuperAdmin)
+            if (restrictToFullAdmin && !scope.IsGlobalSuperAdmin)
             {
                 options.Add(new SelectListItem
                 {
@@ -491,7 +526,7 @@ namespace HR.Web.Controllers
                 Selected = string.Equals(selectedRoleKey, "builtin:Admin", StringComparison.OrdinalIgnoreCase)
             });
 
-            if (isActualSuperAdmin)
+            if (scope.IsGlobalSuperAdmin)
             {
                 options.Add(new SelectListItem
                 {
@@ -501,7 +536,7 @@ namespace HR.Web.Controllers
                 });
             }
 
-            var roleDefinitions = GetAssignableRoleDefinitions(isActualSuperAdmin, actorCompanyId);
+            var roleDefinitions = GetAssignableRoleDefinitions(actorCompanyId, selectedCompanyId);
             foreach (var roleDefinition in roleDefinitions)
             {
                 var scopeName = BuildScopeName(roleDefinition.Company);
@@ -516,17 +551,15 @@ namespace HR.Web.Controllers
             return options;
         }
 
-        private List<RoleDefinition> GetAssignableRoleDefinitions(bool isActualSuperAdmin, int? actorCompanyId)
+        private List<RoleDefinition> GetAssignableRoleDefinitions(int? actorCompanyId, int? catalogCompanyId = null)
         {
+            var scope = GetRoleManagementScopeContext();
             var query = _uow.Context.RoleDefinitions
                 .Include(r => r.Company)
                 .Where(r => r.IsActive)
                 .AsQueryable();
 
-            if (!isActualSuperAdmin)
-            {
-                query = query.Where(r => !r.CompanyId.HasValue || r.CompanyId == actorCompanyId);
-            }
+            query = ApplyRoleDefinitionScopeFilter(query, scope, catalogCompanyId ?? actorCompanyId);
 
             return query
                 .OrderBy(r => r.CompanyId.HasValue)
@@ -537,6 +570,7 @@ namespace HR.Web.Controllers
 
         private RoleSelectionResolution ResolveRoleSelection(string selectedRoleKey, bool isActualSuperAdmin, int? actorCompanyId, int? targetCompanyId)
         {
+            var scope = GetRoleManagementScopeContext();
             if (string.IsNullOrWhiteSpace(selectedRoleKey))
             {
                 return new RoleSelectionResolution
@@ -548,7 +582,7 @@ namespace HR.Web.Controllers
             if (selectedRoleKey.StartsWith("builtin:", StringComparison.OrdinalIgnoreCase))
             {
                 var builtinRole = selectedRoleKey.Substring("builtin:".Length);
-                if (string.Equals(builtinRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase) && !isActualSuperAdmin)
+                if (string.Equals(builtinRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase) && !scope.IsGlobalSuperAdmin)
                 {
                     return new RoleSelectionResolution
                     {
@@ -608,7 +642,15 @@ namespace HR.Web.Controllers
                 };
             }
 
-            if (!isActualSuperAdmin && roleDefinition.CompanyId.HasValue && roleDefinition.CompanyId.Value != actorCompanyId)
+            if (scope.IsImpersonating && !roleDefinition.CompanyId.HasValue)
+            {
+                return new RoleSelectionResolution
+                {
+                    ErrorMessage = "Global role templates cannot be assigned while impersonating a company."
+                };
+            }
+
+            if (!scope.IsGlobalSuperAdmin && roleDefinition.CompanyId.HasValue && roleDefinition.CompanyId.Value != actorCompanyId)
             {
                 return new RoleSelectionResolution
                 {

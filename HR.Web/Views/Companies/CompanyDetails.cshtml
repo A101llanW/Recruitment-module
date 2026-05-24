@@ -1,4 +1,5 @@
 @model HR.Web.Controllers.CompanyDetailsViewModel
+@using HR.Web.Helpers
 @{
     ViewBag.Title = "Company Profile - " + Model.Company.Name;
     Layout = "~/Views/Shared/_Layout.cshtml";
@@ -8,6 +9,8 @@
     var licenseHistory = (Model.LicenseTransactions ?? new System.Collections.Generic.List<HR.Web.Models.LicenseTransaction>())
         .OrderByDescending(t => t.TransactionDate)
         .ToList();
+    var logoUrl = CompanyLogoHelper.GetPublicUrl(Model.Company.LogoPath, Url);
+    var hasLogo = !string.IsNullOrEmpty(logoUrl);
 }
 
 <style>
@@ -175,14 +178,95 @@
         background: #ed8936;
         color: #fff;
     }
+
+    .profile-brand {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .profile-logo {
+        width: 72px;
+        height: 72px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px;
+        flex-shrink: 0;
+    }
+
+    .profile-logo img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .profile-logo.is-empty {
+        color: var(--system-blue);
+        font-size: 1.75rem;
+    }
+
+    .logo-upload-preview {
+        width: 100px;
+        height: 100px;
+        border: 1px dashed var(--border-color);
+        border-radius: 8px;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px;
+        margin-bottom: 12px;
+    }
+
+    .logo-upload-preview img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .logo-upload-preview.is-empty {
+        color: #adb5bd;
+        font-size: 1.75rem;
+    }
 </style>
 
 <div class="details-wrapper">
     <div class="container-fluid">
+        @if (TempData["SuccessMessage"] != null)
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="fas fa-check-circle mr-2"></i>@TempData["SuccessMessage"]
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+        }
+        @if (TempData["ErrorMessage"] != null)
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-circle mr-2"></i>@TempData["ErrorMessage"]
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+        }
+
         <div class="profile-header">
-            <div class="profile-title">
-                <h2><i class="fas fa-building"></i> @Model.Company.Name</h2>
-                <p>System Slug: <code>/@Model.Company.Slug</code> &bull; Resource ID: #@Model.Company.Id</p>
+            <div class="profile-brand">
+                <div class="profile-logo @(hasLogo ? string.Empty : "is-empty")">
+                    @if (hasLogo)
+                    {
+                        <img src="@logoUrl" alt="@Model.Company.Name logo" />
+                    }
+                    else
+                    {
+                        <i class="fas fa-building"></i>
+                    }
+                </div>
+                <div class="profile-title">
+                    <h2>@Model.Company.Name</h2>
+                    <p>System Slug: <code>/@Model.Company.Slug</code> &bull; Resource ID: #@Model.Company.Id</p>
+                </div>
             </div>
             <div class="d-flex gap-2">
                 <a href="@Url.Action("EditCompany", new { id = Model.Company.Id })" class="btn-blue" style="font-size: 0.85rem; padding: 6px 15px; text-decoration: none;">
@@ -196,6 +280,49 @@
 
         <div class="row">
             <div class="col-lg-4">
+                <div class="section-card">
+                    <div class="section-header">
+                        <h4>Branding</h4>
+                    </div>
+                    <div class="section-body">
+                        <div class="logo-upload-preview @(hasLogo ? string.Empty : "is-empty")" id="companyLogoPreview">
+                            @if (hasLogo)
+                            {
+                                <img src="@logoUrl" alt="@Model.Company.Name logo" id="companyLogoPreviewImage" />
+                            }
+                            else
+                            {
+                                <i class="fas fa-image" id="companyLogoPreviewPlaceholder"></i>
+                                <img src="" alt="" id="companyLogoPreviewImage" style="display:none;" />
+                            }
+                        </div>
+                        @using (Html.BeginForm("UploadCompanyLogo", "Companies", FormMethod.Post, new { enctype = "multipart/form-data", @class = "mb-3" }))
+                        {
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.Company.Id" />
+                            <div class="form-group mb-2">
+                                <label class="small font-weight-bold text-uppercase text-muted">Upload logo</label>
+                                <input type="file" name="logoFile" id="companyLogoFile" class="form-control form-control-sm" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp" />
+                                <small class="text-muted d-block mt-1">PNG, JPG, GIF, or WEBP.</small>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm btn-block font-weight-bold">
+                                <i class="fas fa-upload mr-1"></i> Save logo
+                            </button>
+                        }
+                        @if (hasLogo)
+                        {
+                            using (Html.BeginForm("RemoveCompanyLogo", "Companies", FormMethod.Post, new { @class = "mt-2" }))
+                            {
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@Model.Company.Id" />
+                                <button type="submit" class="btn btn-outline-danger btn-sm btn-block font-weight-bold" onclick="return confirm('Remove this company logo?');">
+                                    <i class="fas fa-trash-alt mr-1"></i> Remove logo
+                                </button>
+                            }
+                        }
+                    </div>
+                </div>
+
                 <div class="section-card">
                     <div class="section-header">
                         <h4>Administrative Info</h4>
@@ -258,13 +385,15 @@
                                 </div>
                                 <p class="small mb-2 text-dark">Target: <strong>@activeRequest.RequestedFrom</strong></p>
                                 <div class="d-flex gap-2">
-                                    @using (Html.BeginForm("CancelImpersonationRequest", "Companies", FormMethod.Post, new { @class = "flex-fill" }))
-                                    {
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="requestId" value="@activeRequest.Id" />
-                                        <button type="submit" class="btn btn-sm btn-outline-danger btn-block font-weight-bold">
-                                            <i class="fas fa-times-circle mr-1"></i> Retract Request
-                                        </button>
+                                    @{
+                                        using (Html.BeginForm("CancelImpersonationRequest", "Companies", FormMethod.Post, new { @class = "flex-fill" }))
+                                        {
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="requestId" value="@activeRequest.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger btn-block font-weight-bold">
+                                                <i class="fas fa-times-circle mr-1"></i> Retract Request
+                                            </button>
+                                        }
                                     }
                                 </div>
                             </div>
@@ -339,7 +468,7 @@
                             }
                             else
                             {
-                                <button type="button" class="btn-impersonate" data-toggle="modal" data-target="#impersonateModal">
+                                <button type="button" class="btn-impersonate" id="btnOpenImpersonateModal" aria-haspopup="dialog" aria-controls="impersonateModal">
                                     <i class="fas fa-user-shield mr-2"></i> Elevate to Admin (Request)
                                 </button>
                             }
@@ -620,5 +749,34 @@
         function toggleLicenseRows() {
             toggleRows('.license-history-extra', 'licenseHistoryToggleLabel', 'licenseHistoryToggleIcon', @licenseHistory.Count, @previewRowCount);
         }
+
+        (function () {
+            var openBtn = document.getElementById('btnOpenImpersonateModal');
+            var modal = document.getElementById('impersonateModal');
+            if (openBtn && modal && typeof window.jQuery !== 'undefined') {
+                openBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    window.jQuery(modal).appendTo('body').modal('show');
+                });
+            }
+
+            var fileInput = document.getElementById('companyLogoFile');
+            var previewImage = document.getElementById('companyLogoPreviewImage');
+            var previewBox = document.getElementById('companyLogoPreview');
+            var placeholder = document.getElementById('companyLogoPreviewPlaceholder');
+            if (!fileInput || !previewImage || !previewBox) return;
+
+            fileInput.addEventListener('change', function () {
+                if (!fileInput.files || !fileInput.files.length) return;
+                var reader = new FileReader();
+                reader.onload = function (e) {
+                    previewImage.src = e.target.result;
+                    previewImage.style.display = 'block';
+                    previewBox.classList.remove('is-empty');
+                    if (placeholder) placeholder.style.display = 'none';
+                };
+                reader.readAsDataURL(fileInput.files[0]);
+            });
+        })();
     </script>
 }

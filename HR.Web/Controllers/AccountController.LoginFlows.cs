@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Data.Entity;
+using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -162,6 +164,7 @@ namespace HR.Web.Controllers
         {
             ModelState.AddModelError("", message);
             ViewBag.ReturnUrl = returnUrl;
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(RouteData.Values["tenant"] as string);
             return View();
         }
 
@@ -188,6 +191,8 @@ namespace HR.Web.Controllers
             ModelState.AddModelError("", message);
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, failureReason);
             AuditSvc.LogLogin(request.Username, false, failureReason);
+            ViewBag.ReturnUrl = request.ReturnUrl;
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
             return View();
         }
 
@@ -212,12 +217,13 @@ namespace HR.Web.Controllers
                 "",
                 string.Format("IP {0} blocked after {1} failed attempts in {2} minutes", clientIp, ipFailureCount, ipWindowMinutes));
             ModelState.AddModelError("", "Too many failed login attempts from your location. Please wait 15 minutes before trying again.");
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(RouteData.Values["tenant"] as string);
             return View();
         }
 
         private LoginCandidateModel DiscoverLoginCandidates(LoginRequestModel request, int? targetCompanyId)
         {
-            var discoveryQuery = _uow.Context.Users.AsQueryable();
+            var discoveryQuery = _uow.Context.Users.Include(u => u.Company).AsQueryable();
             if (targetCompanyId.HasValue)
             {
                 discoveryQuery = discoveryQuery.Where(u => u.CompanyId == targetCompanyId.Value);
@@ -253,6 +259,7 @@ namespace HR.Web.Controllers
             ModelState.AddModelError("", string.Format("Account is locked. Please try again in {0} minutes.", remainingTime.Minutes));
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, effectiveCompanyId, "Account locked");
             AuditSvc.LogLogin(request.Username, false, string.Format("Account locked. Try again in {0} minutes", remainingTime.Minutes));
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
             return View();
         }
 
@@ -261,6 +268,7 @@ namespace HR.Web.Controllers
             if (!request.IsEmailLogin && candidates.Count > 1 && !targetCompanyId.HasValue)
             {
                 ModelState.AddModelError("", "This username is used by multiple companies. Please use your email address to help us find the right account.");
+                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
                 return View();
             }
 
@@ -269,6 +277,7 @@ namespace HR.Web.Controllers
                 ViewBag.MultiCandidates = candidates;
                 ModelState.AddModelError("", "We found multiple accounts for this email. Please select the correct portal below.");
                 ViewBag.ReturnUrl = request.ReturnUrl;
+                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
                 return View();
             }
 
@@ -279,10 +288,7 @@ namespace HR.Web.Controllers
         {
             if (user == null)
             {
-                ModelState.AddModelError("", "Invalid username or password.");
-                SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, "Identifier not found");
-                AuditSvc.LogLogin(request.Username, false, "Invalid identifier: " + request.Username);
-                return View();
+                return BuildIdentifierNotFoundFailure(request, targetCompanyId);
             }
 
             var passwordFailure = ValidateUserPassword(request, user);
@@ -291,7 +297,115 @@ namespace HR.Web.Controllers
                 return passwordFailure;
             }
 
+            var companyAccessFailure = ValidateCompanyPortalAccessForLogin(user);
+            if (companyAccessFailure != null)
+            {
+                return companyAccessFailure;
+            }
+
             return CompleteLoginForValidatedUser(request, user);
+        }
+
+        private ActionResult ValidateCompanyPortalAccessForLogin(User user)
+        {
+            if (!user.CompanyId.HasValue)
+            {
+                return null;
+            }
+
+            var company = _uow.Companies.Get(user.CompanyId.Value);
+            if (company == null)
+            {
+                ModelState.AddModelError("", "Your company record could not be found. Contact support.");
+                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(RouteData.Values["tenant"] as string);
+                return View();
+            }
+
+            if (!company.IsActive)
+            {
+                ModelState.AddModelError("", "Your company portal is inactive. Contact your system administrator.");
+                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(RouteData.Values["tenant"] as string);
+                return View();
+            }
+
+            var tenantService = new TenantService(_uow);
+            if (!tenantService.IsCompanyLicenseActive(company.Id))
+            {
+                return RedirectToAction("LicenseExpired", "Account", new { tenant = company.Slug });
+            }
+
+            return null;
+        }
+
+        private ActionResult BuildIdentifierNotFoundFailure(LoginRequestModel request, int? targetCompanyId)
+        {
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
+            ViewBag.ReturnUrl = request.ReturnUrl;
+
+            if (targetCompanyId.HasValue)
+            {
+                var targetCompany = _uow.Companies.Get(targetCompanyId.Value);
+                var targetCompanyName = targetCompany != null ? targetCompany.Name : "this company";
+                var accountsElsewhere = FindAccountsInOtherCompanies(request, targetCompanyId.Value);
+
+                if (accountsElsewhere.Count > 0)
+                {
+                    ViewBag.MultiCandidates = accountsElsewhere;
+                    var identifierLabel = request.IsEmailLogin ? "email" : "username";
+
+                    if (accountsElsewhere.Count == 1)
+                    {
+                        var otherCompanyName = accountsElsewhere[0].Company != null
+                            ? accountsElsewhere[0].Company.Name
+                            : "another company";
+                        ModelState.AddModelError(
+                            "",
+                            string.Format(
+                                CultureInfo.InvariantCulture,
+                                "No account with this {0} is registered for {1}. Your {0} is associated with {2}. Sign in using that company's portal below.",
+                                identifierLabel,
+                                targetCompanyName,
+                                otherCompanyName));
+                    }
+                    else
+                    {
+                        ModelState.AddModelError(
+                            "",
+                            string.Format(
+                                CultureInfo.InvariantCulture,
+                                "No account with this {0} is registered for {1}. Matching accounts were found at other companies—select the correct portal below.",
+                                identifierLabel,
+                                targetCompanyName));
+                    }
+
+                    SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, "Identifier not found in tenant");
+                    AuditSvc.LogLogin(request.Username, false, "Identifier not in tenant, found elsewhere: " + request.Username);
+                    return View();
+                }
+            }
+
+            ModelState.AddModelError("", "Invalid username or password.");
+            SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, "Identifier not found");
+            AuditSvc.LogLogin(request.Username, false, "Invalid identifier: " + request.Username);
+            return View();
+        }
+
+        private List<User> FindAccountsInOtherCompanies(LoginRequestModel request, int targetCompanyId)
+        {
+            var elsewhereQuery = _uow.Context.Users
+                .Include(u => u.Company)
+                .Where(u => u.CompanyId != targetCompanyId);
+
+            if (request.IsEmailLogin)
+            {
+                return elsewhereQuery
+                    .Where(u => u.Email != null && u.Email.ToLower() == request.LowerUsername)
+                    .ToList();
+            }
+
+            return elsewhereQuery
+                .Where(u => u.UserName != null && u.UserName.ToLower() == request.LowerUsername)
+                .ToList();
         }
 
         private ActionResult ValidateUserPassword(LoginRequestModel request, User user)
@@ -311,6 +425,7 @@ namespace HR.Web.Controllers
 
             ModelState.AddModelError("", warningMessage);
             AuditSvc.LogLogin(request.Username, false, "Invalid password");
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
             return View();
         }
 
@@ -328,24 +443,146 @@ namespace HR.Web.Controllers
 
         private ActionResult CompleteLoginForValidatedUser(LoginRequestModel request, User user)
         {
+            var relationship = LegalPolicyHelper.ResolveUserLegalRelationship(user);
+            if (!LegalPolicyHelper.UserMeetsCurrentPolicyVersions(user, relationship))
+            {
+                StorePendingLegalLogin(request, user);
+                PopulateLegalConsentModalViewBag(request, user);
+                ConfigureLoginPortalViewBag(request);
+                ViewBag.ReturnUrl = request.ReturnUrl;
+                return View("Login");
+            }
+
+            PersistUserLegalAcceptance(user);
+            return FinalizeAuthenticatedSessionTail(request, user);
+        }
+
+        private ActionResult FinalizeAuthenticatedSessionTail(LoginRequestModel request, User user)
+        {
             var loginContext = BuildLoginRoutingContext(user);
             RecordSuccessfulLoginState(request, user);
             EnsureLoginAccessToken(user, request.Username);
-            IssueLoginCookie(user, loginContext.Role);
-            AuditSvc.LogAction(request.Username, "LOGIN_COOKIE_SET", "Account", user.Id.ToString(), true, "Auth cookie added to response");
+            StorePendingLoginContinuation(request, user);
 
             var emailVerificationRedirect = HandleUnverifiedEmailRedirect(request.Username, user, loginContext.TenantSlug);
             if (emailVerificationRedirect != null)
             {
+                IssueLoginCookie(user, loginContext.Role);
+                AuditSvc.LogAction(request.Username, "LOGIN_COOKIE_SET", "Account", user.Id.ToString(), true, "Auth cookie added for email verification");
                 return emailVerificationRedirect;
             }
 
             if (RequiresPrivilegedMfa(loginContext))
             {
-                return HandlePrivilegedMfaRedirect(request.Username, user);
+                return HandlePrivilegedMfaRedirect(request.Username, user, loginContext.TenantSlug);
             }
 
+            IssueLoginCookie(user, loginContext.Role);
+            AuditSvc.LogAction(request.Username, "LOGIN_COOKIE_SET", "Account", user.Id.ToString(), true, "Auth cookie added to response");
             return HandleStandardUserRedirect(request, user, loginContext.TenantSlug);
+        }
+
+        private void StorePendingLegalLogin(LoginRequestModel request, User user)
+        {
+            Session[LegalConsentSession.PendingUserIdKey] = user.Id;
+            Session[LegalConsentSession.PendingStartedTicksKey] = DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
+            Session[LegalConsentSession.PendingUsernameKey] = user.UserName;
+            if (user.CompanyId.HasValue)
+            {
+                Session[LegalConsentSession.PendingCompanyIdKey] = user.CompanyId.Value;
+            }
+            else
+            {
+                Session.Remove(LegalConsentSession.PendingCompanyIdKey);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.ReturnUrl))
+            {
+                Session[LegalConsentSession.PendingReturnUrlKey] = request.ReturnUrl;
+            }
+            else
+            {
+                Session.Remove(LegalConsentSession.PendingReturnUrlKey);
+            }
+        }
+
+        private void StorePendingLoginContinuation(LoginRequestModel request, User user)
+        {
+            Session[LegalConsentSession.PendingUsernameKey] = user.UserName;
+            if (user.CompanyId.HasValue)
+            {
+                Session[LegalConsentSession.PendingCompanyIdKey] = user.CompanyId.Value;
+            }
+            else
+            {
+                Session.Remove(LegalConsentSession.PendingCompanyIdKey);
+            }
+        }
+
+        private LoginRequestModel BuildPendingCompletionLoginRequest(User user)
+        {
+            var urlTenantToken = RouteData.Values["tenant"] as string;
+            var returnUrl = Session[LegalConsentSession.PendingReturnUrlKey] as string;
+            return new LoginRequestModel
+            {
+                Username = user.UserName,
+                Password = null,
+                Captcha = null,
+                ReturnUrl = returnUrl,
+                UrlTenantToken = urlTenantToken,
+                ClientIp = Request.UserHostAddress,
+                IsGlobalSuperAdmin = false,
+                IsEmailLogin = false,
+                LowerUsername = null
+            };
+        }
+
+        private void PopulateLegalConsentModalViewBag(LoginRequestModel request, User user)
+        {
+            var tenant = request != null ? request.UrlTenantToken : null;
+            ViewBag.ShowLegalConsentModal = true;
+            ViewBag.LegalTermsUrl = Url.Action("Terms", "Home", new { tenant });
+            ViewBag.LegalPrivacyUrl = Url.Action("Privacy", "Home", new { tenant });
+            ViewBag.LegalConsentDisplayName = string.Format(CultureInfo.InvariantCulture, "{0} {1}", user.FirstName, user.LastName).Trim();
+        }
+
+        private ActionResult HandleConfirmLegalConsent(bool acceptLegalTerms)
+        {
+            ConfigureLoginPortalViewBag(new LoginRequestModel
+            {
+                UrlTenantToken = RouteData.Values["tenant"] as string,
+            });
+
+            var userId = LegalConsentSession.TryReadUserId(Session);
+            if (!userId.HasValue || !LegalConsentSession.IsFresh(Session))
+            {
+                LegalConsentSession.Clear(Session);
+                TempData["ErrorMessage"] = "Your sign-in confirmation expired. Please sign in again.";
+                return RedirectToAction("Login", new { tenant = RouteData.Values["tenant"] as string });
+            }
+
+            var user = _uow.Users.Get(userId.Value);
+            if (user == null)
+            {
+                LegalConsentSession.Clear(Session);
+                TempData["ErrorMessage"] = "Your sign-in confirmation is no longer valid. Please sign in again.";
+                return RedirectToAction("Login", new { tenant = RouteData.Values["tenant"] as string });
+            }
+
+            var relationship = LegalPolicyHelper.ResolveUserLegalRelationship(user);
+            var resumeRequest = BuildPendingCompletionLoginRequest(user);
+
+            if (!acceptLegalTerms)
+            {
+                ModelState.AddModelError("", "Please accept the Terms & Conditions and Privacy Policy to continue.");
+                PopulateLegalConsentModalViewBag(resumeRequest, user);
+                ViewBag.ReturnUrl = resumeRequest.ReturnUrl;
+                return View("Login");
+            }
+
+            PersistUserLegalAcceptance(user);
+            LegalConsentSession.Clear(Session);
+            return FinalizeAuthenticatedSessionTail(resumeRequest, user);
         }
 
         private LoginRoutingContextModel BuildLoginRoutingContext(User user)
@@ -423,21 +660,17 @@ namespace HR.Web.Controllers
             return otpCode;
         }
 
-        private static void QueueEmailVerificationDelivery(string userEmail, string securityToken)
+        private void QueueEmailVerificationDelivery(string userEmail, string securityToken)
         {
-            Task.Run(async () =>
+            try
             {
-                try
-                {
-                    var emailSvc = new EmailService(new SettingsService());
-                    await emailSvc.SendEmailVerificationOtpAsync(userEmail, securityToken);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine("--- [EMAIL VERIFICATION ERROR] Failed to send: " + ex.Message);
-                    System.Diagnostics.Trace.WriteLine("--- [EMAIL VERIFICATION ERROR] Failed to send: " + ex.Message);
-                }
-            });
+                EmailSvc.SendEmailVerificationOtpAsync(userEmail, securityToken).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("--- [EMAIL VERIFICATION ERROR] Failed to send: " + ex.Message);
+                System.Diagnostics.Trace.WriteLine("--- [EMAIL VERIFICATION ERROR] Failed to send: " + ex.Message);
+            }
         }
 
         private static bool RequiresPrivilegedMfa(LoginRoutingContextModel loginContext)
@@ -445,23 +678,27 @@ namespace HR.Web.Controllers
             return loginContext.IsSuperAdmin || string.Equals(loginContext.Role, "Admin", StringComparison.OrdinalIgnoreCase);
         }
 
-        private ActionResult HandlePrivilegedMfaRedirect(string username, User user)
+        private ActionResult HandlePrivilegedMfaRedirect(string username, User user, string tenantSlug)
         {
             if (!user.IsTwoFactorEnabled)
             {
                 Session["ForcedMfaSetup"] = user.UserName;
-                return RedirectToAction("SetupMFA");
+                return RedirectToAction("SetupMFA", "Account", new { tenant = tenantSlug });
             }
 
             AuditSvc.LogAction(username, "LOGIN_REDIRECT_MFA", "Account", user.Id.ToString(), true, "Redirecting to MFA challenge");
             Session["PendingMfaUsername"] = user.UserName;
-
-            if (string.Equals(user.MfaMethod, "Email", StringComparison.OrdinalIgnoreCase))
+            if (user.CompanyId.HasValue)
             {
-                SendMfaCode(user);
+                Session[LegalConsentSession.PendingCompanyIdKey] = user.CompanyId.Value;
             }
 
-            return RedirectToAction("VerifyMFA");
+            if (UsesEmailMfa(user) || string.IsNullOrWhiteSpace(user.MfaMethod))
+            {
+                SendMfaCode(user, "Email");
+            }
+
+            return RedirectToAction("VerifyMFA", "Account", new { tenant = tenantSlug });
         }
 
         private ActionResult HandleStandardUserRedirect(LoginRequestModel request, User user, string tenantSlug)
@@ -469,6 +706,7 @@ namespace HR.Web.Controllers
             if (string.IsNullOrEmpty(tenantSlug))
             {
                 ModelState.AddModelError("", "Your account is not associated with an active company.");
+                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
                 return View();
             }
 
@@ -489,6 +727,30 @@ namespace HR.Web.Controllers
 
             AuditSvc.LogAction(request.Username, "LOGIN_REDIRECT_DEFAULT", "Account", user.Id.ToString(), true, "Redirecting to default dashboard for " + tenantSlug);
             return RedirectToAction("Index", "Positions", new { tenant = tenantSlug });
+        }
+
+        private void ConfigureLoginPortalViewBag(LoginRequestModel request)
+        {
+            ViewBag.IsTenantCompanyPortal = request != null && !string.IsNullOrEmpty(request.UrlTenantToken);
+        }
+
+        private void PersistUserLegalAcceptance(User user)
+        {
+            var relationship = LegalPolicyHelper.ResolveUserLegalRelationship(user);
+            var expectedPrivacy = LegalPolicyHelper.GetPrivacyVersion(relationship);
+            var expectedTerms = LegalPolicyHelper.GetTermsVersion(relationship);
+            var requiresPrivacyUpdate = !user.PrivacyAcceptedAt.HasValue ||
+                                        !string.Equals(user.PrivacyVersion, expectedPrivacy, StringComparison.Ordinal);
+            var requiresTermsUpdate = !user.TermsAcceptedAt.HasValue ||
+                                      !string.Equals(user.TermsVersion, expectedTerms, StringComparison.Ordinal);
+            if (!requiresPrivacyUpdate && !requiresTermsUpdate)
+            {
+                return;
+            }
+
+            LegalPolicyHelper.ApplyUserAcceptance(user, DateTime.UtcNow, relationship);
+            _uow.Users.Update(user);
+            _uow.Complete();
         }
 
         private void AddPreferredTenantCookie(string tenantSlug)

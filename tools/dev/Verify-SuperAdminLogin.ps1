@@ -1,30 +1,29 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Verifies SuperAdmin (global) credentials against the HR database using the same PBKDF2 logic as the web app.
+  Verifies global (SuperAdmin) credentials against the HR database using the same PBKDF2 logic as the web app.
 
 .DESCRIPTION
-  Loads HR.Web.dll from bin and calls HR.Web.Helpers.PasswordHelper.VerifyPassword against the stored hash.
-  This confirms username/password match the database; the live /Account/Login page still requires CAPTCHA and MFA.
+  Local development tool only — not part of the web deploy. Loads HR.Web.dll from HR.Web\bin and
+  calls HR.Web.Helpers.PasswordHelper.VerifyPassword. The live /Account/Login page still requires CAPTCHA and MFA.
 
 .PARAMETER Username
   Default: admin
 
 .PARAMETER Password
-  Default: NanoSoftTech2026!
+  Required. Never commit or script a default value.
 
 .PARAMETER ConnectionString
-  Optional. If omitted, reads HrContext from Web.config next to this project.
+  Optional. If omitted, reads HrContext from HR.Web\Web.config.
 
 .EXAMPLE
-  .\Test-SuperAdminLogin.ps1
-
-.EXAMPLE
-  .\Test-SuperAdminLogin.ps1 -Password 'OtherPass!1'
+  $p = Read-Host -AsSecureString; $b = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($p))
+  .\tools\dev\Verify-SuperAdminLogin.ps1 -Password $b
 #>
 param(
     [string]$Username = "admin",
-    [string]$Password = "NanoSoftTech2026!",
+    [Parameter(Mandatory = $true)]
+    [string]$Password,
     [string]$ConnectionString = $null
 )
 
@@ -33,13 +32,14 @@ $ErrorActionPreference = "Stop"
 $scriptDir = $PSScriptRoot
 if (-not $scriptDir) { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
-$hrWebRoot = Split-Path -Parent $scriptDir
+$repoRoot = Split-Path -Parent (Split-Path -Parent $scriptDir)
+$hrWebRoot = Join-Path $repoRoot "HR.Web"
 $binPath = Join-Path $hrWebRoot "bin"
 $webConfigPath = Join-Path $hrWebRoot "Web.config"
 $hrWebDll = Join-Path $binPath "HR.Web.dll"
 
 if (-not (Test-Path $hrWebDll)) {
-    Write-Error "HR.Web.dll not found at '$hrWebDll'. Build the project (Debug) first."
+    Write-Error "HR.Web.dll not found at '$hrWebDll'. Build HR.Web first."
 }
 
 if ([string]::IsNullOrWhiteSpace($ConnectionString)) {
@@ -99,14 +99,13 @@ if ([string]::IsNullOrWhiteSpace($hash)) {
     exit 3
 }
 
-# Same verification as the MVC app (HR.Web.Helpers.PasswordHelper)
 [System.Reflection.Assembly]::LoadFrom($hrWebDll) | Out-Null
 $verified = [HR.Web.Helpers.PasswordHelper]::VerifyPassword($hash, $Password)
 
 if ($verified) {
     Write-Host "PASS: Password matches the stored hash for '$Username'." -ForegroundColor Green
     if ($mfa) {
-        Write-Host "Note: After password check, the site will still require MFA (e.g. email code) on /Account/VerifyMFA." -ForegroundColor Yellow
+        Write-Host "Note: After password check, the site will still require MFA on /Account/VerifyMFA." -ForegroundColor Yellow
     }
     Write-Host "Note: /Account/Login also requires CAPTCHA; this script does not POST to the site." -ForegroundColor DarkGray
     exit 0

@@ -352,8 +352,8 @@ namespace HR.Web.Controllers
                 Company = company,
                 Users = users,
                 UserRoleDisplayNames = userRoleDisplayNames,
-                Positions = _uow.Positions.GetAll().Where(p => p.CompanyId == companyId).ToList(),
-                Applications = _uow.Applications.GetAll().Where(a => a.CompanyId == companyId).ToList(),
+                Positions = _uow.Positions.GetAll(p => p.Department).Where(p => p.CompanyId == companyId).ToList(),
+                Applications = _uow.Applications.GetAll(a => a.Applicant, a => a.Position).Where(a => a.CompanyId == companyId).ToList(),
                 Departments = _uow.Departments.GetAll().Where(d => d.CompanyId == companyId).ToList(),
                 LicenseTransactions = _uow.LicenseTransactions.GetAll()
                     .Where(lt => lt.CompanyId == companyId)
@@ -371,7 +371,7 @@ namespace HR.Web.Controllers
                     .FirstOrDefault(r =>
                         r.CompanyId == companyId &&
                         r.RequestedBy == User.Identity.Name &&
-                        r.Status == ImpersonationRequestStatus.Approved &&
+                        (r.Status == ImpersonationRequestStatus.Approved || r.Status == ImpersonationRequestStatus.Active) &&
                         (!r.ExpiryDate.HasValue || r.ExpiryDate > DateTime.Now)),
                 ActiveRejectedRequest = null,
                 CompanyAdmins = _uow.Users.GetAll()
@@ -438,7 +438,8 @@ namespace HR.Web.Controllers
                 return HttpNotFound();
             }
 
-            if (request.Status == ImpersonationRequestStatus.Approved)
+            if (request.Status == ImpersonationRequestStatus.Approved ||
+                request.Status == ImpersonationRequestStatus.Active)
             {
                 return null;
             }
@@ -471,11 +472,7 @@ namespace HR.Web.Controllers
                 null,
                 new { Reason = request.Reason, CompanyName = company.Name, ApprovedBy = request.RequestedFrom });
 
-            Session["ImpersonatedRequestId"] = request.Id;
-            Session["ImpersonatedCompanyId"] = request.CompanyId;
-            Session["ImpersonationReason"] = request.Reason ?? "Not specified";
-            Session["ImpersonatedCompanyName"] = company.Name;
-            Session["ImpersonationExpiry"] = request.ExpiryDate;
+            ImpersonationSessionHelper.ApplySession(Session, request, company);
 
             request.Status = ImpersonationRequestStatus.Active;
             _uow.ImpersonationRequests.Update(request);

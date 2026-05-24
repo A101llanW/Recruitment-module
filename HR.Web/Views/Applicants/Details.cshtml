@@ -4,12 +4,7 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 <style>
-    body {
-        font-size: 0.97rem;
-        background: #f6faff;
-        min-height: 100vh;
-    }
-    .card-blue {
+.card-blue {
         background: #f6faff;
         border-radius: 0;
         box-shadow: none;
@@ -212,20 +207,6 @@
                                                 <dt class="col-sm-4 d-flex align-items-center">Status</dt>
                                                 <dd class="col-sm-8 d-flex align-items-center">
                                                     <span class="badge badge-pill ms-2">@selectedApp.Status</span>
-                                                </dd>
-
-                                                <dt class="col-sm-4">Resume/CV</dt>
-                                                <dd class="col-sm-8">
-                                                    @if (!string.IsNullOrEmpty(selectedApp.ResumePath))
-                                                    {
-                                                        <a class="btn btn-sm btn-outline-primary" href="@Url.Action("DownloadCV", "Applicants", new { id = selectedApp.Id })" target="_blank">
-                                                            Download CV
-                                                        </a>
-                                                    }
-                                                    else
-                                                    {
-                                                        <span class="text-muted">No resume uploaded</span>
-                                                    }
                                                 </dd>
                                             </dl>
                                         </div>

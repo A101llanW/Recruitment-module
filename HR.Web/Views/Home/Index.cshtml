@@ -1,10 +1,12 @@
 @{
+    ViewBag.SuppressPageHero = true;
     Layout = null;
 }
 
 <!DOCTYPE html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HR Portal - All Links</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
@@ -33,6 +35,12 @@
         .global-section .link-title { color: white; }
         .global-section .link-url { background: rgba(255,255,255,0.2); color: #e9ecef; }
         .error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 6px; margin: 20px 0; }
+    
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr !important; }
+            body { margin: 12px; }
+            .container { padding: 16px !important; }
+        }
     </style>
 </head>
 <body>
@@ -74,6 +82,7 @@
         <div class="section">
             <h2>🏭 Company Portals</h2>
             @{
+    ViewBag.SuppressPageHero = true;
                 try
                 {
                     using (var uow = new HR.Web.Data.UnitOfWork())

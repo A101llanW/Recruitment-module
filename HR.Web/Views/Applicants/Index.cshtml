@@ -2,64 +2,15 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Applicants";
-    var interviewers = ViewBag.Interviewers as List<HR.Web.Models.User>;
-    var interviewedAppIds = ViewBag.InterviewedAppIds as List<int> ?? new List<int>();
-
-    Func<HR.Web.Models.Applicant, string> getProficiencyDisplay = (applicant) => {
-        if (applicant.Applications == null || !applicant.Applications.Any())
-            return "N/A";
-        var latest = applicant.Applications.OrderByDescending(a => a.AppliedOn).FirstOrDefault();
-        if (latest == null || string.IsNullOrEmpty(latest.WorkExperienceLevel))
-            return "N/A";
-        int val;
-        if (!int.TryParse(latest.WorkExperienceLevel, out val))
-            return latest.WorkExperienceLevel;
-        switch (val) {
-            case 0: return "No direct experience";
-            case 1: return "Less than 1 year";
-            case 2: return "1-2 years";
-            case 4: return "3-5 years";
-            case 6: return "5+ years";
-            default: return val + " years";
-        }
-    };
-
-    Func<HR.Web.Models.Applicant, int> getProficiencyValue = (applicant) => {
-        if (applicant.Applications == null || !applicant.Applications.Any())
-            return -1;
-        var latest = applicant.Applications.OrderByDescending(a => a.AppliedOn).FirstOrDefault();
-        if (latest == null || string.IsNullOrEmpty(latest.WorkExperienceLevel))
-            return -1;
-        int val;
-        if (int.TryParse(latest.WorkExperienceLevel, out val))
-            return val;
-        return -1;
-    };
-
-    Func<HR.Web.Models.Applicant, HR.Web.Models.Application> getLatestUninterviewedApp = (applicant) => {
-        if (applicant.Applications == null || !applicant.Applications.Any())
-            return null;
-        return applicant.Applications
-            .Where(a => !interviewedAppIds.Contains(a.Id) && a.Status != "On Hold")
-            .OrderByDescending(a => a.AppliedOn)
-            .FirstOrDefault();
-    };
-
-    Func<HR.Web.Models.Applicant, HR.Web.Models.Application> getLatestApp = (applicant) => {
-        if (applicant.Applications == null || !applicant.Applications.Any())
-            return null;
-        return applicant.Applications
-            .OrderByDescending(a => a.AppliedOn)
-            .FirstOrDefault();
-    };
 }
 
 <style>
     .applicant-item {
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 4px;
-        margin-bottom: 4px;
-        background: #fff;
+        border: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
+        border-radius: 10px;
+        margin-bottom: 6px;
+        background: var(--app-surface, #fff);
+        box-shadow: 0 2px 8px rgba(13, 44, 74, 0.04);
     }
 
     .applicant-summary {
@@ -87,34 +38,16 @@
         font-weight: 600;
         line-height: 1.2;
     }
-
-    .applicant-meta-compact {
-        font-size: 0.8rem;
-        color: #6c757d;
-        white-space: nowrap;
-    }
 </style>
 
-<div class="mt-4">
-    <h2 class="mb-3">Applicants</h2>
-
-    <div class="d-flex flex-wrap align-items-end mb-2">
+<div class="app-toolbar-wrap">
+    <div class="d-flex flex-wrap align-items-end mb-2 app-toolbar">
         <div class="mr-3 mb-2 flex-grow-1" style="min-width: 200px;">
             <label for="searchBar" class="small text-muted mb-1 d-block">Search</label>
             <input type="text"
                    id="searchBar"
                    class="form-control form-control-sm"
                    placeholder="Name, email, or phone…">
-        </div>
-        <div class="mr-3 mb-2">
-            <span class="small text-muted mb-1 d-block">Needs review</span>
-            <button type="button"
-                    id="needsReviewToggle"
-                    class="btn btn-sm btn-outline-warning"
-                    aria-pressed="false"
-                    title="Show only candidates with an active application that is not on hold and has no interview booked yet.">
-                <i class="fas fa-filter"></i> Off
-            </button>
         </div>
         <div class="mr-3 mb-2">
             <label for="pageSizeSelect" class="small text-muted mb-1 d-block">Show up to</label>
@@ -125,25 +58,6 @@
                 <option value="100">100</option>
                 <option value="0">All</option>
             </select>
-        </div>
-        <div class="mb-2 ml-md-auto">
-            <span class="small text-muted mb-1 d-block">Sort</span>
-            <a href="@Url.Action("Index", new { sortOrder = ViewBag.ProficiencySortParam })"
-               class="btn btn-sm btn-outline-secondary">
-                Proficiency
-                @if (ViewBag.ProficiencySortParam == "proficiency_desc")
-                {
-                    <i class="fas fa-sort-up"></i>
-                }
-                else if (ViewBag.ProficiencySortParam == "")
-                {
-                    <i class="fas fa-sort-down"></i>
-                }
-                else
-                {
-                    <i class="fas fa-sort"></i>
-                }
-            </a>
         </div>
     </div>
     <p id="applicantListMeta" class="small text-muted mb-3"></p>
@@ -157,15 +71,10 @@
         <div id="applicantList" class="applicant-list">
             @foreach (var item in Model)
             {
-                var latestApp = getLatestUninterviewedApp(item);
-                var latestAppForHold = getLatestApp(item);
-                var needsReview = latestApp != null;
                 var collapseId = "applicant-detail-" + item.Id;
                 var searchBlob = (item.FullName + " " + item.Email + " " + item.Phone).ToLowerInvariant();
                 <div class="applicant-item"
-                     data-needs-review="@(needsReview ? "1" : "0")"
-                     data-search-text="@searchBlob"
-                     data-proficiency="@getProficiencyValue(item)">
+                     data-search-text="@searchBlob">
                     <div class="applicant-summary d-flex align-items-center px-2 py-1 px-md-3 py-md-2"
                          role="button"
                          tabindex="0"
@@ -177,13 +86,6 @@
                         <div class="flex-grow-1 text-truncate applicant-name-compact" title="@item.FullName">
                             @item.FullName
                         </div>
-                        @if (needsReview)
-                        {
-                            <span class="badge badge-warning badge-pill mr-2">Review</span>
-                        }
-                        <span class="applicant-meta-compact d-none d-sm-inline">
-                            @getProficiencyDisplay(item)
-                        </span>
                     </div>
                     <div id="@collapseId" class="collapse applicant-details border-top bg-light px-3 py-3">
                         <div class="row small mb-3">
@@ -195,43 +97,12 @@
                                 <span class="text-muted">Phone</span>
                                 <div>@(string.IsNullOrEmpty(item.Phone) ? "—" : item.Phone)</div>
                             </div>
-                            <div class="col-12 mt-2 d-sm-none">
-                                <span class="text-muted">Proficiency</span>
-                                <div>@getProficiencyDisplay(item)</div>
-                            </div>
                         </div>
                         <div class="d-flex flex-column flex-md-row flex-wrap">
                             <a href="@Url.Action("Details", "Applicants", new { id = item.Id })"
                                class="btn btn-sm btn-info mb-1 mb-md-0 mr-md-1">
                                 <i class="fas fa-user"></i> View
                             </a>
-
-                            @if (latestAppForHold != null)
-                            {
-                                if (latestAppForHold.Status != "On Hold")
-                                {
-                                    using (Html.BeginForm("PutOnHold", "Applications", FormMethod.Post, new { @class = "d-inline mb-1 mb-md-0 mr-md-1" }))
-                                    {
-                                        @Html.AntiForgeryToken()
-                                        @Html.Hidden("applicationId", latestAppForHold.Id)
-                                        <button type="submit" class="btn btn-sm btn-warning">
-                                            Put On Hold
-                                        </button>
-                                    }
-                                }
-                                else
-                                {
-                                    using (Html.BeginForm("ReleaseHold", "Applications", FormMethod.Post, new { @class = "d-inline mb-1 mb-md-0 mr-md-1" }))
-                                    {
-                                        @Html.AntiForgeryToken()
-                                        @Html.Hidden("applicationId", latestAppForHold.Id)
-                                        <button type="submit" class="btn btn-sm btn-primary">
-                                            Release Hold
-                                        </button>
-                                    }
-                                    <span class="badge badge-secondary align-self-center mb-1 mb-md-0 mr-md-1">On Hold</span>
-                                }
-                            }
                         </div>
                     </div>
                 </div>
@@ -243,10 +114,9 @@
 <script>
     (function () {
         var searchBar = document.getElementById('searchBar');
-        var needsReviewToggle = document.getElementById('needsReviewToggle');
         var pageSizeSelect = document.getElementById('pageSizeSelect');
         var meta = document.getElementById('applicantListMeta');
-        if (!searchBar || !needsReviewToggle || !pageSizeSelect || !meta) {
+        if (!searchBar || !pageSizeSelect || !meta) {
             return;
         }
 
@@ -274,7 +144,6 @@
 
         function applyFilters() {
             var q = (searchBar.value || '').toLowerCase().trim();
-            var needsOnly = needsReviewToggle.getAttribute('aria-pressed') === 'true';
             var limit = getPageSizeLimit();
             var items = document.querySelectorAll('.applicant-item');
             var matched = 0;
@@ -282,12 +151,9 @@
 
             items.forEach(function (item) {
                 var blob = (item.getAttribute('data-search-text') || '');
-                var needs = item.getAttribute('data-needs-review') === '1';
                 var matchesSearch = !q || blob.indexOf(q) !== -1;
-                var matchesReview = !needsOnly || needs;
-                var passes = matchesSearch && matchesReview;
 
-                if (!passes) {
+                if (!matchesSearch) {
                     item.style.display = 'none';
                     return;
                 }
@@ -311,21 +177,6 @@
                 meta.textContent = 'Showing ' + shown + ' matching applicant' + (shown === 1 ? '' : 's') + '.';
             }
         }
-
-        needsReviewToggle.addEventListener('click', function () {
-            var on = needsReviewToggle.getAttribute('aria-pressed') !== 'true';
-            needsReviewToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
-            if (on) {
-                needsReviewToggle.classList.remove('btn-outline-warning');
-                needsReviewToggle.classList.add('btn-warning');
-                needsReviewToggle.innerHTML = '<i class="fas fa-filter"></i> On';
-            } else {
-                needsReviewToggle.classList.add('btn-outline-warning');
-                needsReviewToggle.classList.remove('btn-warning');
-                needsReviewToggle.innerHTML = '<i class="fas fa-filter"></i> Off';
-            }
-            applyFilters();
-        });
 
         searchBar.addEventListener('input', applyFilters);
         pageSizeSelect.addEventListener('change', applyFilters);

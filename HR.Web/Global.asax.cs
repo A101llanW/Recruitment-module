@@ -1,6 +1,4 @@
 using System;
-using System.Security.Cryptography;
-using System.Text;
 using System.Web;
 using System.Web.Mvc;
 using System.Web.Routing;
@@ -10,6 +8,7 @@ using System.Data.Entity;
 using System.Linq;
 using System.Web.Optimization;
 using HR.Web.Data;
+using HR.Web.Helpers;
 
 namespace HR.Web
 {
@@ -80,11 +79,14 @@ namespace HR.Web
             var path = Request.Path.ToLower();
             if (path.Contains("/account/login") || 
                 path.Contains("/account/register") || 
+                path.Contains("/account/confirmlegalconsent") ||
                 path.Contains("/account/forgotpassword") ||
                 path.Contains("/account/resetpassword") ||
                 path.Contains("/account/verifymfa") ||
                 path.Contains("/account/verifyemail") ||
                 path.Contains("/account/setupmfa") ||
+                path.Contains("/home/privacy") ||
+                path.Contains("/home/terms") ||
                 path.Contains("/home/error") ||
                 path.Contains("/content/") ||
                 path.Contains("/scripts/"))
@@ -139,7 +141,7 @@ namespace HR.Web
             // --- LAYER 2: Browser Fingerprint Validation (catches stolen cookie replay from different browser/tool) ---
             if (!string.IsNullOrEmpty(storedUaHash))
             {
-                var currentUaHash = GetFingerprint(Request.UserAgent);
+                var currentUaHash = UserAgentFingerprint.Compute(Request.UserAgent);
                 if (currentUaHash != storedUaHash)
                 {
                     InvalidateSession("session_hijack");
@@ -162,20 +164,6 @@ namespace HR.Web
             if (string.IsNullOrEmpty(loginUrl)) loginUrl = "~/Account/Login";
             Response.Redirect(string.Format("{0}?reason={1}", loginUrl, reason));
             Response.End();
-        }
-
-        /// <summary>
-        /// Computes a short, non-reversible SHA256 fingerprint of the browser's User-Agent string.
-        /// This helps detect if a stolen cookie is being replayed from a different browser or automated tool.
-        /// </summary>
-        private string GetFingerprint(string userAgent)
-        {
-            if (string.IsNullOrEmpty(userAgent)) return "unknown";
-            using (var sha = SHA256.Create())
-            {
-                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(userAgent));
-                return Convert.ToBase64String(hash).Substring(0, 16); // 16 chars is sufficient
-            }
         }
 
         private void SetupPrincipal(string username, string rolesString)

@@ -89,11 +89,6 @@
 }
 
 <style>
-    body {
-        font-size: 0.97rem;
-        background: #f6faff;
-        min-height: 100vh;
-    }
     .pos-detail-card {
         background: #fafdff;
         border-radius: 0.4rem;
@@ -115,25 +110,25 @@
         background: #eaf4fb;
     }
     .position-item.active { 
-        box-shadow: 0 0 8px 2px #007bff, 0 0 0 2px #fff inset;
-        border-radius: 6px;
-        background: rgba(0,123,255,0.08);
-        border-left: 3px solid #007bff;
-        border-bottom: 1px solid #007bff;
+        box-shadow: 0 0 8px 2px rgba(61, 143, 173, 0.35), 0 0 0 2px #fff inset;
+        border-radius: 8px;
+        background: rgba(111, 184, 220, 0.12);
+        border-left: 3px solid var(--app-accent-deep, #3d8fad);
+        border-bottom: 1px solid rgba(61, 143, 173, 0.35);
     }
     .position-item.active h5 {
-        color: #007bff !important;
+        color: var(--app-accent-deep, #3d8fad) !important;
         font-weight: 600;
     }
     .position-item.active p {
         color: #333 !important;
     }
     .position-item.active .text-muted {
-        color: #007bff !important;
+        color: var(--app-accent-deep, #3d8fad) !important;
         opacity: 0.9;
     }
     .position-item.active small {
-        color: #007bff !important;
+        color: var(--app-accent-deep, #3d8fad) !important;
         opacity: 0.9;
     }
     .text-truncate { 
@@ -205,11 +200,27 @@
         display: flex;
         flex-wrap: wrap;
     }
+
+    @@media (max-width: 767.98px) {
+        .position-item .d-flex.w-100.justify-content-between {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .position-item .text-right.ml-3 {
+            margin-left: 0 !important;
+            text-align: left;
+        }
+
+        #positionDetail {
+            margin-top: 1rem;
+        }
+    }
 </style>
 
 @if (ViewBag.IsSuperAdmin == true && ViewBag.IsReadOnly == true)
 {
-    <div class="mb-4 d-flex justify-content-between align-items-center bg-white p-3 rounded shadow-sm border-left border-primary" style="border-left-width: 4px !important;">
+    <div class="mb-4 d-flex justify-content-between align-items-center bg-white p-3 rounded shadow-sm border-left border-primary positions-sa-bar" style="border-left-width: 4px !important;">
         <div>
             <h4 class="mb-1">Positions for <span class="text-primary">@ViewBag.SelectedCompanyName</span></h4>
             <p class="text-muted mb-0 small"><i class="fas fa-info-circle"></i> Companies Management View: Read-only access to all positions.</p>
@@ -239,8 +250,8 @@
 
 @if (isAdmin)
 {
-    <div class="mb-3">
-        <div class="d-flex justify-content-between align-items-center">
+    <div class="mb-3 positions-admin-toolbar">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center w-100">
             <div>
                 <a class="btn btn-blue" href="@Url.Action("Create", "Positions")">
                     <i class="fas fa-plus"></i> New Position
