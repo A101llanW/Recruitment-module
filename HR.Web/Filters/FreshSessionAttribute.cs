@@ -38,14 +38,22 @@ namespace HR.Web.Filters
                 var query = HttpUtility.ParseQueryString(request.QueryString.ToString());
                 query.Remove("fresh");
 
-                var cleanUrl = request.Url != null ? request.Url.AbsolutePath : "/";
-                var queryString = query.ToString();
-                if (!string.IsNullOrEmpty(queryString))
+                var path = request.Url != null ? request.Url.AbsolutePath : "/";
+                if (string.IsNullOrEmpty(path) || !path.StartsWith("/", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal))
                 {
-                    cleanUrl = cleanUrl + "?" + queryString;
+                    path = "/";
                 }
-                
-                filterContext.Result = new RedirectResult(cleanUrl);
+
+                var queryString = query.ToString();
+                var redirectUrl = string.IsNullOrEmpty(queryString) ? path : path + "?" + queryString;
+
+                var urlHelper = new UrlHelper(filterContext.RequestContext);
+                if (!urlHelper.IsLocalUrl(redirectUrl))
+                {
+                    redirectUrl = "/";
+                }
+
+                filterContext.Result = new RedirectResult(redirectUrl);
                 return;
             }
 

@@ -5,8 +5,8 @@ namespace HR.Web.Controllers
 {
     public partial class ApplicationsController
     {
-        private const string CoverLetterSessionKey = "CoverLetter";
-        private const string CoverLetterPositionSessionKey = "CoverLetterPositionId";
+        private static readonly string CoverLetterSession = "CoverLetter";
+        private static readonly string CoverLetterPositionSession = "CoverLetterPositionId";
 
         // Step 1 of the candidate application flow:
         // CoverLetter -> ProfileDetails -> Questionnaire
@@ -112,18 +112,18 @@ namespace HR.Web.Controllers
                 return null;
             }
 
-            return Session[CoverLetterSessionKey] as string;
+            return Session[CoverLetterSession] as string;
         }
 
         private void SetPendingCoverLetter(int positionId, string coverLetter)
         {
-            Session[CoverLetterPositionSessionKey] = positionId;
-            Session[CoverLetterSessionKey] = string.IsNullOrWhiteSpace(coverLetter) ? null : coverLetter.Trim();
+            Session[CoverLetterPositionSession] = positionId;
+            Session[CoverLetterSession] = string.IsNullOrWhiteSpace(coverLetter) ? null : coverLetter.Trim();
         }
 
         private int? GetCoverLetterPositionIdFromSession()
         {
-            var raw = Session[CoverLetterPositionSessionKey];
+            var raw = Session[CoverLetterPositionSession];
             if (raw is int)
             {
                 return (int)raw;

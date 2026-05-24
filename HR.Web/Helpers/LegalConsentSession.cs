@@ -9,11 +9,11 @@ namespace HR.Web.Helpers
     /// </summary>
     public static class LegalConsentSession
     {
-        public const string PendingUserIdKey = "PendingLoginLegal_UserId";
-        public const string PendingStartedTicksKey = "PendingLoginLegal_StartedUtcTicks";
-        public const string PendingReturnUrlKey = "PendingLoginLegal_ReturnUrl";
-        public const string PendingCompanyIdKey = "PendingLoginLegal_CompanyId";
-        public const string PendingUsernameKey = "PendingLoginLegal_Username";
+        public static readonly string PendingUserIdSession = "PendingLoginLegal_UserId";
+        public static readonly string PendingStartedTicksSession = "PendingLoginLegal_StartedUtcTicks";
+        public static readonly string PendingReturnUrlSession = "PendingLoginLegal_ReturnUrl";
+        public static readonly string PendingCompanyIdSession = "PendingLoginLegal_CompanyId";
+        public static readonly string PendingUsernameSession = "PendingLoginLegal_Username";
 
         public static readonly TimeSpan PendingTtl = TimeSpan.FromMinutes(30);
 
@@ -24,11 +24,11 @@ namespace HR.Web.Helpers
                 return;
             }
 
-            session.Remove(PendingUserIdKey);
-            session.Remove(PendingStartedTicksKey);
-            session.Remove(PendingReturnUrlKey);
-            session.Remove(PendingCompanyIdKey);
-            session.Remove(PendingUsernameKey);
+            session.Remove(PendingUserIdSession);
+            session.Remove(PendingStartedTicksSession);
+            session.Remove(PendingReturnUrlSession);
+            session.Remove(PendingCompanyIdSession);
+            session.Remove(PendingUsernameSession);
         }
 
         public static int? TryReadCompanyId(HttpSessionStateBase session)
@@ -38,7 +38,7 @@ namespace HR.Web.Helpers
                 return null;
             }
 
-            var raw = session[PendingCompanyIdKey];
+            var raw = session[PendingCompanyIdSession];
             if (raw == null)
             {
                 return null;
@@ -65,7 +65,7 @@ namespace HR.Web.Helpers
                 return null;
             }
 
-            var raw = session[PendingUserIdKey];
+            var raw = session[PendingUserIdSession];
             if (raw == null)
             {
                 return null;
@@ -92,7 +92,7 @@ namespace HR.Web.Helpers
                 return false;
             }
 
-            var ticksRaw = session[PendingStartedTicksKey] as string;
+            var ticksRaw = session[PendingStartedTicksSession] as string;
             if (string.IsNullOrWhiteSpace(ticksRaw))
             {
                 return false;

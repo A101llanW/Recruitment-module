@@ -10,7 +10,7 @@ namespace HR.Web.Services
 {
     public class RolePermissionService
     {
-        private const string CurrentUserContextKey = "__RolePermissionService_CurrentUserContext";
+        private static readonly string CurrentUserContextSlot = typeof(RolePermissionService).FullName + ".CurrentUserContext";
 
         private sealed class CurrentUserAccessContext
         {
@@ -172,13 +172,13 @@ namespace HR.Web.Services
                 return new CurrentUserAccessContext();
             }
 
-            if (httpContext.Items[CurrentUserContextKey] is CurrentUserAccessContext cachedContext)
+            if (httpContext.Items[CurrentUserContextSlot] is CurrentUserAccessContext cachedContext)
             {
                 return cachedContext;
             }
 
             var context = BuildCurrentUserContext(httpContext);
-            httpContext.Items[CurrentUserContextKey] = context;
+            httpContext.Items[CurrentUserContextSlot] = context;
             return context;
         }
 

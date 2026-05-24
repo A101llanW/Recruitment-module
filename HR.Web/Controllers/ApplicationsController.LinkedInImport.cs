@@ -8,9 +8,9 @@ namespace HR.Web.Controllers
 {
     public partial class ApplicationsController
     {
-        private const string LinkedInImportStateSessionKey = "__Applications_LinkedInImport_State";
-        private const string LinkedInImportPositionIdSessionKey = "__Applications_LinkedInImport_PositionId";
-        private const string LinkedInImportedProfileSessionKey = "__Applications_LinkedInImport_Profile";
+        private static readonly string LinkedInImportStateSession = "__Applications_LinkedInImport_State";
+        private static readonly string LinkedInImportPositionIdSession = "__Applications_LinkedInImport_PositionId";
+        private static readonly string LinkedInImportedProfileSession = "__Applications_LinkedInImport_Profile";
 
         [Authorize]
         public ActionResult StartLinkedInImport(int positionId)
@@ -57,8 +57,8 @@ namespace HR.Web.Controllers
             }
 
             var state = Guid.NewGuid().ToString("N");
-            Session[LinkedInImportStateSessionKey] = state;
-            Session[LinkedInImportPositionIdSessionKey] = positionId;
+            Session[LinkedInImportStateSession] = state;
+            Session[LinkedInImportPositionIdSession] = positionId;
 
             var tenantToken = RouteData.Values["tenant"] as string;
             var redirectUri = BuildLinkedInImportCallbackUri(tenantToken);
@@ -84,7 +84,7 @@ namespace HR.Web.Controllers
                 return RedirectToAction("ProfileDetails", new { tenant = tenantToken, positionId = positionId.Value });
             }
 
-            var expectedState = Session[LinkedInImportStateSessionKey] as string;
+            var expectedState = Session[LinkedInImportStateSession] as string;
             ClearLinkedInImportStateToken();
             if (string.IsNullOrWhiteSpace(expectedState) || !string.Equals(expectedState, state, StringComparison.Ordinal))
             {
@@ -103,7 +103,7 @@ namespace HR.Web.Controllers
                 var linkedInService = new LinkedInProfileImportService();
                 var redirectUri = BuildLinkedInImportCallbackUri(tenantToken);
                 var importedProfile = linkedInService.ImportProfile(code, redirectUri);
-                Session[LinkedInImportedProfileSessionKey] = importedProfile;
+                Session[LinkedInImportedProfileSession] = importedProfile;
 
                 TempData["SuccessMessage"] = importedProfile != null && importedProfile.HasData
                     ? "LinkedIn basic profile imported. Review the fields below and complete the remaining details."
@@ -124,7 +124,7 @@ namespace HR.Web.Controllers
             ViewBag.LinkedInImportAvailable = linkedInService.IsConfigured();
             ViewBag.LinkedInImportUnavailableReason = linkedInService.GetUnavailabilityReason();
             ViewBag.LinkedInImportHelpText = "Imports the free LinkedIn fields available for profile prefill. Experience history, education, skills, and availability still need manual review.";
-            ViewBag.LinkedInImportedProfile = Session[LinkedInImportedProfileSessionKey] as LinkedInBasicProfileResult;
+            ViewBag.LinkedInImportedProfile = Session[LinkedInImportedProfileSession] as LinkedInBasicProfileResult;
         }
 
         private void ApplyPendingLinkedInImport(ApplicantProfileViewModel model)
@@ -134,7 +134,7 @@ namespace HR.Web.Controllers
                 return;
             }
 
-            var importedProfile = Session[LinkedInImportedProfileSessionKey] as LinkedInBasicProfileResult;
+            var importedProfile = Session[LinkedInImportedProfileSession] as LinkedInBasicProfileResult;
             if (importedProfile == null)
             {
                 return;
@@ -153,24 +153,24 @@ namespace HR.Web.Controllers
 
         private void ClearPendingLinkedInImport()
         {
-            Session.Remove(LinkedInImportedProfileSessionKey);
-            Session.Remove(LinkedInImportPositionIdSessionKey);
-            Session.Remove(LinkedInImportStateSessionKey);
+            Session.Remove(LinkedInImportedProfileSession);
+            Session.Remove(LinkedInImportPositionIdSession);
+            Session.Remove(LinkedInImportStateSession);
         }
 
         private void ClearLinkedInImportStateToken()
         {
-            Session.Remove(LinkedInImportStateSessionKey);
+            Session.Remove(LinkedInImportStateSession);
         }
 
         private int? GetLinkedInImportPositionId()
         {
-            if (Session[LinkedInImportPositionIdSessionKey] is int positionId)
+            if (Session[LinkedInImportPositionIdSession] is int positionId)
             {
                 return positionId;
             }
 
-            var rawValue = Session[LinkedInImportPositionIdSessionKey] as string;
+            var rawValue = Session[LinkedInImportPositionIdSession] as string;
             if (!string.IsNullOrWhiteSpace(rawValue) && int.TryParse(rawValue, out positionId))
             {
                 return positionId;

@@ -419,6 +419,7 @@ namespace HR.Web.Controllers
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public JsonResult SendSetupCode(string method)
         {
             string username = Session["ForcedMfaSetup"] as string;

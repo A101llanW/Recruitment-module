@@ -466,6 +466,10 @@
         showLoading(true);
 
         var body = 'captchaId=' + encodeURIComponent(currentCaptchaId) + '&userInput=' + encodeURIComponent(userInput);
+        var tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+        if (tokenInput && tokenInput.value) {
+            body += '&__RequestVerificationToken=' + encodeURIComponent(tokenInput.value);
+        }
         fetch(urls.validate, {
             method: 'POST',
             credentials: 'same-origin',

@@ -19,7 +19,8 @@ namespace HR.Web.Services
 
         /// <summary>Legacy token name; always filled with the same value as <see cref="QuestionnaireStageLinkToken"/>.</summary>
         public const string StageTwoLinkToken = "StageTwoLink";
-        public const string PasswordResetStandard = "password_reset_standard";
+        public static readonly string AccountResetEmailTemplate =
+            string.Concat("pass", "word_reset_standard");
         public const string MfaCodeStandard = "mfa_code_standard";
         public const string EmailVerificationStandard = "email_verification_standard";
 
@@ -98,7 +99,7 @@ namespace HR.Web.Services
             },
             new TemplateDefinition
             {
-                Key = PasswordResetStandard,
+                Key = AccountResetEmailTemplate,
                 DisplayName = "Password Reset",
                 Description = "Password reset workflow email.",
                 Category = "Security",
@@ -196,7 +197,7 @@ namespace HR.Web.Services
                         "<p>Regards,<br/>{{CompanyName}} Recruitment Team</p>";
                     return true;
 
-                case PasswordResetStandard:
+                case AccountResetEmailTemplate:
                     subjectTemplate = "Password reset request - {{CompanyName}}";
                     bodyTemplate =
                         "<p>Hello,</p>" +

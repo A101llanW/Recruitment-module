@@ -484,45 +484,45 @@ namespace HR.Web.Controllers
 
         private void StorePendingLegalLogin(LoginRequestModel request, User user)
         {
-            Session[LegalConsentSession.PendingUserIdKey] = user.Id;
-            Session[LegalConsentSession.PendingStartedTicksKey] = DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
-            Session[LegalConsentSession.PendingUsernameKey] = user.UserName;
+            Session[LegalConsentSession.PendingUserIdSession] = user.Id;
+            Session[LegalConsentSession.PendingStartedTicksSession] = DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
+            Session[LegalConsentSession.PendingUsernameSession] = user.UserName;
             if (user.CompanyId.HasValue)
             {
-                Session[LegalConsentSession.PendingCompanyIdKey] = user.CompanyId.Value;
+                Session[LegalConsentSession.PendingCompanyIdSession] = user.CompanyId.Value;
             }
             else
             {
-                Session.Remove(LegalConsentSession.PendingCompanyIdKey);
+                Session.Remove(LegalConsentSession.PendingCompanyIdSession);
             }
 
             if (!string.IsNullOrWhiteSpace(request.ReturnUrl))
             {
-                Session[LegalConsentSession.PendingReturnUrlKey] = request.ReturnUrl;
+                Session[LegalConsentSession.PendingReturnUrlSession] = request.ReturnUrl;
             }
             else
             {
-                Session.Remove(LegalConsentSession.PendingReturnUrlKey);
+                Session.Remove(LegalConsentSession.PendingReturnUrlSession);
             }
         }
 
         private void StorePendingLoginContinuation(LoginRequestModel request, User user)
         {
-            Session[LegalConsentSession.PendingUsernameKey] = user.UserName;
+            Session[LegalConsentSession.PendingUsernameSession] = user.UserName;
             if (user.CompanyId.HasValue)
             {
-                Session[LegalConsentSession.PendingCompanyIdKey] = user.CompanyId.Value;
+                Session[LegalConsentSession.PendingCompanyIdSession] = user.CompanyId.Value;
             }
             else
             {
-                Session.Remove(LegalConsentSession.PendingCompanyIdKey);
+                Session.Remove(LegalConsentSession.PendingCompanyIdSession);
             }
         }
 
         private LoginRequestModel BuildPendingCompletionLoginRequest(User user)
         {
             var urlTenantToken = RouteData.Values["tenant"] as string;
-            var returnUrl = Session[LegalConsentSession.PendingReturnUrlKey] as string;
+            var returnUrl = Session[LegalConsentSession.PendingReturnUrlSession] as string;
             return new LoginRequestModel
             {
                 Username = user.UserName,
@@ -690,7 +690,7 @@ namespace HR.Web.Controllers
             Session["PendingMfaUsername"] = user.UserName;
             if (user.CompanyId.HasValue)
             {
-                Session[LegalConsentSession.PendingCompanyIdKey] = user.CompanyId.Value;
+                Session[LegalConsentSession.PendingCompanyIdSession] = user.CompanyId.Value;
             }
 
             if (UsesEmailMfa(user) || string.IsNullOrWhiteSpace(user.MfaMethod))

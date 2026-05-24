@@ -51,6 +51,7 @@ namespace HR.Web.Controllers
         /// Check for duplicate questions in sample collection
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult CheckDuplicateQuestions(string questionsJson)
         {
             return HandleCheckDuplicateQuestions(questionsJson);

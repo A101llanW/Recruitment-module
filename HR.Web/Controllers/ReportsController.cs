@@ -28,6 +28,7 @@ namespace HR.Web.Controllers
 
         // POST: Reports/GenerateDirect
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult GenerateDirect(string reportType)
         {
             try

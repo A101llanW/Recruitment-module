@@ -104,7 +104,10 @@
                 btn.find('.btn-loader').removeClass('d-none');
                 $('#firstSendStatus').removeClass('d-none text-success text-danger').text('').hide();
 
-                $.post('@Url.Action("SendSetupCode", "Account", new { tenant = tenantToken })', { method: 'Email' }, function (res) {
+                $.post('@Url.Action("SendSetupCode", "Account", new { tenant = tenantToken })', {
+                    method: 'Email',
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                }, function (res) {
                     btn.find('.btn-loader').addClass('d-none');
                     if (res.success) {
                         btn.removeClass('btn-outline-primary').addClass('btn-success').find('.btn-text').text('Code sent!');

@@ -239,6 +239,7 @@ namespace HR.Web.Controllers
         /// Clone questionnaire from one position to another
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult CloneQuestionnaire(int sourcePositionId, int targetPositionId)
         {
             try

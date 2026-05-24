@@ -50,6 +50,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [AllowAnonymous]
+        [ValidateAntiForgeryToken]
         public JsonResult Validate(string captchaId, string userInput)
         {
             try

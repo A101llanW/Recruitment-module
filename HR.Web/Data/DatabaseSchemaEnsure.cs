@@ -16,7 +16,7 @@ namespace HR.Web.Data
                 return;
             }
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF OBJECT_ID(N'dbo.CompanyHrCcEmails', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.CompanyHrCcEmails (
@@ -30,123 +30,123 @@ BEGIN
         CONSTRAINT FK_CompanyHrCcEmails_Companies FOREIGN KEY (CompanyId) REFERENCES dbo.Companies (Id) ON DELETE CASCADE
     );
     CREATE NONCLUSTERED INDEX IX_CompanyHrCcEmails_CompanyId ON dbo.CompanyHrCcEmails (CompanyId);
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applications', N'FailedCandidateEmailSentAt') IS NULL
 BEGIN
     ALTER TABLE dbo.Applications ADD FailedCandidateEmailSentAt DATETIME NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applications', N'CoverLetter') IS NULL
 BEGIN
     ALTER TABLE dbo.Applications ADD CoverLetter NVARCHAR(MAX) NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Positions', N'PassMarksByStageJson') IS NULL
 BEGIN
     ALTER TABLE dbo.Positions ADD PassMarksByStageJson NVARCHAR(4000) NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Positions', N'QuestionnaireStageCount') IS NULL
 BEGIN
     ALTER TABLE dbo.Positions ADD QuestionnaireStageCount INT NOT NULL CONSTRAINT DF_Positions_QuestionnaireStageCount DEFAULT (1);
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.PositionQuestions', N'StageNumber') IS NULL
 BEGIN
     ALTER TABLE dbo.PositionQuestions ADD StageNumber INT NOT NULL CONSTRAINT DF_PositionQuestions_StageNumber DEFAULT (1);
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.ApplicationAnswers', N'StageNumber') IS NULL
 BEGIN
     ALTER TABLE dbo.ApplicationAnswers ADD StageNumber INT NOT NULL CONSTRAINT DF_ApplicationAnswers_StageNumber DEFAULT (1);
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applications', N'CurrentStage') IS NULL
 BEGIN
     ALTER TABLE dbo.Applications ADD CurrentStage INT NOT NULL CONSTRAINT DF_Applications_CurrentStage DEFAULT (1);
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applications', N'LastCompletedQuestionnaireStage') IS NULL
 BEGIN
     ALTER TABLE dbo.Applications ADD LastCompletedQuestionnaireStage INT NOT NULL CONSTRAINT DF_Applications_LastCompletedQuestionnaireStage DEFAULT (0);
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applications', N'PendingQuestionnaireStage') IS NULL
 BEGIN
     ALTER TABLE dbo.Applications ADD PendingQuestionnaireStage INT NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applications', N'QuestionnaireInvitedOn') IS NULL
 BEGIN
     ALTER TABLE dbo.Applications ADD QuestionnaireInvitedOn DATETIME NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applications', N'LastQuestionnaireScore') IS NULL
 BEGIN
     ALTER TABLE dbo.Applications ADD LastQuestionnaireScore DECIMAL(18,2) NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Users', N'PrivacyAcceptedAt') IS NULL
 BEGIN
     ALTER TABLE dbo.Users ADD PrivacyAcceptedAt DATETIME NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Users', N'TermsAcceptedAt') IS NULL
 BEGIN
     ALTER TABLE dbo.Users ADD TermsAcceptedAt DATETIME NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Users', N'PrivacyVersion') IS NULL
 BEGIN
     ALTER TABLE dbo.Users ADD PrivacyVersion NVARCHAR(20) NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Users', N'TermsVersion') IS NULL
 BEGIN
     ALTER TABLE dbo.Users ADD TermsVersion NVARCHAR(20) NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applicants', N'PrivacyAcceptedAt') IS NULL
 BEGIN
     ALTER TABLE dbo.Applicants ADD PrivacyAcceptedAt DATETIME NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applicants', N'TermsAcceptedAt') IS NULL
 BEGIN
     ALTER TABLE dbo.Applicants ADD TermsAcceptedAt DATETIME NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applicants', N'PrivacyVersion') IS NULL
 BEGIN
     ALTER TABLE dbo.Applicants ADD PrivacyVersion NVARCHAR(20) NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF COL_LENGTH(N'dbo.Applicants', N'TermsVersion') IS NULL
 BEGIN
     ALTER TABLE dbo.Applicants ADD TermsVersion NVARCHAR(20) NULL;
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF OBJECT_ID(N'dbo.QuestionnaireTemplates', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.QuestionnaireTemplates (
@@ -161,9 +161,9 @@ BEGIN
         CONSTRAINT FK_QuestionnaireTemplates_Companies FOREIGN KEY (CompanyId) REFERENCES dbo.Companies (Id)
     );
     CREATE NONCLUSTERED INDEX IX_QuestionnaireTemplates_CompanyId ON dbo.QuestionnaireTemplates (CompanyId);
-END");
+END"));
 
-            TryExecute(db, @"
+            TryExecute(db, ctx => ctx.Database.ExecuteSqlCommand(@"
 IF OBJECT_ID(N'dbo.QuestionnaireTemplateQuestions', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.QuestionnaireTemplateQuestions (
@@ -179,14 +179,14 @@ BEGIN
     );
     CREATE NONCLUSTERED INDEX IX_QuestionnaireTemplateQuestions_TemplateId ON dbo.QuestionnaireTemplateQuestions (TemplateId);
     CREATE NONCLUSTERED INDEX IX_QuestionnaireTemplateQuestions_QuestionId ON dbo.QuestionnaireTemplateQuestions (QuestionId);
-END");
+END"));
         }
 
-        private static void TryExecute(HrContext db, string sql)
+        private static void TryExecute(HrContext db, Action<HrContext> execute)
         {
             try
             {
-                db.Database.ExecuteSqlCommand(sql);
+                execute(db);
             }
             catch (SqlException ex)
             {

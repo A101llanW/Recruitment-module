@@ -187,6 +187,7 @@ namespace HR.Web.Controllers
         /// API endpoint for real-time score updates
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult UpdateApplicationScore(int applicationId)
         {
             try

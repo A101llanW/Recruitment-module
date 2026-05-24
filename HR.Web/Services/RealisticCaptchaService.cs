@@ -6,13 +6,13 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using HR.Web.Models;
 
 namespace HR.Web.Services
 {
     public class RealisticCaptchaService
     {
-        private static readonly Random _random = new Random();
         private static readonly string[] _fonts = new[] { "Arial", "Verdana", "Tahoma", "Georgia" };
         private static readonly Color[] _colors = new[] { 
             Color.FromArgb(50, 50, 50), Color.FromArgb(100, 50, 150), 
@@ -38,7 +38,7 @@ namespace HR.Web.Services
                 graphics.TextRenderingHint = TextRenderingHint.AntiAlias;
                 
                 // Background
-                var bgColor = _backgroundColors[_random.Next(_backgroundColors.Length)];
+                var bgColor = _backgroundColors[SecureNext(_backgroundColors.Length)];
                 using (var brush = new SolidBrush(bgColor))
                 {
                     graphics.FillRectangle(brush, 0, 0, width, height);
@@ -81,16 +81,16 @@ namespace HR.Web.Services
         {
             const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
             return new string(Enumerable.Repeat(chars, length)
-              .Select(s => s[_random.Next(s.Length)]).ToArray());
+              .Select(s => s[SecureNext(s.Length)]).ToArray());
         }
 
         private void AddNoise(Graphics graphics, int width, int height)
         {
             for (int i = 0; i < 100; i++)
             {
-                var x = _random.Next(width);
-                var y = _random.Next(height);
-                var color = Color.FromArgb(_random.Next(100, 200), _random.Next(100, 200), _random.Next(100, 200));
+                var x = SecureNext(width);
+                var y = SecureNext(height);
+                var color = Color.FromArgb(SecureNext(100, 200), SecureNext(100, 200), SecureNext(100, 200));
                 using (var brush = new SolidBrush(color))
                 {
                     graphics.FillEllipse(brush, x, y, 1, 1);
@@ -102,11 +102,11 @@ namespace HR.Web.Services
         {
             for (int i = 0; i < 5; i++)
             {
-                var x1 = _random.Next(width);
-                var y1 = _random.Next(height);
-                var x2 = _random.Next(width);
-                var y2 = _random.Next(height);
-                var color = Color.FromArgb(_random.Next(50, 150), _random.Next(50, 150), _random.Next(50, 150));
+                var x1 = SecureNext(width);
+                var y1 = SecureNext(height);
+                var x2 = SecureNext(width);
+                var y2 = SecureNext(height);
+                var color = Color.FromArgb(SecureNext(50, 150), SecureNext(50, 150), SecureNext(50, 150));
                 using (var pen = new Pen(color, 1))
                 {
                     graphics.DrawLine(pen, x1, y1, x2, y2);
@@ -117,9 +117,9 @@ namespace HR.Web.Services
         private void DrawText(Graphics graphics, string text, int width, int height)
         {
             var fontSize = 24;
-            var font = new Font(_fonts[_random.Next(_fonts.Length)], fontSize, FontStyle.Bold);
+            var font = new Font(_fonts[SecureNext(_fonts.Length)], fontSize, FontStyle.Bold);
             
-            using (var brush = new SolidBrush(_colors[_random.Next(_colors.Length)]))
+            using (var brush = new SolidBrush(_colors[SecureNext(_colors.Length)]))
             {
                 var textSize = graphics.MeasureString(text, font);
                 var x = (width - textSize.Width) / 2;
@@ -127,12 +127,37 @@ namespace HR.Web.Services
                 
                 // Add slight rotation
                 graphics.TranslateTransform(x + textSize.Width / 2, y + textSize.Height / 2);
-                graphics.RotateTransform(_random.Next(-10, 10));
+                graphics.RotateTransform(SecureNext(-10, 11));
                 graphics.TranslateTransform(-(x + textSize.Width / 2), -(y + textSize.Height / 2));
                 
                 graphics.DrawString(text, font, brush, x, y);
                 graphics.ResetTransform();
             }
+        }
+
+        private static int SecureNext(int maxExclusive)
+        {
+            if (maxExclusive <= 0)
+            {
+                return 0;
+            }
+
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                var bytes = new byte[4];
+                rng.GetBytes(bytes);
+                return (int)(BitConverter.ToUInt32(bytes, 0) % (uint)maxExclusive);
+            }
+        }
+
+        private static int SecureNext(int minInclusive, int maxExclusive)
+        {
+            if (maxExclusive <= minInclusive)
+            {
+                return minInclusive;
+            }
+
+            return minInclusive + SecureNext(maxExclusive - minInclusive);
         }
     }
 

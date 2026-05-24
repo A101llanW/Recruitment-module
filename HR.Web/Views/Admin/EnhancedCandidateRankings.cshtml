@@ -315,7 +315,10 @@ $(document).ready(function() {
         $.ajax({
             url: '@Url.Action("UpdateApplicationScore", "Admin")',
             type: 'POST',
-            data: { applicationId: applicationId },
+            data: {
+                applicationId: applicationId,
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+            },
             success: function(response) {
                 if (response.success) {
                     // Update the score display in the table
