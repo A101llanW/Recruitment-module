@@ -208,7 +208,7 @@
                                                 <span class="input-group-text bg-white border-right-0"><i class="fas fa-link text-primary" style="font-size: 0.7rem;"></i></span>
                                             </div>
                                             @{
-                                                var baseUrl = ExternalUrlHelper.GetBaseUrl(Request);
+                                                var baseUrl = ExternalUrlHelper.GetBaseUri(Request).ToString().TrimEnd('/');
                                                 var companyUrl = string.Format("{0}/{1}", baseUrl, company.Slug);
                                             }
                                             <input type="text" class="form-control bg-white border-left-0 font-weight-bold" value="@companyUrl" readonly style="font-family: monospace; letter-spacing: 1px;" />

@@ -129,7 +129,18 @@
             });
 
             $('#mfaForm').submit(function() {
-                $('#btnSubmit').html('<i class="fas fa-spinner fa-spin mr-2"></i> Verifying...').prop('disabled', true);
+                var btn = document.getElementById('btnSubmit');
+                if (!btn) {
+                    return;
+                }
+                while (btn.firstChild) {
+                    btn.removeChild(btn.firstChild);
+                }
+                btn.disabled = true;
+                var icon = document.createElement('i');
+                icon.className = 'fas fa-spinner fa-spin mr-2';
+                btn.appendChild(icon);
+                btn.appendChild(document.createTextNode(' Verifying...'));
             });
 
             $('#code').focus();

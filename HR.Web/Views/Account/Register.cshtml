@@ -314,6 +314,17 @@
 
         confirmPasswordInput.addEventListener('input', checkPasswordMatch);
 
+        function setSubmitBusy(btn, iconClass, label) {
+            while (btn.firstChild) {
+                btn.removeChild(btn.firstChild);
+            }
+            btn.disabled = true;
+            var icon = document.createElement('i');
+            icon.className = iconClass;
+            btn.appendChild(icon);
+            btn.appendChild(document.createTextNode(label));
+        }
+
         if (registerForm) {
             registerForm.addEventListener('submit', function(event) {
                 if (acceptLegalTerms && !acceptLegalTerms.checked) {
@@ -322,8 +333,7 @@
                     return;
                 }
 
-                submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Creating Account...';
-                submitBtn.disabled = true;
+                setSubmitBusy(submitBtn, 'fas fa-circle-notch fa-spin mr-2', ' Creating Account...');
             });
         }
     });

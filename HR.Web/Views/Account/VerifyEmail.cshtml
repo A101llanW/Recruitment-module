@@ -125,11 +125,42 @@
 
 @section Scripts {
     <script>
+        function rememberButtonNodes(btn) {
+            if (!btn._savedNodes) {
+                btn._savedNodes = Array.prototype.slice.call(btn.childNodes).map(function (node) {
+                    return node.cloneNode(true);
+                });
+            }
+        }
+
+        function setButtonBusy(btn, iconClass, label) {
+            rememberButtonNodes(btn);
+            clearElement(btn);
+            btn.disabled = true;
+            var icon = document.createElement('i');
+            icon.className = iconClass;
+            btn.appendChild(icon);
+            btn.appendChild(document.createTextNode(label));
+        }
+
+        function restoreButton(btn) {
+            clearElement(btn);
+            btn.disabled = false;
+            (btn._savedNodes || []).forEach(function (node) {
+                btn.appendChild(node.cloneNode(true));
+            });
+        }
+
+        function clearElement(el) {
+            while (el && el.firstChild) {
+                el.removeChild(el.firstChild);
+            }
+        }
+
         function resendOtp() {
             var btn = event.target.closest('button');
-            var originalHtml = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Sending...';
+
+            setButtonBusy(btn, 'fas fa-spinner fa-spin mr-1', ' Sending...');
 
             var token = $('input[name="__RequestVerificationToken"]').val();
 
@@ -141,14 +172,12 @@
                 }
 
                 setTimeout(function() {
-                    btn.disabled = false;
-                    btn.innerHTML = originalHtml;
+                    restoreButton(btn);
                     setTimeout(function() { $('#resendMessage').fadeOut(); }, 3000);
                 }, 1000);
             }).fail(function() {
                 $('#resendMessage').removeClass('text-success').addClass('text-danger').text('Failed to connect to server.');
-                btn.disabled = false;
-                btn.innerHTML = originalHtml;
+                restoreButton(btn);
             });
         }
 
@@ -160,11 +189,17 @@
             }
 
             $('#verifyOtpForm').submit(function() {
-                $('#btnSubmit').html('<i class="fas fa-circle-notch fa-spin mr-2"></i> Verifying...').prop('disabled', true);
+                var btn = $('#btnSubmit')[0];
+                if (btn) {
+                    setButtonBusy(btn, 'fas fa-circle-notch fa-spin mr-2', ' Verifying...');
+                }
             });
 
             $('#updateEmailForm').submit(function() {
-                $('#btnUpdateEmail').html('<i class="fas fa-circle-notch fa-spin mr-2"></i> Sending...').prop('disabled', true);
+                var btn = $('#btnUpdateEmail')[0];
+                if (btn) {
+                    setButtonBusy(btn, 'fas fa-circle-notch fa-spin mr-2', ' Sending...');
+                }
             });
         });
     </script>

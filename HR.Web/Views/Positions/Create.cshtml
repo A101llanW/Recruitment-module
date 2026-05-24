@@ -174,7 +174,7 @@
 }
             @using (Html.BeginForm(null, null, FormMethod.Post, new { id = "positionCreateForm" })) {
                 @Html.AntiForgeryToken()
-                <input type="hidden" id="questionWeightsPayload" name="questionWeightsPayload" value="" />
+                <input type="hidden" id="questionWeightValues" name="questionWeightValues" value="" />
                 <input type="hidden" id="questionStagesPayload" name="questionStagesPayload" value="" />
                 <div id="selectedQuestionsHiddenContainer" aria-hidden="true"></div>
                 @Html.ValidationSummary(true, "", new { @class = "text-danger" })
@@ -255,8 +255,8 @@
                     @Html.ValidationMessageFor(m => m.ExpiryDate, "", new { @class = "text-danger" })
                 </div>
                 <div class="form-check mb-3 text-center">
-                    <input type="checkbox" class="form-check-input" id="hasSecondaryStageCheckbox" @(Model.QuestionnaireStageCount > 1 ? "checked=\"checked\"" : "") />
-                    <label class="form-check-label" for="hasSecondaryStageCheckbox" title="Sets questionnaire stages to at least 2. Use the number field under Open for 3+ stages.">Has secondary stage</label>
+                    <input type="checkbox" class="form-check-input" id="enableMultiStageToggle" @(Model.QuestionnaireStageCount > 1 ? "checked=\"checked\"" : "") />
+                    <label class="form-check-label" for="enableMultiStageToggle" title="Sets questionnaire stages to at least 2. Use the number field under Open for 3+ stages.">Has secondary stage</label>
                 </div>
                 <div class="form-check mb-3 text-center">
                     @Html.CheckBoxFor(m => m.IsOpen, new { @class = "form-check-input" })

@@ -70,8 +70,41 @@ function removeOption(btn) {
 
 document.getElementById('addOptionBtn').addEventListener('click', function() {
     var table = document.getElementById('optionsTable');
+    var rowIndex = table.rows.length;
     var row = document.createElement('tr');
-    row.innerHTML = `<td><input class='form-control option-input' type='text' name='Options[${table.rows.length}].Text' /></td><td><input class='form-control option-input' type='number' step='0.01' name='Options[${table.rows.length}].Points' /></td><td><button type='button' class='btn btn-danger btn-sm option-remove' onclick='removeOption(this)'>Remove</button></td><input type='hidden' name='Options[${table.rows.length}].Id' value='' />`;
+
+    var textCell = document.createElement('td');
+    var textInput = document.createElement('input');
+    textInput.className = 'form-control option-input';
+    textInput.type = 'text';
+    textInput.name = 'Options[' + rowIndex + '].Text';
+    textCell.appendChild(textInput);
+
+    var pointsCell = document.createElement('td');
+    var pointsInput = document.createElement('input');
+    pointsInput.className = 'form-control option-input';
+    pointsInput.type = 'number';
+    pointsInput.step = '0.01';
+    pointsInput.name = 'Options[' + rowIndex + '].Points';
+    pointsCell.appendChild(pointsInput);
+
+    var removeCell = document.createElement('td');
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn btn-danger btn-sm option-remove';
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', function () { removeOption(removeBtn); });
+    removeCell.appendChild(removeBtn);
+
+    var idInput = document.createElement('input');
+    idInput.type = 'hidden';
+    idInput.name = 'Options[' + rowIndex + '].Id';
+    idInput.value = '';
+
+    row.appendChild(textCell);
+    row.appendChild(pointsCell);
+    row.appendChild(removeCell);
+    row.appendChild(idInput);
     table.appendChild(row);
 });
 

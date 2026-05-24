@@ -149,6 +149,7 @@
 </style>
 
 <div class="container-fluid">
+    @Html.AntiForgeryToken()
     <h2 class="mb-4">Candidate Rankings by Position</h2>
 
     <!-- Filter Panel -->
@@ -260,6 +261,36 @@
 
 @section Scripts {
 <script>
+    function rememberButtonNodes(btn) {
+        if (!btn._savedNodes) {
+            btn._savedNodes = Array.prototype.slice.call(btn.childNodes).map(function (node) {
+                return node.cloneNode(true);
+            });
+        }
+    }
+
+    function setButtonBusy(btn, iconClass, label) {
+        rememberButtonNodes(btn);
+        while (btn.firstChild) {
+            btn.removeChild(btn.firstChild);
+        }
+        btn.disabled = true;
+        var icon = document.createElement('i');
+        icon.className = iconClass;
+        btn.appendChild(icon);
+        btn.appendChild(document.createTextNode(label));
+    }
+
+    function restoreButton(btn) {
+        while (btn.firstChild) {
+            btn.removeChild(btn.firstChild);
+        }
+        btn.disabled = false;
+        (btn._savedNodes || []).forEach(function (node) {
+            btn.appendChild(node.cloneNode(true));
+        });
+    }
+
     function togglePositionCandidates(element) {
         var listContainer = element.nextElementSibling;
         if (listContainer) {
@@ -285,16 +316,15 @@
 
         // Show loading state
         var button = event.target;
-        var originalText = button.innerHTML;
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Evaluating...';
-        button.disabled = true;
+        setButtonBusy(button, 'fas fa-spinner fa-spin', ' Evaluating...');
 
         $.ajax({
             url: '@Url.Action("EvaluateCandidates", "Admin")',
             type: 'POST',
             data: {
                 positionId: positionId,
-                targetCount: targetCount
+                targetCount: targetCount,
+                __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
             },
             success: function(response) {
                 if (response.success) {
@@ -308,9 +338,7 @@
                 alert('Error evaluating candidates');
             },
             complete: function() {
-                // Restore button state
-                button.innerHTML = originalText;
-                button.disabled = false;
+                restoreButton(button);
             }
         });
     }

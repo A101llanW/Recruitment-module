@@ -6,7 +6,7 @@
     }
 
     var isTenantBranded = Model.Brand != null && Model.Brand.IsTenantBranded;
-    var hasTenantLogo = isTenantBranded && !string.IsNullOrEmpty(Model.Brand.LogoUrl);
+    var hasTenantLogo = isTenantBranded && Model.Brand.LogoUrl != null;
     var hasTenantName = isTenantBranded && !string.IsNullOrWhiteSpace(Model.Brand.Title);
     var showTenantSubtitle = isTenantBranded && !string.IsNullOrWhiteSpace(Model.Brand.Subtitle);
 }

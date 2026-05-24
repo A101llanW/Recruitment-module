@@ -99,8 +99,18 @@
             $('#code').focus();
 
             $('#mfaVerifyForm').submit(function() {
-                var btn = $('#btnSubmit');
-                btn.html('<i class="fas fa-spinner fa-spin mr-2"></i> Verifying...').prop('disabled', true);
+                var btn = $('#btnSubmit')[0];
+                if (!btn) {
+                    return;
+                }
+                while (btn.firstChild) {
+                    btn.removeChild(btn.firstChild);
+                }
+                btn.disabled = true;
+                var icon = document.createElement('i');
+                icon.className = 'fas fa-spinner fa-spin mr-2';
+                btn.appendChild(icon);
+                btn.appendChild(document.createTextNode(' Verifying...'));
             });
 
             $('#btnResend').on('click', function() {

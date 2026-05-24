@@ -629,7 +629,7 @@
                                 <div class="input-group mb-3">
                                     <input type="text" class="form-control" id="secureDownloadUrl" readonly value="@Url.Action("DownloadCredentials", "Companies", new { token = token }, Request.Url.Scheme)" style="background-color: #fff; font-family: monospace;">
                                     <div class="input-group-append">
-                                        <button class="btn btn-outline-secondary" type="button" onclick="var copyText = document.getElementById('secureDownloadUrl'); copyText.select(); document.execCommand('copy'); this.innerHTML='<i class=\'fas fa-check\'></i> Copied!'; setTimeout(function(){ document.querySelector('#secureDownloadUrl').nextElementSibling.querySelector('button').innerHTML='<i class=\'fas fa-copy\'></i> Copy'; }, 3000);" title="Copy to clipboard">
+                                        <button class="btn btn-outline-secondary" type="button" id="secureDownloadCopyBtn" title="Copy to clipboard">
                                             <i class="fas fa-copy"></i> Copy
                                         </button>
                                     </div>
@@ -669,6 +669,36 @@
                     document.body.style.overflow='auto';
                 }
             });
+
+            var copyBtn = document.getElementById('secureDownloadCopyBtn');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', function () {
+                    var copyText = document.getElementById('secureDownloadUrl');
+                    if (!copyText) {
+                        return;
+                    }
+                    copyText.select();
+                    document.execCommand('copy');
+
+                    while (copyBtn.firstChild) {
+                        copyBtn.removeChild(copyBtn.firstChild);
+                    }
+                    var checkIcon = document.createElement('i');
+                    checkIcon.className = 'fas fa-check';
+                    copyBtn.appendChild(checkIcon);
+                    copyBtn.appendChild(document.createTextNode(' Copied!'));
+
+                    setTimeout(function () {
+                        while (copyBtn.firstChild) {
+                            copyBtn.removeChild(copyBtn.firstChild);
+                        }
+                        var copyIcon = document.createElement('i');
+                        copyIcon.className = 'fas fa-copy';
+                        copyBtn.appendChild(copyIcon);
+                        copyBtn.appendChild(document.createTextNode(' Copy'));
+                    }, 3000);
+                });
+            }
         </script>
     }
 

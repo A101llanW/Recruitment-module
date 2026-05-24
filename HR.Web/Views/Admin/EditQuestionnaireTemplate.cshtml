@@ -32,7 +32,7 @@
     {
         @Html.AntiForgeryToken()
         @Html.HiddenFor(m => m.Id)
-        <input type="hidden" id="questionWeightsPayload" name="questionWeightsPayload" value="" />
+        <input type="hidden" id="questionWeightValues" name="questionWeightValues" value="" />
         <input type="hidden" id="questionStagesPayload" name="questionStagesPayload" value="" />
         <div id="selectedQuestionsHiddenContainer" aria-hidden="true"></div>
         @Html.ValidationSummary(true, "", new { @class = "text-danger" })
@@ -49,8 +49,8 @@
                     @Html.TextAreaFor(m => m.Description, 2, 80, new { @class = "form-control", placeholder = "Optional notes about when to use this template" })
                 </div>
                 <div class="form-check mb-3">
-                    <input type="checkbox" class="form-check-input" id="hasSecondaryStageCheckbox" @(Model.StageCount > 1 ? "checked=\"checked\"" : "") />
-                    <label class="form-check-label" for="hasSecondaryStageCheckbox">Use multiple questionnaire stages</label>
+                    <input type="checkbox" class="form-check-input" id="enableMultiStageToggle" @(Model.StageCount > 1 ? "checked=\"checked\"" : "") />
+                    <label class="form-check-label" for="enableMultiStageToggle">Use multiple questionnaire stages</label>
                 </div>
                 <div id="questionnaireStageCountSection" class="form-group @(Model.StageCount > 1 ? "" : "d-none")">
                     @Html.LabelFor(m => m.StageCount, new { @class = "font-weight-bold" })
@@ -149,7 +149,7 @@
         initQuestionnaireAssignmentEditor({
             formId: 'templateEditForm',
             stageCountInputId: 'questionnaireStageCountInput',
-            hasSecondaryStageCheckboxId: 'hasSecondaryStageCheckbox',
+            multiStageToggleFieldId: 'enableMultiStageToggle',
             stageCountSectionId: 'questionnaireStageCountSection'
         });
     });

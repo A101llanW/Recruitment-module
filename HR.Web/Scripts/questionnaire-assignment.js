@@ -1,35 +1,64 @@
-// Shared questionnaire assignment editor
+/* eslint-env browser */
+/* global document, window */
+/* exported initQuestionnaireAssignmentEditor */
+
+function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v));
+}
+
+function clearElement(el) {
+    while (el && el.firstChild) {
+        el.removeChild(el.firstChild);
+    }
+}
+
+function mapGet(map, key, defaultValue) {
+    return map.has(key) ? map.get(key) : defaultValue;
+}
+
+function mapSet(map, key, value) {
+    map.set(key, value);
+}
+
+function mapDelete(map, key) {
+    map.delete(key);
+}
+
+function mapIsTrue(map, key) {
+    return map.get(key) === true;
+}
+
+function parseIntSafe(raw, fallback) {
+    var parsed = parseInt(raw, 10);
+    return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function findWeightRow(container, questionId) {
+    if (!container) {
+        return null;
+    }
+    var rows = container.querySelectorAll('.question-weight-row[data-question-id]');
+    for (var i = 0; i < rows.length; i++) {
+        if (rows[i].getAttribute('data-question-id') === String(questionId)) {
+            return rows[i];
+        }
+    }
+    return null;
+}
+
 function initQuestionnaireAssignmentEditor(options) {
     options = options || {};
         var form = document.getElementById(options.formId) || document.getElementById('positionCreateForm') || document.getElementById('positionEditForm') || document.getElementById('templateEditForm');
-        if (!form) return;
-        function clearElement(el) {
-            while (el && el.firstChild) {
-                el.removeChild(el.firstChild);
-            }
+        if (!form) {
+            return undefined;
         }
-
-        function mapGet(map, key, defaultValue) {
-            return map.has(key) ? map.get(key) : defaultValue;
-        }
-
-        function mapSet(map, key, value) {
-            map.set(key, value);
-        }
-
-        function mapDelete(map, key) {
-            map.delete(key);
-        }
-
-        function mapIsTrue(map, key) {
-            return map.get(key) === true;
-        }
-
-
-        var weightsFieldEl = document.getElementById('questionWeightsPayload');
-        var stagesPayloadInput = document.getElementById('questionStagesPayload');
+        var weightsFieldId = 'questionWeightValues';
+        var weightsFieldEl = document.getElementById(weightsFieldId);
+        var stageValuesFieldId = 'questionStagesPayload';
+        var stagesPayloadInput = document.getElementById(stageValuesFieldId);
         var stageCountInput = document.getElementById(options.stageCountInputId || 'questionnaireStageCountInput');
-        var secondaryStageToggleEl = document.getElementById(options.hasSecondaryStageCheckboxId || 'hasSecondaryStageCheckbox');
+        var multiStageToggleFieldId = options.multiStageToggleFieldId || 'enableMultiStageToggle';
+        var secondaryStageToggleEl = document.getElementById(multiStageToggleFieldId);
         var stageCountSection = document.getElementById(options.stageCountSectionId || 'questionnaireStageCountSection');
         var legendRow = document.getElementById('questionnaireStageLegendRow');
         var legendEl = document.getElementById('questionnaireStageLegend');
@@ -46,16 +75,12 @@ function initQuestionnaireAssignmentEditor(options) {
         var isQuestionSelected = new Map();
         var activeQuestionnaireEditorStage = 1;
 
-        function clamp(v, min, max) {
-            return Math.max(min, Math.min(max, v));
-        }
-
         function readStageCountFromInput() {
             if (!stageCountInput) {
                 return 1;
             }
             var n = parseInt(stageCountInput.value, 10);
-            if (isNaN(n) || n < 1) {
+            if (Number.isNaN(n) || n < 1) {
                 return 1;
             }
             if (n > 10) {
@@ -195,7 +220,7 @@ function initQuestionnaireAssignmentEditor(options) {
             var pairs = selected.map(function (cb) {
                 var qid = cb.value;
                 var st = parseInt(mapGet(questionStages, qid, 1), 10);
-                if (isNaN(st) || st < 1) {
+                if (Number.isNaN(st) || st < 1) {
                     st = 1;
                 }
                 if (st > maxS) {
@@ -207,18 +232,13 @@ function initQuestionnaireAssignmentEditor(options) {
             stagesPayloadInput.value = pairs.join(';');
         }
 
-        function parseIntSafe(raw, fallback) {
-            var parsed = parseInt(raw, 10);
-            return isNaN(parsed) ? fallback : parsed;
-        }
-
         function selectedIds(selected) {
             return selected.map(function (cb) { return cb.value; });
         }
 
         function ensureWeight(questionId) {
             var current = parseIntSafe(mapGet(questionWeights, questionId, 0), NaN);
-            if (isNaN(current)) {
+            if (Number.isNaN(current)) {
                 current = 0;
             }
             mapSet(questionWeights, questionId, clamp(current, 0, 100));
@@ -362,7 +382,7 @@ function initQuestionnaireAssignmentEditor(options) {
             selected.forEach(function (cb) {
                 var questionId = cb.value;
                 ensureWeight(questionId);
-                var row = weightRows.querySelector('.question-weight-row[data-question-id="' + questionId + '"]');
+                var row = findWeightRow(weightRows, questionId);
                 if (!row) {
                     return;
                 }
@@ -589,7 +609,7 @@ function initQuestionnaireAssignmentEditor(options) {
             selected.forEach(function (cb) {
                 ensureWeight(cb.value);
                 var qid = cb.value;
-                if (!questionStages.has(qid) || isNaN(parseInt(mapGet(questionStages, qid, 1), 10))) {
+                if (!questionStages.has(qid) || Number.isNaN(parseInt(mapGet(questionStages, qid, 1), 10))) {
                     mapSet(questionStages, qid, 1);
                 }
             });
@@ -657,14 +677,14 @@ function initQuestionnaireAssignmentEditor(options) {
         questionCheckboxes.forEach(function (cb) {
             var qid = cb.value;
             var initial = parseFloat(cb.getAttribute('data-initial-weight'));
-            if (!isNaN(initial)) {
+            if (!Number.isNaN(initial)) {
                 mapSet(questionWeights, qid, clamp(initial, 0, 100));
             }
             if (cb.checked) {
                 mapSet(isQuestionSelected, qid, true);
                 var initStage = parseInt(cb.getAttribute('data-initial-stage'), 10);
                 var cap = getQuestionnaireStageCount();
-                var st = (!isNaN(initStage) && initStage > 0) ? initStage : 1;
+                var st = (!Number.isNaN(initStage) && initStage > 0) ? initStage : 1;
                 mapSet(questionStages, qid, Math.min(cap, Math.max(1, st)));
             }
             cb.addEventListener('change', function () {
@@ -782,7 +802,7 @@ function initQuestionnaireAssignmentEditor(options) {
             return;
         }
         var desiredStageCount = parseInt(template.stageCount, 10);
-        if (!isNaN(desiredStageCount) && desiredStageCount > getQuestionnaireStageCount()) {
+        if (!Number.isNaN(desiredStageCount) && desiredStageCount > getQuestionnaireStageCount()) {
             if (secondaryStageToggleEl) {
                 secondaryStageToggleEl.checked = desiredStageCount > 1;
             }
@@ -799,9 +819,9 @@ function initQuestionnaireAssignmentEditor(options) {
             }
             mapSet(isQuestionSelected, qid, true);
             var weight = parseFloat(item.weight);
-            mapSet(questionWeights, qid, clamp(isNaN(weight) ? 0 : Math.round(weight), 0, 100));
+            mapSet(questionWeights, qid, clamp(Number.isNaN(weight) ? 0 : Math.round(weight), 0, 100));
             var stage = parseInt(item.stageNumber, 10);
-            mapSet(questionStages, qid, isNaN(stage) || stage < 1 ? 1 : stage);
+            mapSet(questionStages, qid, Number.isNaN(stage) || stage < 1 ? 1 : stage);
         });
         syncAllCheckboxVisuals();
         syncGroupSelectHeaders();
@@ -812,3 +832,5 @@ function initQuestionnaireAssignmentEditor(options) {
     window.questionnaireAssignmentEditor = api;
     return api;
 }
+
+window.initQuestionnaireAssignmentEditor = initQuestionnaireAssignmentEditor;

@@ -1,9 +1,15 @@
-var swGlobal = typeof globalThis !== "undefined" ? globalThis : this;
+/* eslint-env serviceworker */
+/* global self */
+var swGlobal = self;
+var LEADING_SLASHES = /^\/+/;
+var STATIC_PATH_PATTERN = /\/(?:Content|Scripts)\//i;
+var STATIC_EXT_PATTERN = /\.(?:css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/i;
+
 var CACHE_NAME = "recruitment-shell-v1";
 var scopeUrl = new swGlobal.URL(swGlobal.registration.scope);
 
 function appUrl(relativePath) {
-    return new swGlobal.URL(relativePath.replace(/^\/+/, ""), scopeUrl).toString();
+    return new swGlobal.URL(relativePath.replace(LEADING_SLASHES, ""), scopeUrl).toString();
 }
 
 var OFFLINE_URL = appUrl("offline.html");
@@ -70,8 +76,8 @@ swGlobal.addEventListener("fetch", function (event) {
         return;
     }
 
-    var isStaticAsset = /\/(Content|Scripts)\//i.test(requestUrl.pathname) ||
-        /\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/i.test(requestUrl.pathname);
+    var isStaticAsset = STATIC_PATH_PATTERN.test(requestUrl.pathname) ||
+        STATIC_EXT_PATTERN.test(requestUrl.pathname);
 
     if (isStaticAsset) {
         event.respondWith(
