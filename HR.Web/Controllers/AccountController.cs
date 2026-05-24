@@ -38,6 +38,12 @@ namespace HR.Web.Controllers
         }
 
         [AllowAnonymous]
+        public ActionResult Login(Uri returnUri)
+        {
+            return LoginCore(returnUri);
+        }
+
+        [AllowAnonymous]
         public ActionResult Login(string returnUrl)
         {
             return LoginCore(ParseReturnUriOrNull(returnUrl));
@@ -67,6 +73,11 @@ namespace HR.Web.Controllers
             return View();
         }
 
+        private static Uri ParseReturnUriOrNull(Uri returnUri)
+        {
+            return returnUri;
+        }
+
         private Uri ParseReturnUriOrNull(string returnUrl)
         {
             LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedUri);
@@ -86,7 +97,7 @@ namespace HR.Web.Controllers
                 password,
                 captcha ?? string.Empty,
                 role ?? string.Empty,
-                returnUrl ?? string.Empty);
+                ParseReturnUriOrNull(returnUrl));
         }
 
         [HttpPost]
@@ -361,7 +372,13 @@ namespace HR.Web.Controllers
         }
 
         [AllowAnonymous]
-        public ActionResult Register(int? companyId = null, bool isSuperAdmin = false, string returnUrl = null)
+        public ActionResult Register(int? companyId = null, bool isSuperAdmin = false, Uri returnUri = null)
+        {
+            return HandleRegisterGet(companyId, isSuperAdmin, returnUri);
+        }
+
+        [AllowAnonymous]
+        public ActionResult Register(int? companyId, bool isSuperAdmin, string returnUrl)
         {
             return HandleRegisterGet(companyId, isSuperAdmin, ParseReturnUriOrNull(returnUrl));
         }

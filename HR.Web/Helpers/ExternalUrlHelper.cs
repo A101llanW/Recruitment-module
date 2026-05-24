@@ -27,64 +27,63 @@ namespace HR.Web.Helpers
 
         private static Uri ResolveBaseUri(Uri requestUrl)
         {
-            var configuredBaseUrl = GetConfiguredBaseUrl();
-            var requestBaseUrl = BuildRequestBaseUrl(requestUrl);
+            var configuredBaseUri = GetConfiguredBaseUri();
+            var requestBaseUri = BuildRequestBaseUri(requestUrl);
 
-            string resolved;
-            if (!string.IsNullOrWhiteSpace(configuredBaseUrl))
+            Uri resolved;
+            if (configuredBaseUri != null)
             {
-                if (ShouldPreferRequestUrl(configuredBaseUrl, requestUrl))
+                if (ShouldPreferRequestUrl(configuredBaseUri, requestUrl))
                 {
-                    resolved = requestBaseUrl ?? configuredBaseUrl;
+                    resolved = requestBaseUri ?? configuredBaseUri;
                 }
                 else
                 {
-                    resolved = configuredBaseUrl;
+                    resolved = configuredBaseUri;
                 }
             }
             else
             {
-                resolved = requestBaseUrl ?? DefaultBaseUrl;
+                resolved = requestBaseUri ?? new Uri(DefaultBaseUrl, UriKind.Absolute);
             }
 
-            return Uri.TryCreate(resolved, UriKind.Absolute, out var parsedUri)
-                ? parsedUri
-                : new Uri(DefaultBaseUrl, UriKind.Absolute);
+            return resolved ?? new Uri(DefaultBaseUrl, UriKind.Absolute);
         }
 
-        private static string GetConfiguredBaseUrl()
+        private static Uri GetConfiguredBaseUri()
         {
             var settingsService = new SettingsService();
             var configured = settingsService.GetSetting("ExternalBaseUrl") ?? ConfigurationManager.AppSettings["ExternalBaseUrl"];
-            return string.IsNullOrWhiteSpace(configured) ? null : configured.Trim().TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(configured))
+            {
+                return null;
+            }
+
+            var trimmed = configured.Trim().TrimEnd('/');
+            return Uri.TryCreate(trimmed, UriKind.Absolute, out var parsedUri) ? parsedUri : null;
         }
 
-        private static string BuildRequestBaseUrl(Uri requestUrl)
+        private static Uri BuildRequestBaseUri(Uri requestUrl)
         {
             if (requestUrl == null)
             {
                 return null;
             }
 
-            return string.Format(
+            var requestBaseUrl = string.Format(
                 "{0}://{1}:{2}",
                 requestUrl.Scheme,
                 requestUrl.Host,
                 requestUrl.Port);
+
+            return Uri.TryCreate(requestBaseUrl, UriKind.Absolute, out var parsedUri) ? parsedUri : null;
         }
 
-        private static bool ShouldPreferRequestUrl(string configuredBaseUrl, Uri requestUrl)
+        private static bool ShouldPreferRequestUrl(Uri configuredUri, Uri requestUrl)
         {
-            if (requestUrl == null)
+            if (configuredUri == null || requestUrl == null)
             {
-                return false;
-            }
-
-            Uri configuredUri;
-            if (!Uri.TryCreate(configuredBaseUrl, UriKind.Absolute, out configuredUri))
-            {
-                // Invalid configured URL: use live request URL if available.
-                return true;
+                return requestUrl != null;
             }
 
             if (!IsLoopbackHost(configuredUri.Host) || !IsLoopbackHost(requestUrl.Host))
@@ -94,6 +93,17 @@ namespace HR.Web.Helpers
 
             return configuredUri.Port != requestUrl.Port ||
                    !string.Equals(configuredUri.Scheme, requestUrl.Scheme, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ShouldPreferRequestUrl(string configuredBaseUrl, Uri requestUrl)
+        {
+            if (string.IsNullOrWhiteSpace(configuredBaseUrl))
+            {
+                return requestUrl != null;
+            }
+
+            return Uri.TryCreate(configuredBaseUrl, UriKind.Absolute, out var configuredUri)
+                && ShouldPreferRequestUrl(configuredUri, requestUrl);
         }
 
         private static bool IsLoopbackHost(string host)
@@ -113,4 +123,3 @@ namespace HR.Web.Helpers
         }
     }
 }
-

@@ -145,9 +145,9 @@ namespace HR.Web.Controllers
                 model.FullName = importedProfile.FullName;
             }
 
-            if (string.IsNullOrWhiteSpace(model.PortfolioUrl) && importedProfile.ProfileUrl != null)
+            if (model.PortfolioUrl == null && importedProfile.ProfileUrl != null)
             {
-                model.PortfolioUrl = importedProfile.ProfileUrl.ToString();
+                model.PortfolioUrl = importedProfile.ProfileUrl;
             }
         }
 

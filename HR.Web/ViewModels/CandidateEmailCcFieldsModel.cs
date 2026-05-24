@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using HR.Web.Models;
 
@@ -11,6 +12,6 @@ namespace HR.Web.ViewModels
 
         public List<CompanyHrCcEmail> HrContacts { get; set; }
 
-        public string ManageHrCcUrl { get; set; }
+        public Uri ManageHrCcUrl { get; set; }
     }
 }

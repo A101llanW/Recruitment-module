@@ -87,7 +87,7 @@ namespace HR.Web.ViewModels
         public string Certifications { get; set; }
 
         [Display(Name = "Portfolio or LinkedIn URL")]
-        public string PortfolioUrl { get; set; }
+        public Uri PortfolioUrl { get; set; }
 
         [Display(Name = "Work Authorization")]
         public bool WorkAuthorization { get; set; }

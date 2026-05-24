@@ -39,7 +39,14 @@ namespace HR.Web.Controllers
         {
             try
             {
-                var request = BuildQuestionGenerationRequest(jobTitle, jobDescription, keyResponsibilities, requiredQualifications, count, experience, questionTypes);
+                var request = BuildQuestionGenerationRequest(
+                    jobTitle ?? string.Empty,
+                    jobDescription ?? string.Empty,
+                    keyResponsibilities ?? string.Empty,
+                    requiredQualifications ?? string.Empty,
+                    count,
+                    experience ?? string.Empty,
+                    questionTypes);
                 LogQuestionGenerationRequest(request);
 
                 var validationError = ValidateQuestionGenerationRequest(request);

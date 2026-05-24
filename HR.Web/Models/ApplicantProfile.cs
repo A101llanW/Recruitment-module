@@ -48,7 +48,24 @@ namespace HR.Web.Models
 
         public string Certifications { get; set; }
 
-        public string PortfolioUrl { get; set; }
+        [Column("PortfolioUrl")]
+        [MaxLength(300)]
+        public string PortfolioUrlValue { get; set; }
+
+        [NotMapped]
+        public Uri PortfolioUrl
+        {
+            get
+            {
+                return string.IsNullOrWhiteSpace(PortfolioUrlValue) || !Uri.TryCreate(PortfolioUrlValue, UriKind.Absolute, out var parsedUri)
+                    ? null
+                    : parsedUri;
+            }
+            set
+            {
+                PortfolioUrlValue = value != null ? value.ToString() : null;
+            }
+        }
 
         public bool WorkAuthorization { get; set; }
 

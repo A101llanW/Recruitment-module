@@ -231,9 +231,10 @@ namespace HR.Web
             }
 
             var identity = new GenericIdentity(username, "Forms");
-            var roles = string.IsNullOrWhiteSpace(rolesString)
+            var rolesStringValue = rolesString ?? string.Empty;
+            var roles = string.IsNullOrWhiteSpace(rolesStringValue)
                 ? new string[] { }
-                : rolesString.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                : rolesStringValue.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
             var principal = new GenericPrincipal(identity, roles);
             HttpContext.Current.User = principal;
             System.Threading.Thread.CurrentPrincipal = principal;

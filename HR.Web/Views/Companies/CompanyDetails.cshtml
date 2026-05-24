@@ -9,8 +9,9 @@
     var licenseHistory = (Model.LicenseTransactions ?? new System.Collections.Generic.List<HR.Web.Models.LicenseTransaction>())
         .OrderByDescending(t => t.TransactionDate)
         .ToList();
-    var logoUrl = CompanyLogoHelper.GetPublicUrl(Model.Company.LogoPath, Url);
-    var hasLogo = !string.IsNullOrEmpty(logoUrl);
+    var logoUri = CompanyLogoHelper.GetPublicUrl(Model.Company.LogoPath, Url);
+    var logoUrl = logoUri != null ? logoUri.ToString() : null;
+    var hasLogo = logoUri != null;
 }
 
 <style>

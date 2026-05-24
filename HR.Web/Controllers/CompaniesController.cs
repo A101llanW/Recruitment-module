@@ -701,7 +701,7 @@ namespace HR.Web.Controllers
         public bool IsActive { get; set; }
         public DateTime? LicenseExpiryDate { get; set; }
         public string CurrentLogoPath { get; set; }
-        public string CurrentLogoUrl { get; set; }
+        public Uri CurrentLogoUrl { get; set; }
     }
 
     public class CompanyDetailsViewModel

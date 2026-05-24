@@ -35,7 +35,9 @@
 
     var panelistsForCc = ViewBag.EmailCcPanelists as List<HR.Web.Models.User> ?? new List<HR.Web.Models.User>();
     var hrContactsForCc = ViewBag.EmailCcHrContacts as List<HR.Web.Models.CompanyHrCcEmail> ?? new List<HR.Web.Models.CompanyHrCcEmail>();
-    var manageHrCcUrl = Url.Action("HrCcEmails", "Admin");
+    var manageHrCcUrl = Uri.TryCreate(Url.Action("HrCcEmails", "Admin"), UriKind.RelativeOrAbsolute, out var parsedManageHrCcUrl)
+        ? parsedManageHrCcUrl
+        : null;
     var failedCandidateEmailApplicationIds = ViewBag.FailedCandidateEmailApplicationIds as HashSet<int>
         ?? new HashSet<int>();
 

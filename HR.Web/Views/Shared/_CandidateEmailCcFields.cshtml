@@ -79,7 +79,7 @@
     {
         <div class="text-muted small">
             No HR CC addresses configured.
-            @if (!string.IsNullOrWhiteSpace(Model.ManageHrCcUrl))
+            @if (Model.ManageHrCcUrl != null)
             {
                 <a href="@Model.ManageHrCcUrl">Add HR CC emails</a>
             }

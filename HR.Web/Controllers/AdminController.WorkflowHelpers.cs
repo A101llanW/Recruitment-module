@@ -13,7 +13,7 @@ namespace HR.Web.Controllers
     {
         private ActionResult HandleCandidateRankings(int? positionId)
         {
-            var applications = GetCandidateRankingApplications(positionId);
+            var applications = GetCandidateRankingApplications(positionId) ?? new List<Application>();
             var viewModel = new CandidateRankingsViewModel
             {
                 Positions = _uow.Positions.GetAll(p => p.Department).ToList(),
@@ -35,7 +35,8 @@ namespace HR.Web.Controllers
             applicationsQuery = _tenantService.ApplyTenantFilter(applicationsQuery);
             if (positionId.HasValue)
             {
-                applicationsQuery = applicationsQuery.Where(a => a.PositionId == positionId.Value);
+                var selectedPositionId = positionId.Value;
+                applicationsQuery = applicationsQuery.Where(a => a.PositionId == selectedPositionId);
             }
 
             return applicationsQuery.ToList();
@@ -72,30 +73,42 @@ namespace HR.Web.Controllers
 
         private CandidateApplicationScore BuildCandidateScore(Application application)
         {
-            var questionnaireScore = CalculateQuestionnaireScoreOrFallback(application);
+            if (application == null)
+            {
+                return new CandidateApplicationScore();
+            }
+
+            var scopedApplication = application;
+            var questionnaireScore = CalculateQuestionnaireScoreOrFallback(scopedApplication);
             return new CandidateApplicationScore
             {
-                ApplicationId = application.Id,
-                CandidateName = application.Applicant != null ? application.Applicant.FullName : "Unknown",
-                CandidateEmail = application.Applicant != null ? application.Applicant.Email : "",
+                ApplicationId = scopedApplication.Id,
+                CandidateName = scopedApplication.Applicant != null ? scopedApplication.Applicant.FullName : "Unknown",
+                CandidateEmail = scopedApplication.Applicant != null ? scopedApplication.Applicant.Email : "",
                 TotalScore = questionnaireScore,
                 QuestionnaireScore = questionnaireScore,
                 MaxQuestionnaireScore = 100,
-                AppliedDate = application.AppliedOn,
-                Status = application.Status ?? "Pending",
-                PositionId = application.PositionId
+                AppliedDate = scopedApplication.AppliedOn,
+                Status = scopedApplication.Status ?? "Pending",
+                PositionId = scopedApplication.PositionId
             };
         }
 
         private decimal CalculateQuestionnaireScoreOrFallback(Application application)
         {
+            if (application == null)
+            {
+                return 0;
+            }
+
+            var scopedApplication = application;
             try
             {
-                return _scoringService.CalculateApplicationScore(application);
+                return _scoringService.CalculateApplicationScore(scopedApplication);
             }
             catch
             {
-                return application.Score ?? 0;
+                return scopedApplication.Score ?? 0;
             }
         }
 
@@ -449,17 +462,24 @@ namespace HR.Web.Controllers
 
         private static User BuildUserFromCreateModel(CreateUserViewModel model, RoleSelectionResolution roleSelection)
         {
+            if (model == null || roleSelection == null)
+            {
+                return null;
+            }
+
+            var userModel = model;
+            var resolvedRole = roleSelection;
             return new User
             {
-                FirstName = model.FirstName,
-                LastName = model.LastName,
-                UserName = model.UserName,
-                Email = model.Email,
-                Role = roleSelection.BaseRole,
-                RoleDefinitionId = roleSelection.RoleDefinitionId,
-                PasswordHash = PasswordHelper.HashPassword(model.Password),
-                CompanyId = model.CompanyId,
-                RequirePasswordChange = model.RequirePasswordChange
+                FirstName = userModel.FirstName,
+                LastName = userModel.LastName,
+                UserName = userModel.UserName,
+                Email = userModel.Email,
+                Role = resolvedRole.BaseRole,
+                RoleDefinitionId = resolvedRole.RoleDefinitionId,
+                PasswordHash = PasswordHelper.HashPassword(userModel.Password),
+                CompanyId = userModel.CompanyId,
+                RequirePasswordChange = userModel.RequirePasswordChange
             };
         }
 

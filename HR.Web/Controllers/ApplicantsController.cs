@@ -49,7 +49,7 @@ namespace HR.Web.Controllers
                 return tenantAccessResult;
             }
 
-            var applications = GetApplicantApplications(id);
+            var applications = GetApplicantApplications(id) ?? new List<Application>();
             LogApplicantDetailsDebug(applicant, applications.Count);
 
             var selectedApp = SelectApplication(applications, selectedApplicationId);
@@ -87,12 +87,14 @@ namespace HR.Web.Controllers
 
         private static Application SelectApplication(IEnumerable<Application> applications, int? selectedApplicationId)
         {
+            var applicationList = applications ?? Enumerable.Empty<Application>();
             if (selectedApplicationId.HasValue)
             {
-                return applications.FirstOrDefault(a => a.Id == selectedApplicationId.Value);
+                var selectedId = selectedApplicationId.Value;
+                return applicationList.FirstOrDefault(a => a != null && a.Id == selectedId);
             }
 
-            return applications.FirstOrDefault();
+            return applicationList.FirstOrDefault(a => a != null);
         }
 
         private static void LogApplicantDetailsDebug(Applicant applicant, int applicationCount)

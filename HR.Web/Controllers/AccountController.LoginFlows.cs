@@ -20,7 +20,7 @@ namespace HR.Web.Controllers
             public string Password { get; set; }
             public string Captcha { get; set; }
             public Uri ReturnUrl { get; set; }
-            public string UrlTenantToken { get; set; }
+            public string TenantToken { get; set; }
             public string ClientIp { get; set; }
             public bool IsGlobalSuperAdmin { get; set; }
             public bool IsEmailLogin { get; set; }
@@ -41,6 +41,12 @@ namespace HR.Web.Controllers
             public string TenantSlug { get; set; }
         }
 
+        private ActionResult HandleLoginPost(string username, string password, string captcha, string role, Uri returnUri)
+        {
+            var returnPath = LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri) ?? string.Empty;
+            return HandleLoginPost(username, password, captcha, role, returnPath);
+        }
+
         private ActionResult HandleLoginPost(string username, string password, string captcha, string role, string returnPath)
         {
             _ = role;
@@ -52,7 +58,7 @@ namespace HR.Web.Controllers
             try
             {
                 var request = BuildLoginRequest(username, password, captcha, returnPath);
-                var targetCompanyId = ResolveTargetCompanyId(request.UrlTenantToken);
+                var targetCompanyId = ResolveTargetCompanyId(request.TenantToken);
 
                 var captchaFailure = ValidateSubmittedCaptcha(request);
                 if (captchaFailure != null)
@@ -104,7 +110,7 @@ namespace HR.Web.Controllers
 
         private LoginRequestModel BuildLoginRequest(string username, string password, string captcha, string returnPath)
         {
-            var urlTenantToken = RouteData.Values["tenant"] as string;
+            var tenantToken = RouteData.Values["tenant"] as string;
             LocalReturnUrlHelper.TryParseLocalReturnUri(returnPath, Url, out var parsedReturnUrl);
 
             return new LoginRequestModel
@@ -113,22 +119,22 @@ namespace HR.Web.Controllers
                 Password = password,
                 Captcha = captcha,
                 ReturnUrl = parsedReturnUrl,
-                UrlTenantToken = urlTenantToken,
+                TenantToken = tenantToken,
                 ClientIp = Request.UserHostAddress,
                 IsGlobalSuperAdmin = !string.IsNullOrEmpty(username) &&
                                      string.Equals(username, "SuperAdmin", StringComparison.OrdinalIgnoreCase) &&
-                                     string.IsNullOrEmpty(urlTenantToken)
+                                     string.IsNullOrEmpty(tenantToken)
             };
         }
 
-        private int? ResolveTargetCompanyId(string urlTenantToken)
+        private int? ResolveTargetCompanyId(string tenantToken)
         {
-            if (string.IsNullOrEmpty(urlTenantToken))
+            if (string.IsNullOrEmpty(tenantToken))
             {
                 return null;
             }
 
-            var targetCompany = _uow.Companies.GetAll().FirstOrDefault(c => c.Slug == urlTenantToken);
+            var targetCompany = _uow.Companies.GetAll().FirstOrDefault(c => c.Slug == tenantToken);
             return targetCompany != null ? (int?)targetCompany.Id : null;
         }
 
@@ -204,7 +210,7 @@ namespace HR.Web.Controllers
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, failureReason);
             AuditSvc.LogLogin(request.Username, false, failureReason);
             ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
-            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
             return View();
         }
 
@@ -282,7 +288,7 @@ namespace HR.Web.Controllers
             ModelState.AddModelError("", string.Format("Account is locked. Please try again in {0} minutes.", remainingTime.Minutes));
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, effectiveCompanyId, "Account locked");
             AuditSvc.LogLogin(request.Username, false, string.Format("Account locked. Try again in {0} minutes", remainingTime.Minutes));
-            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
             return View();
         }
 
@@ -291,7 +297,7 @@ namespace HR.Web.Controllers
             if (!request.IsEmailLogin && candidates.Count > 1 && !targetCompanyId.HasValue)
             {
                 ModelState.AddModelError("", "This username is used by multiple companies. Please use your email address to help us find the right account.");
-                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
+                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
                 return View();
             }
 
@@ -300,7 +306,7 @@ namespace HR.Web.Controllers
                 ViewBag.MultiCandidates = candidates;
                 ModelState.AddModelError("", "We found multiple accounts for this email. Please select the correct portal below.");
                 ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
-                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
+                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
                 return View();
             }
 
@@ -363,7 +369,7 @@ namespace HR.Web.Controllers
 
         private ActionResult BuildIdentifierNotFoundFailure(LoginRequestModel request, int? targetCompanyId)
         {
-            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
             ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
 
             if (targetCompanyId.HasValue)
@@ -449,7 +455,7 @@ namespace HR.Web.Controllers
 
             ModelState.AddModelError("", warningMessage);
             AuditSvc.LogLogin(request.Username, false, "Invalid password");
-            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
+            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
             return View();
         }
 
@@ -545,7 +551,7 @@ namespace HR.Web.Controllers
 
         private LoginRequestModel BuildPendingCompletionLoginRequest(User user)
         {
-            var urlTenantToken = RouteData.Values["tenant"] as string;
+            var tenantToken = RouteData.Values["tenant"] as string;
             var returnUrl = Session[LegalConsentSession.PendingReturnUrlSession] as string;
             LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedReturnUrl);
             return new LoginRequestModel
@@ -554,7 +560,7 @@ namespace HR.Web.Controllers
                 Password = null,
                 Captcha = null,
                 ReturnUrl = parsedReturnUrl,
-                UrlTenantToken = urlTenantToken,
+                TenantToken = tenantToken,
                 ClientIp = Request.UserHostAddress,
                 IsGlobalSuperAdmin = false,
                 IsEmailLogin = false,
@@ -564,7 +570,7 @@ namespace HR.Web.Controllers
 
         private void PopulateLegalConsentModalViewBag(LoginRequestModel request, User user)
         {
-            var tenant = request != null ? request.UrlTenantToken : null;
+            var tenant = request != null ? request.TenantToken : null;
             ViewBag.ShowLegalConsentModal = true;
             ViewBag.LegalTermsUrl = Url.Action("Terms", "Home", new { tenant });
             ViewBag.LegalPrivacyUrl = Url.Action("Privacy", "Home", new { tenant });
@@ -575,7 +581,7 @@ namespace HR.Web.Controllers
         {
             ConfigureLoginPortalViewBag(new LoginRequestModel
             {
-                UrlTenantToken = RouteData.Values["tenant"] as string,
+                TenantToken = RouteData.Values["tenant"] as string,
             });
 
             var userId = LegalConsentSession.TryReadUserId(Session);
@@ -732,13 +738,13 @@ namespace HR.Web.Controllers
             if (string.IsNullOrEmpty(tenantSlug))
             {
                 ModelState.AddModelError("", "Your account is not associated with an active company.");
-                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
+                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
                 return View();
             }
 
             AddPreferredTenantCookie(tenantSlug);
 
-            if (IsTenantMismatch(request.UrlTenantToken, tenantSlug))
+            if (IsTenantMismatch(request.TenantToken, tenantSlug))
             {
                 AuditSvc.LogAction(request.Username, "LOGIN_REDIRECT_TENANT", "Account", user.Id.ToString(), true, "Redirecting to branded portal: " + tenantSlug);
                 return RedirectToAction("Index", "Positions", new { tenant = tenantSlug });
@@ -757,7 +763,7 @@ namespace HR.Web.Controllers
 
         private void ConfigureLoginPortalViewBag(LoginRequestModel request)
         {
-            ViewBag.IsTenantCompanyPortal = request != null && !string.IsNullOrEmpty(request.UrlTenantToken);
+            ViewBag.IsTenantCompanyPortal = request != null && !string.IsNullOrEmpty(request.TenantToken);
         }
 
         private void PersistUserLegalAcceptance(User user)
@@ -789,10 +795,10 @@ namespace HR.Web.Controllers
             Response.Cookies.Add(prefCookie);
         }
 
-        private static bool IsTenantMismatch(string urlTenantToken, string correctTenantSlug)
+        private static bool IsTenantMismatch(string tenantToken, string correctTenantSlug)
         {
-            return string.IsNullOrEmpty(urlTenantToken) ||
-                   !string.Equals(urlTenantToken, correctTenantSlug, StringComparison.OrdinalIgnoreCase);
+            return string.IsNullOrEmpty(tenantToken) ||
+                   !string.Equals(tenantToken, correctTenantSlug, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

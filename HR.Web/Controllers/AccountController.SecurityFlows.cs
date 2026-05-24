@@ -375,7 +375,7 @@ namespace HR.Web.Controllers
                 applicantProfile.EducationInstitution = TrimToNull(model.EducationInstitution);
                 applicantProfile.KeyAchievement = TrimToNull(model.KeyAchievement);
                 applicantProfile.Certifications = TrimToNull(model.Certifications);
-                applicantProfile.PortfolioUrl = TrimToNull(model.PortfolioUrl);
+                applicantProfile.PortfolioUrl = model.PortfolioUrl;
                 applicantProfile.WorkAuthorization = model.WorkAuthorization;
                 applicantProfile.NoticePeriod = TrimToNull(model.NoticePeriod);
                 applicantProfile.UpdatedOn = DateTime.UtcNow;
@@ -445,7 +445,7 @@ namespace HR.Web.Controllers
                    !string.IsNullOrWhiteSpace(model.EducationInstitution) ||
                    !string.IsNullOrWhiteSpace(model.KeyAchievement) ||
                    !string.IsNullOrWhiteSpace(model.Certifications) ||
-                   !string.IsNullOrWhiteSpace(model.PortfolioUrl) ||
+                   model.PortfolioUrl != null ||
                    model.WorkAuthorization ||
                    !string.IsNullOrWhiteSpace(model.NoticePeriod);
         }

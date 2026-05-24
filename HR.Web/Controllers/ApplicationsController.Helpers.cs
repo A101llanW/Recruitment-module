@@ -942,7 +942,7 @@ namespace HR.Web.Controllers
             profile.EducationInstitution = profileModel.EducationInstitution != null ? profileModel.EducationInstitution.Trim() : null;
             profile.KeyAchievement = profileModel.KeyAchievement != null ? profileModel.KeyAchievement.Trim() : null;
             profile.Certifications = profileModel.Certifications != null ? profileModel.Certifications.Trim() : null;
-            profile.PortfolioUrl = profileModel.PortfolioUrl != null ? profileModel.PortfolioUrl.Trim() : null;
+            profile.PortfolioUrl = profileModel.PortfolioUrl;
             profile.WorkAuthorization = profileModel.WorkAuthorization;
             profile.NoticePeriod = profileModel.NoticePeriod != null ? profileModel.NoticePeriod.Trim() : null;
             profile.UpdatedOn = DateTime.UtcNow;

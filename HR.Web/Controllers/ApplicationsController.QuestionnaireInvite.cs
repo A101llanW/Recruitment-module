@@ -185,11 +185,5 @@ namespace HR.Web.Controllers
             var text = value.ToString();
             return new Uri(text.EndsWith("/", StringComparison.Ordinal) ? text : text + "/", UriKind.Absolute);
         }
-
-        private static string EnsureQuestionnaireInviteBaseUrl(string value)
-        {
-            return EnsureQuestionnaireInviteBaseUrl(
-                Uri.TryCreate(value, UriKind.Absolute, out var parsedUri) ? parsedUri : null).ToString();
-        }
     }
 }

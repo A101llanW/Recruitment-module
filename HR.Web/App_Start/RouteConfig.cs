@@ -8,6 +8,11 @@ namespace HR.Web
     {
         public static void RegisterRoutes(RouteCollection routes)
         {
+            if (routes == null)
+            {
+                return;
+            }
+
             routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
             routes.IgnoreRoute("Content/{*pathInfo}");
             routes.IgnoreRoute("Scripts/{*pathInfo}");

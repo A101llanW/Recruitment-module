@@ -218,7 +218,7 @@
                             <tr><th>Education Institution</th><td>@textOrDash(Model.EducationInstitution)</td></tr>
                             <tr><th>Key Achievement</th><td>@textOrDash(Model.KeyAchievement)</td></tr>
                             <tr><th>Certifications</th><td>@textOrDash(Model.Certifications)</td></tr>
-                            <tr><th>Portfolio / LinkedIn URL</th><td>@textOrDash(Model.PortfolioUrl)</td></tr>
+                            <tr><th>Portfolio / LinkedIn URL</th><td>@textOrDash(Model.PortfolioUrl != null ? Model.PortfolioUrl.ToString() : null)</td></tr>
                         </tbody>
                     </table>
                 </div>

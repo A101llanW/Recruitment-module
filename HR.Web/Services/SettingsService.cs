@@ -28,6 +28,11 @@ namespace HR.Web.Services
 
         public string GetSetting(string key, string defaultValue = null)
         {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return defaultValue;
+            }
+
             try
             {
                 // Simple cache logic
@@ -64,8 +69,16 @@ namespace HR.Web.Services
 
         public T GetSetting<T>(string key, T defaultValue = default(T))
         {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return defaultValue;
+            }
+
             string value = GetSetting(key);
-            if (string.IsNullOrEmpty(value)) return defaultValue;
+            if (string.IsNullOrEmpty(value))
+            {
+                return defaultValue;
+            }
 
             try
             {

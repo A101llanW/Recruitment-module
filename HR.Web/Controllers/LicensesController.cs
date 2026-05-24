@@ -40,7 +40,8 @@ namespace HR.Web.Controllers
                     return Json(new { success = false, message = "Company not found." });
                 }
 
-                var oldExpiry = company.LicenseExpiryDate;
+                var scopedCompany = company;
+                var oldExpiry = scopedCompany.LicenseExpiryDate;
                 var newExpiry = CalculateNewExpiry(oldExpiry, value, unit);
                 _tenantService.UpdateCompanyLicense(id, newExpiry, null);
                 RecordLicenseExtension(id, oldExpiry, newExpiry, value, unit);
@@ -48,7 +49,7 @@ namespace HR.Web.Controllers
 
                 return Json(new { 
                     success = true, 
-                    message = string.Format("License extended by {0} {1} for {2}.", value, unit, company.Name),
+                    message = string.Format("License extended by {0} {1} for {2}.", value, unit, scopedCompany.Name),
                     newExpiry = newExpiry.ToString("yyyy-MM-dd")
                 });
             }

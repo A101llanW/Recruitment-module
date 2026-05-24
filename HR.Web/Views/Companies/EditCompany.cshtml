@@ -2,7 +2,7 @@
 @{
     ViewBag.Title = "Edit Company";
     Layout = "~/Views/Shared/_Layout.cshtml";
-    var hasLogo = !string.IsNullOrEmpty(Model.CurrentLogoUrl);
+    var hasLogo = Model.CurrentLogoUrl != null;
 }
 
 <style>

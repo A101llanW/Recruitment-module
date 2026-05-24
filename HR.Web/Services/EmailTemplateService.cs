@@ -40,11 +40,21 @@ namespace HR.Web.Services
 
         public string GetGlobalSubjectKey(string templateKey)
         {
+            if (string.IsNullOrWhiteSpace(templateKey))
+            {
+                return BuildGlobalTemplateKey(string.Empty, "Subject");
+            }
+
             return BuildGlobalTemplateKey(templateKey, "Subject");
         }
 
         public string GetGlobalBodyKey(string templateKey)
         {
+            if (string.IsNullOrWhiteSpace(templateKey))
+            {
+                return BuildGlobalTemplateKey(string.Empty, "BodyHtml");
+            }
+
             return BuildGlobalTemplateKey(templateKey, "BodyHtml");
         }
 

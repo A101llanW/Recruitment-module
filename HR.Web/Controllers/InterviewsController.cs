@@ -613,7 +613,8 @@ namespace HR.Web.Controllers
         {
             var safeApplicantName = HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(applicantName) ? "Candidate" : applicantName.Trim());
             var safePositionTitle = HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(positionTitle) ? "the position" : positionTitle.Trim());
-            var safeMode = HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(mode) ? "Interview" : mode.Trim());
+            var modeValue = mode ?? string.Empty;
+            var safeMode = HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(modeValue) ? "Interview" : modeValue.Trim());
             var safeScheduledAt = HttpUtility.HtmlEncode(scheduledAt.ToString("f"));
             var safeMessage = HttpUtility.HtmlEncode(customMessage ?? string.Empty)
                 .Replace("\r\n", "<br/>")
