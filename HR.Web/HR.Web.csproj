@@ -252,6 +252,7 @@
     <Compile Include="Services\DynamicQuestionService.cs" />
     <Compile Include="Services\MCPService.cs" />
     <Compile Include="Services\QuestionnaireService.cs" />
+    <Compile Include="Services\QuestionnaireService.Templates.cs" />
     <Compile Include="Services\ScoringService.cs" />
     <Compile Include="Services\SecurityService.cs" />
     <Compile Include="Services\AuditService.cs" />

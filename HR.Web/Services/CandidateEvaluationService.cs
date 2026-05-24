@@ -143,34 +143,37 @@ namespace HR.Web.Services
 
         private static void CountStandardProfileFields(ApplicationReviewViewModel review, ref int totalFields, ref int completedFields)
         {
-            if (review == null)
+            if (review == null || !UsesStandardProfileFields(review))
             {
                 return;
             }
 
-            var reviewData = review;
-            var usingStandardFields = !string.IsNullOrWhiteSpace(reviewData.WhyInterested) ||
-                                      !string.IsNullOrWhiteSpace(reviewData.YearsInField) ||
-                                      !string.IsNullOrWhiteSpace(reviewData.EducationLevel);
-            if (!usingStandardFields)
-            {
-                return;
-            }
-
-            totalFields += 12;
-            if (!string.IsNullOrWhiteSpace(reviewData.WhyInterested)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.InterestLevel)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.YearsInField)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.YearsInRole)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.ExpectedSalary)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.EducationLevel)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.WorkAvailability)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.WorkMode)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.AvailabilityToStart)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.CommunicationSkills)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.ProblemSolvingSkills)) completedFields++;
-            if (!string.IsNullOrWhiteSpace(reviewData.TeamworkSkills)) completedFields++;
+            totalFields += StandardProfileFieldAccessors.Length;
+            completedFields += StandardProfileFieldAccessors.Count(accessor => !string.IsNullOrWhiteSpace(accessor(review)));
         }
+
+        private static bool UsesStandardProfileFields(ApplicationReviewViewModel review)
+        {
+            return !string.IsNullOrWhiteSpace(review.WhyInterested) ||
+                   !string.IsNullOrWhiteSpace(review.YearsInField) ||
+                   !string.IsNullOrWhiteSpace(review.EducationLevel);
+        }
+
+        private static readonly Func<ApplicationReviewViewModel, string>[] StandardProfileFieldAccessors =
+        {
+            review => review.WhyInterested,
+            review => review.InterestLevel,
+            review => review.YearsInField,
+            review => review.YearsInRole,
+            review => review.ExpectedSalary,
+            review => review.EducationLevel,
+            review => review.WorkAvailability,
+            review => review.WorkMode,
+            review => review.AvailabilityToStart,
+            review => review.CommunicationSkills,
+            review => review.ProblemSolvingSkills,
+            review => review.TeamworkSkills
+        };
 
         private static void CountDynamicAnswerFields(List<ApplicationAnswer> answers, ref int totalFields, ref int completedFields)
         {
@@ -409,33 +412,37 @@ namespace HR.Web.Services
         private static decimal ScoreEducation(string educationLevel, string fallbackText)
         {
             var eduText = (educationLevel ?? string.Empty) + " " + (fallbackText ?? string.Empty);
-            if (string.IsNullOrWhiteSpace(eduText))
+            if (string.IsNullOrWhiteSpace(eduText.Trim()))
             {
                 return 0;
             }
 
-            var edu = eduText.ToLower();
-            if (edu.Contains("master") || edu.Contains("phd") || edu.Contains("doctorate"))
+            return MatchEducationScore(eduText.ToLower());
+        }
+
+        private static decimal MatchEducationScore(string edu)
+        {
+            if (ContainsAny(edu, "master", "phd", "doctorate"))
             {
                 return 7;
             }
 
-            if (edu.Contains("bachelor") || edu.Contains("degree") || edu.Contains("graduate"))
+            if (ContainsAny(edu, "bachelor", "degree", "graduate"))
             {
                 return 5;
             }
 
-            if (edu.Contains("diploma") || edu.Contains("certificate"))
+            if (ContainsAny(edu, "diploma", "certificate"))
             {
                 return 3;
             }
 
-            if (edu.Contains("high school"))
-            {
-                return 1;
-            }
+            return edu.Contains("high school") ? 1 : 0;
+        }
 
-            return 0;
+        private static bool ContainsAny(string text, params string[] terms)
+        {
+            return terms.Any(text.Contains);
         }
 
         private decimal EvaluateMotivation(ApplicationReviewViewModel review, string fallbackText = "")
@@ -522,48 +529,62 @@ namespace HR.Web.Services
                 return 0;
             }
 
-            var reviewData = review;
-            if (string.IsNullOrWhiteSpace(reviewData.CommunicationSkills) &&
-                string.IsNullOrWhiteSpace(reviewData.ProblemSolvingSkills) &&
-                string.IsNullOrWhiteSpace(reviewData.TeamworkSkills))
+            var ratings = ParseSkillRatings(review);
+            if (ratings.Count == 0)
             {
                 return 0;
             }
 
-            decimal skillSum = 0;
-            int count = 0;
-            int val;
-            if (int.TryParse(reviewData.CommunicationSkills, out val)) { skillSum += val; count++; }
-            if (int.TryParse(reviewData.ProblemSolvingSkills, out val)) { skillSum += val; count++; }
-            if (int.TryParse(reviewData.TeamworkSkills, out val)) { skillSum += val; count++; }
+            return ScoreAverageSkillRating(ratings.Average());
+        }
 
-            if (count <= 0)
+        private static List<decimal> ParseSkillRatings(ApplicationReviewViewModel review)
+        {
+            var ratings = new List<decimal>();
+            foreach (var fieldValue in new[] { review.CommunicationSkills, review.ProblemSolvingSkills, review.TeamworkSkills })
             {
-                return 0;
+                int parsedValue;
+                if (int.TryParse(fieldValue, out parsedValue))
+                {
+                    ratings.Add(parsedValue);
+                }
             }
 
-            var avg = skillSum / count;
-            if (avg >= 4) return 3;
-            if (avg >= 3) return 2;
-            return 1;
+            return ratings;
+        }
+
+        private static decimal ScoreAverageSkillRating(decimal average)
+        {
+            if (average >= 4)
+            {
+                return 3;
+            }
+
+            return average >= 3 ? 2 : 1;
+        }
+
+        private static bool HasSkillAssessments(ApplicationReviewViewModel review)
+        {
+            return review != null && (
+                !string.IsNullOrWhiteSpace(review.CommunicationSkills) ||
+                !string.IsNullOrWhiteSpace(review.ProblemSolvingSkills) ||
+                !string.IsNullOrWhiteSpace(review.TeamworkSkills));
         }
 
         private static decimal ScoreDetailedAnswersBonus(ApplicationReviewViewModel review, List<ApplicationAnswer> answers)
         {
-            if (review == null)
+            if (HasSkillAssessments(review))
             {
                 return 0;
             }
 
-            var reviewData = review;
-            if (!string.IsNullOrWhiteSpace(reviewData.CommunicationSkills) ||
-                !string.IsNullOrWhiteSpace(reviewData.ProblemSolvingSkills) ||
-                !string.IsNullOrWhiteSpace(reviewData.TeamworkSkills))
-            {
-                return 0;
-            }
+            return HasDetailedDynamicAnswers(answers) ? 2 : 0;
+        }
 
-            return answers != null && answers.Any(a => a != null && a.AnswerText != null && a.AnswerText.Length > 100) ? 2 : 0;
+        private static bool HasDetailedDynamicAnswers(List<ApplicationAnswer> answers)
+        {
+            return answers != null &&
+                   answers.Any(a => a != null && a.AnswerText != null && a.AnswerText.Length > 100);
         }
 
         private static decimal ScoreCompleteDynamicAnswers(List<ApplicationAnswer> answers)

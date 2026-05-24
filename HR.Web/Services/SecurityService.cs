@@ -20,30 +20,22 @@ namespace HR.Web.Services
         
         public bool IsAccountLocked(string username, int? companyId = null)
         {
-            var lockoutThreshold = DateTime.Now.AddMinutes(-LockoutDurationMinutes);
-            var query = _uow.LoginAttempts.GetAll()
-                .Where(a => a.Username.ToLower() == username.ToLower() 
-                           && !a.WasSuccessful 
-                           && a.AttemptTime > lockoutThreshold);
-            
-            if (companyId.HasValue)
-                query = query.Where(a => a.CompanyId == companyId.Value);
-                
-            return query.Count() >= MaxFailedAttempts;
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return false;
+            }
+
+            return BuildRecentFailedLoginQuery(username, companyId).Count() >= MaxFailedAttempts;
         }
         
         public DateTime? GetLockoutEndTime(string username, int? companyId = null)
         {
-            var lockoutThreshold = DateTime.Now.AddMinutes(-LockoutDurationMinutes);
-            var query = _uow.LoginAttempts.GetAll()
-                .Where(a => a.Username.ToLower() == username.ToLower() 
-                           && !a.WasSuccessful 
-                           && a.AttemptTime > lockoutThreshold);
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return null;
+            }
 
-            if (companyId.HasValue)
-                query = query.Where(a => a.CompanyId == companyId.Value);
-
-            var failedAttempts = query
+            var failedAttempts = BuildRecentFailedLoginQuery(username, companyId)
                 .OrderByDescending(a => a.AttemptTime)
                 .Take(MaxFailedAttempts)
                 .ToList();
@@ -59,10 +51,15 @@ namespace HR.Web.Services
         
         public void RecordLoginAttempt(string username, string ipAddress, bool wasSuccessful, int? companyId = null, string failureReason = null)
         {
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return;
+            }
+
             var attempt = new LoginAttempt
             {
                 Username = username,
-                IPAddress = ipAddress,
+                IPAddress = ipAddress ?? string.Empty,
                 AttemptTime = DateTime.Now,
                 WasSuccessful = wasSuccessful,
                 CompanyId = companyId,
@@ -75,28 +72,22 @@ namespace HR.Web.Services
         
         public int GetRemainingAttempts(string username, int? companyId = null)
         {
-            var lockoutThreshold = DateTime.Now.AddMinutes(-LockoutDurationMinutes);
-            var query = _uow.LoginAttempts.GetAll()
-                .Where(a => a.Username.ToLower() == username.ToLower() 
-                           && !a.WasSuccessful 
-                           && a.AttemptTime > lockoutThreshold);
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return MaxFailedAttempts;
+            }
 
-            if (companyId.HasValue)
-                query = query.Where(a => a.CompanyId == companyId.Value);
-                
-            return Math.Max(0, MaxFailedAttempts - query.Count());
+            return Math.Max(0, MaxFailedAttempts - BuildRecentFailedLoginQuery(username, companyId).Count());
         }
         
         public void ClearFailedAttempts(string username, int? companyId = null)
         {
-            var query = _uow.LoginAttempts.GetAll()
-                .Where(a => a.Username.ToLower() == username.ToLower() 
-                           && !a.WasSuccessful);
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return;
+            }
 
-            if (companyId.HasValue)
-                query = query.Where(a => a.CompanyId == companyId.Value);
-
-            var failedAttempts = query.ToList();
+            var failedAttempts = BuildFailedLoginQuery(username, companyId).ToList();
                 
             foreach (var attempt in failedAttempts)
             {
@@ -104,6 +95,27 @@ namespace HR.Web.Services
             }
             
             _uow.Complete();
+        }
+
+        private IQueryable<LoginAttempt> BuildRecentFailedLoginQuery(string username, int? companyId)
+        {
+            var lockoutThreshold = DateTime.Now.AddMinutes(-LockoutDurationMinutes);
+            return BuildFailedLoginQuery(username, companyId)
+                .Where(a => a.AttemptTime > lockoutThreshold);
+        }
+
+        private IQueryable<LoginAttempt> BuildFailedLoginQuery(string username, int? companyId)
+        {
+            var normalizedUsername = username.ToLower();
+            var query = _uow.LoginAttempts.GetAll()
+                .Where(a => a.Username.ToLower() == normalizedUsername && !a.WasSuccessful);
+
+            if (companyId.HasValue)
+            {
+                query = query.Where(a => a.CompanyId == companyId.Value);
+            }
+
+            return query;
         }
         public string GenerateSecureToken()
         {
@@ -138,14 +150,21 @@ namespace HR.Web.Services
 
         public string GetQrCodeBase64(string username, string secret)
         {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(secret))
+            {
+                return string.Empty;
+            }
+
+            var accountName = username;
+            var sharedSecret = secret;
             var authenticator = new TwoFactorAuthenticator();
-            var setupInfo = authenticator.GenerateSetupCode(HR.Web.Helpers.AppConfig.ProductName, username, secret, false, 3);
+            var setupInfo = authenticator.GenerateSetupCode(HR.Web.Helpers.AppConfig.ProductName, accountName, sharedSecret, false, 3);
             
             // Format: otpauth://totp/Issuer:Account?secret=Secret&issuer=Issuer
             string otpAuthUrl = string.Format("otpauth://totp/{0}:{1}?secret={2}&issuer={0}", 
                 HttpUtility.UrlEncode(HR.Web.Helpers.AppConfig.ProductName), 
-                HttpUtility.UrlEncode(username), 
-                secret);
+                HttpUtility.UrlEncode(accountName), 
+                sharedSecret);
 
             using (var qrGenerator = new QRCodeGenerator())
             using (var qrCodeData = qrGenerator.CreateQrCode(otpAuthUrl, QRCodeGenerator.ECCLevel.Q))
@@ -162,6 +181,11 @@ namespace HR.Web.Services
 
         public bool ValidateTwoFactorCode(string secret, string code)
         {
+            if (string.IsNullOrWhiteSpace(secret) || string.IsNullOrWhiteSpace(code))
+            {
+                return false;
+            }
+
             var authenticator = new TwoFactorAuthenticator();
             return authenticator.ValidateTwoFactorPIN(secret, code);
         }
@@ -179,8 +203,15 @@ namespace HR.Web.Services
 
         public bool ValidateTemporaryCode(User user, string code)
         {
-            if (user == null || string.IsNullOrEmpty(user.TwoFactorCode)) return false;
-            if (!user.TwoFactorExpiry.HasValue || user.TwoFactorExpiry.Value < DateTime.Now) return false;
+            if (user == null || string.IsNullOrEmpty(user.TwoFactorCode) || string.IsNullOrWhiteSpace(code))
+            {
+                return false;
+            }
+
+            if (!user.TwoFactorExpiry.HasValue || user.TwoFactorExpiry.Value < DateTime.Now)
+            {
+                return false;
+            }
             
             return user.TwoFactorCode == code;
         }

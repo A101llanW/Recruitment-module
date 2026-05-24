@@ -1,5 +1,5 @@
 /* eslint-env browser */
-/* global document, window, Map, CSS */
+/* global document, window, CSS */
 /* @noflow */
 /* exported initQuestionnaireAssignmentEditor */
 
