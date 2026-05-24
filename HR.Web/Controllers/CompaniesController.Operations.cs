@@ -192,7 +192,7 @@ namespace HR.Web.Controllers
             var credentials = new AdminCredentialsViewModel
             {
                 CompanyName = company.Name,
-                CompanyUrl = string.Format("{0}/{1}", ExternalUrlHelper.GetBaseUrl(Request), company.Slug),
+                CompanyUrl = new Uri(string.Format("{0}/{1}", ExternalUrlHelper.GetBaseUrl(Request), company.Slug), UriKind.Absolute),
                 AdminUsername = bundle.AdminUser.UserName,
                 AdminPassword = bundle.TempPassword
             };

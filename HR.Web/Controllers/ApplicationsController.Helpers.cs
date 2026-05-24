@@ -133,6 +133,28 @@ namespace HR.Web.Controllers
         }
 
         /// <summary>
+        /// Validates tenant access, applicant identity, and profile completeness for questionnaire actions.
+        /// </summary>
+        private ActionResult ValidateQuestionnaireApplicantAccess(Position position, out Applicant applicant)
+        {
+            applicant = null;
+
+            var tenantValidationResult = ValidatePositionTenantAccess(position, "Access Denied: Position belongs to another company.");
+            if (tenantValidationResult != null)
+            {
+                return tenantValidationResult;
+            }
+
+            var applicantResult = RequireApplicantForPosition(position.CompanyId, out applicant);
+            if (applicantResult != null)
+            {
+                return applicantResult;
+            }
+
+            return RequireCompleteApplicantProfile(applicant, position);
+        }
+
+        /// <summary>
         /// Validates whether the applicant may open the questionnaire for this position and which stage is active.
         /// </summary>
         private ActionResult TryValidateQuestionnaireWorkflow(int positionId, Applicant applicant, out Position position, out int activeQuestionnaireStage, out Application existingApplication)
@@ -169,6 +191,13 @@ namespace HR.Web.Controllers
                 activeQuestionnaireStage = 1;
                 return null;
             }
+
+            return ResolveExistingApplicationQuestionnaireStage(existingApplication, maxStages, out activeQuestionnaireStage);
+        }
+
+        private ActionResult ResolveExistingApplicationQuestionnaireStage(Application existingApplication, int maxStages, out int activeQuestionnaireStage)
+        {
+            activeQuestionnaireStage = 1;
 
             if (maxStages <= 1)
             {
@@ -371,18 +400,24 @@ namespace HR.Web.Controllers
 
         private static bool HasBaseProfileFields(ApplicantProfile profile)
         {
+            if (profile == null)
+            {
+                return false;
+            }
+
+            var checkedProfile = profile;
             var checks = new[]
             {
-                !string.IsNullOrWhiteSpace(profile.Location),
-                profile.TotalYearsExperience.HasValue,
-                !string.IsNullOrWhiteSpace(profile.MostRecentCompany),
-                !string.IsNullOrWhiteSpace(profile.MostRecentTitle),
-                profile.MostRecentStartDate.HasValue,
-                !string.IsNullOrWhiteSpace(profile.EmploymentType),
-                !string.IsNullOrWhiteSpace(profile.EducationDegree),
-                !string.IsNullOrWhiteSpace(profile.EducationInstitution),
-                !string.IsNullOrWhiteSpace(profile.KeyAchievement),
-                !string.IsNullOrWhiteSpace(profile.NoticePeriod)
+                !string.IsNullOrWhiteSpace(checkedProfile.Location),
+                checkedProfile.TotalYearsExperience.HasValue,
+                !string.IsNullOrWhiteSpace(checkedProfile.MostRecentCompany),
+                !string.IsNullOrWhiteSpace(checkedProfile.MostRecentTitle),
+                checkedProfile.MostRecentStartDate.HasValue,
+                !string.IsNullOrWhiteSpace(checkedProfile.EmploymentType),
+                !string.IsNullOrWhiteSpace(checkedProfile.EducationDegree),
+                !string.IsNullOrWhiteSpace(checkedProfile.EducationInstitution),
+                !string.IsNullOrWhiteSpace(checkedProfile.KeyAchievement),
+                !string.IsNullOrWhiteSpace(checkedProfile.NoticePeriod)
             };
 
             return checks.All(isValid => isValid);
@@ -390,10 +425,16 @@ namespace HR.Web.Controllers
 
         private static bool HasTechnicalProfileFields(ApplicantProfile profile)
         {
+            if (profile == null)
+            {
+                return false;
+            }
+
+            var checkedProfile = profile;
             var checks = new[]
             {
-                profile.RelevantYearsExperience.HasValue,
-                !string.IsNullOrWhiteSpace(profile.Skills)
+                checkedProfile.RelevantYearsExperience.HasValue,
+                !string.IsNullOrWhiteSpace(checkedProfile.Skills)
             };
 
             return checks.All(isValid => isValid);
@@ -412,16 +453,23 @@ namespace HR.Web.Controllers
 
         private Application CreateApplicationFromQuestionnaire(ApplicationReviewViewModel model, Position position, int applicantId)
         {
+            if (model == null || position == null)
+            {
+                throw new InvalidOperationException("Questionnaire submission requires a review model and position.");
+            }
+
+            var reviewModel = model;
+            var targetPosition = position;
             var resumePath = Session["ResumePath"] as string;
             var application = new Application
             {
                 ApplicantId = applicantId,
-                PositionId = model.PositionId,
-                CompanyId = position.CompanyId,
+                PositionId = reviewModel.PositionId,
+                CompanyId = targetPosition.CompanyId,
                 Status = "Interviewing",
                 AppliedOn = DateTime.UtcNow,
-                WorkExperienceLevel = model.YearsInRole ?? "Not specified",
-                ResumePath = resumePath ?? model.ResumePath,
+                WorkExperienceLevel = reviewModel.YearsInRole ?? "Not specified",
+                ResumePath = resumePath ?? reviewModel.ResumePath,
                 CurrentStage = 1,
                 LastCompletedQuestionnaireStage = 0,
                 PendingQuestionnaireStage = null

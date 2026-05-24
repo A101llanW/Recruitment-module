@@ -120,8 +120,8 @@ namespace HR.Web.Controllers
             var positionTitle = string.IsNullOrWhiteSpace(position.Title) ? "this position" : position.Title.Trim();
 
             var questionnairePath = BuildQuestionnaireInvitationPath(company, position.Id);
-            var baseUrl = ExternalUrlHelper.GetBaseUrl(Request);
-            var baseUri = new Uri(EnsureQuestionnaireInviteBaseUrl(baseUrl), UriKind.Absolute);
+            var baseUrl = ExternalUrlHelper.GetBaseUri(Request);
+            var baseUri = EnsureQuestionnaireInviteBaseUrl(baseUrl);
             var stageLink = new Uri(baseUri, questionnairePath.TrimStart('/')).ToString();
 
             try
@@ -168,16 +168,21 @@ namespace HR.Web.Controllers
             return Url.Action("Questionnaire", "Applications", new { positionId = positionId });
         }
 
-        private static string EnsureQuestionnaireInviteBaseUrl(string value)
+        private static Uri EnsureQuestionnaireInviteBaseUrl(Uri value)
         {
-            if (string.IsNullOrWhiteSpace(value))
+            if (value == null)
             {
-                return "http://localhost/";
+                return new Uri("http://localhost/", UriKind.Absolute);
             }
 
-            return value.EndsWith("/", StringComparison.Ordinal)
-                ? value
-                : value + "/";
+            var text = value.ToString();
+            return new Uri(text.EndsWith("/", StringComparison.Ordinal) ? text : text + "/", UriKind.Absolute);
+        }
+
+        private static string EnsureQuestionnaireInviteBaseUrl(string value)
+        {
+            return EnsureQuestionnaireInviteBaseUrl(
+                Uri.TryCreate(value, UriKind.Absolute, out var parsedUri) ? parsedUri : null).ToString();
         }
     }
 }

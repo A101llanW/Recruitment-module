@@ -490,9 +490,14 @@ namespace HR.Web.Controllers
         [HttpPost]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
-        [ValidateInput(false)]
         public ActionResult CreateUser(CreateUserViewModel model)
         {
+            if (model != null)
+            {
+                model.Password = Request.Unvalidated.Form["Password"];
+                model.ConfirmPassword = Request.Unvalidated.Form["ConfirmPassword"];
+            }
+
             return HandleCreateUser(model);
         }
 

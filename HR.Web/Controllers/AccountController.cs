@@ -35,6 +35,11 @@ namespace HR.Web.Controllers
         [AllowAnonymous]
         public ActionResult Login(string returnUrl)
         {
+            return LoginCore(ParseReturnUriOrNull(returnUrl));
+        }
+
+        private ActionResult LoginCore(Uri returnUri)
+        {
             // If no tenant is specified in the URL, check if we have a remembered company
             var urlTenantToken = RouteData.Values["tenant"] as string;
             ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(urlTenantToken);
@@ -53,25 +58,35 @@ namespace HR.Web.Controllers
                 }
             }
 
-            ViewBag.ReturnUrl = returnUrl;
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(returnUri);
             return View();
         }
 
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [AllowAnonymous]
-        [ValidateInput(false)]
-        public ActionResult Login(string username, string password, string captcha, string role, string returnUrl, bool acceptLegalTerms = false, string legalRelationship = null)
+        private Uri ParseReturnUriOrNull(string returnUrl)
         {
-            _ = acceptLegalTerms;
-            _ = legalRelationship;
-            return HandleLoginPost(username, password, captcha, role, returnUrl);
+            LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedUri);
+            return parsedUri;
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         [AllowAnonymous]
-        [ValidateInput(false)]
+        public ActionResult Login(string username, string captcha, string role, string returnUrl, bool acceptLegalTerms = false, string legalRelationship = null)
+        {
+            _ = acceptLegalTerms;
+            _ = legalRelationship;
+            var password = Request.Unvalidated.Form["password"] ?? string.Empty;
+            return HandleLoginPost(
+                username ?? string.Empty,
+                password,
+                captcha ?? string.Empty,
+                role ?? string.Empty,
+                returnUrl ?? string.Empty);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [AllowAnonymous]
         public ActionResult ConfirmLegalConsent(bool acceptLegalTerms = false)
         {
             return HandleConfirmLegalConsent(acceptLegalTerms);
@@ -97,9 +112,17 @@ namespace HR.Web.Controllers
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
-        [ValidateInput(false)]
         public ActionResult ChangePassword(ChangePasswordViewModel model)
         {
+            if (model == null)
+            {
+                return View();
+            }
+
+            model.OldPassword = Request.Unvalidated.Form["OldPassword"];
+            model.NewPassword = Request.Unvalidated.Form["NewPassword"];
+            model.ConfirmPassword = Request.Unvalidated.Form["ConfirmPassword"];
+
             return HandleChangePassword(model);
         }
 
@@ -124,12 +147,23 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public new ActionResult Profile(ProfileViewModel model)
         {
+            if (model == null)
+            {
+                return RedirectToAction("Profile");
+            }
+
             return HandleProfileUpdate(model);
         }
 
         private User GetCurrentUserFromIdentity(string username)
         {
-            return ResolveCurrentUserFromIdentity(username);
+            if (string.IsNullOrEmpty(username))
+            {
+                return null;
+            }
+
+            var resolvedUsername = username;
+            return ResolveCurrentUserFromIdentity(resolvedUsername);
         }
 
         [HttpGet]
@@ -240,7 +274,7 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult VerifyEmailSubmit(string code)
         {
-            return HandleVerifyEmailSubmit(code);
+            return HandleVerifyEmailSubmit(code ?? string.Empty);
         }
 
 
@@ -302,14 +336,20 @@ namespace HR.Web.Controllers
         [AllowAnonymous]
         public ActionResult Register(int? companyId = null, bool isSuperAdmin = false, string returnUrl = null)
         {
-            return HandleRegisterGet(companyId, isSuperAdmin, returnUrl);
+            return HandleRegisterGet(companyId, isSuperAdmin, returnUrl ?? string.Empty);
         }
         [HttpPost]
         [ValidateAntiForgeryToken]
         [AllowAnonymous]
         public ActionResult Register(RegisterViewModel model, bool isSuperAdmin = false, string returnUrl = null)
         {
-            return HandleRegisterPost(model, isSuperAdmin, returnUrl);
+            if (model != null)
+            {
+                model.Password = Request.Unvalidated.Form["Password"];
+                model.ConfirmPassword = Request.Unvalidated.Form["ConfirmPassword"];
+            }
+
+            return HandleRegisterPost(model, isSuperAdmin, returnUrl ?? string.Empty);
         }
 
         // Forgot Password Actions
@@ -324,6 +364,11 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<ActionResult> ForgotPassword(ForgotPasswordViewModel model)
         {
+            if (model == null)
+            {
+                return View(new ForgotPasswordViewModel());
+            }
+
             return await HandleForgotPassword(model);
         }
 
@@ -353,9 +398,20 @@ namespace HR.Web.Controllers
         [HttpPost]
         [AllowAnonymous]
         [ValidateAntiForgeryToken]
-        [ValidateInput(false)]
         public ActionResult ResetPassword(ResetPasswordViewModel model)
         {
+            if (model != null)
+            {
+                model.NewPassword = Request.Unvalidated.Form["NewPassword"];
+                model.ConfirmPassword = Request.Unvalidated.Form["ConfirmPassword"];
+            }
+
+            if (model == null)
+            {
+                ViewBag.ErrorMessage = "Invalid password reset request.";
+                return View();
+            }
+
             return HandleResetPassword(model);
         }
 
@@ -476,10 +532,11 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult VerifyMFA(string code)
         {
-            return HandleVerifyMfaSubmission(code);
+            return HandleVerifyMfaSubmission(code ?? string.Empty);
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public JsonResult ResendCode()
         {
             string username = Session["PendingMfaUsername"] as string;
@@ -521,16 +578,26 @@ namespace HR.Web.Controllers
 
         private static bool UsesEmailMfa(User user)
         {
-            return user != null &&
-                string.Equals(user.MfaMethod, "Email", StringComparison.OrdinalIgnoreCase);
+            if (user == null)
+            {
+                return false;
+            }
+
+            var mfaUser = user;
+            return string.Equals(mfaUser.MfaMethod, "Email", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool HasActiveMfaCode(User user)
         {
-            return user != null &&
-                !string.IsNullOrEmpty(user.TwoFactorCode) &&
-                user.TwoFactorExpiry.HasValue &&
-                user.TwoFactorExpiry.Value > DateTime.Now;
+            if (user == null)
+            {
+                return false;
+            }
+
+            var mfaUser = user;
+            return !string.IsNullOrEmpty(mfaUser.TwoFactorCode) &&
+                mfaUser.TwoFactorExpiry.HasValue &&
+                mfaUser.TwoFactorExpiry.Value > DateTime.Now;
         }
 
         private bool SendMfaCode(User user)
@@ -540,54 +607,80 @@ namespace HR.Web.Controllers
 
         private bool SendMfaCode(User user, string overrideMethod)
         {
-            string method = overrideMethod ?? user.MfaMethod;
+            if (user == null)
+            {
+                return false;
+            }
+
+            var mfaUser = user;
+            string method = overrideMethod ?? mfaUser.MfaMethod;
             if (!string.Equals(method, "Email", StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(user.Email))
+            if (string.IsNullOrWhiteSpace(mfaUser.Email))
             {
                 System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] User has no email address ---");
                 return false;
             }
 
             string code = SecuritySvc.GenerateTemporaryCode();
-            user.TwoFactorCode = code;
-            user.TwoFactorExpiry = DateTime.Now.AddMinutes(10);
-            _uow.Users.Update(user);
+            mfaUser.TwoFactorCode = code;
+            mfaUser.TwoFactorExpiry = DateTime.Now.AddMinutes(10);
+            _uow.Users.Update(mfaUser);
             _uow.Complete();
 
-            DevDiagnostics.LogOneTimeCode("MFA CODE", user.Email, code);
+            var recipientEmail = mfaUser.Email;
+            DevDiagnostics.LogOneTimeCode("MFA CODE", recipientEmail, code);
 
             try
             {
-                EmailSvc.SendMfaCodeEmailAsync(user.Email.Trim(), code).GetAwaiter().GetResult();
+                EmailSvc.SendMfaCodeEmailAsync(recipientEmail.Trim(), code).GetAwaiter().GetResult();
                 return true;
             }
             catch (Exception ex)
             {
-                DevDiagnostics.LogOneTimeCode("MFA CODE (email failed — use code above)", user.Email, code);
+                DevDiagnostics.LogOneTimeCode("MFA CODE (email failed — use code above)", recipientEmail, code);
                 System.Diagnostics.Debug.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
                 System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
-                AuditSvc.LogAction(user.UserName, "MFA_EMAIL_SEND_FAILED", "Account", user.Id.ToString(), ex.Message);
+                AuditSvc.LogAction(mfaUser.UserName, "MFA_EMAIL_SEND_FAILED", "Account", mfaUser.Id.ToString(), ex.Message);
                 return false;
             }
         }
 
         private string MaskContactInfo(string email)
         {
-            if (string.IsNullOrEmpty(email)) return "Not configured";
-            var parts = email.Split('@');
-            if (parts.Length != 2) return email;
+            if (string.IsNullOrEmpty(email))
+            {
+                return "Not configured";
+            }
+
+            var safeEmail = email;
+            var parts = safeEmail.Split('@');
+            if (parts.Length != 2)
+            {
+                return safeEmail;
+            }
+
             var name = parts[0];
-            if (name.Length <= 2) return email;
+            if (name.Length <= 2)
+            {
+                return safeEmail;
+            }
+
             return name.Substring(0, 2) + "****@" + parts[1];
         }
 
         private ActionResult CompleteLogin(User user)
         {
-            return CompleteUserLogin(user);
+            if (user == null)
+            {
+                return RedirectToAction("Login");
+            }
+
+            var loginUser = user;
+            return CompleteUserLogin(loginUser);
         }
     }
 }

@@ -93,53 +93,68 @@ namespace HR.Web.Services
                 // Validate question count
                 if (questionCount <= 0 || questionCount > 50)
                 {
-                    return new QuestionGenerationResult
-                    {
-                        Success = false,
-                        Message = "Question count must be between 1 and 50"
-                    };
+                    return CreateQuestionCountErrorResult();
                 }
 
-                // Default question types if not specified
                 questionTypes = questionTypes ?? new List<string> { "Text", "Choice", "Number", "Rating" };
 
-                var questions = new List<GeneratedQuestion>();
-                var questionDistribution = DistributeQuestionTypes(questionCount, questionTypes);
+                var questions = BuildGeneratedQuestions(questionCount, questionTypes, analysis);
 
-                // Generate questions for each type
-                foreach (var kvp in questionDistribution)
-                {
-                    var typeQuestions = GenerateQuestionsByType(kvp.Key, kvp.Value, analysis);
-                    questions.AddRange(typeQuestions);
-                }
-
-                // Shuffle and limit to requested count
-                questions = ShuffleSecurely(questions).Take(questionCount).ToList();
-
-                return new QuestionGenerationResult
-                {
-                    Success = true,
-                    Questions = questions,
-                    Metadata = new Dictionary<string, object>
-                    {
-                        { "jobTitle", jobTitle },
-                        { "experience", experience },
-                        { "questionCount", questions.Count },
-                        { "generatedAt", DateTime.UtcNow.ToString("O") },
-                        { "analysis", analysis },
-                        { "distribution", questionDistribution }
-                    },
-                    Message = string.Format("Successfully generated {0} dynamic questions", questions.Count)
-                };
+                return CreateSuccessfulQuestionGenerationResult(jobTitle, experience, questions, analysis);
             }
             catch (Exception ex)
             {
                 return new QuestionGenerationResult
                 {
                     Success = false,
-                    Message = "Error generating questions: " + ex.Message
+                    Message = "Failed to generate questions: " + ex.Message
                 };
             }
+        }
+
+        private static QuestionGenerationResult CreateQuestionCountErrorResult()
+        {
+            return new QuestionGenerationResult
+            {
+                Success = false,
+                Message = "Question count must be between 1 and 50"
+            };
+        }
+
+        private List<GeneratedQuestion> BuildGeneratedQuestions(int questionCount, List<string> questionTypes, JobAnalysis analysis)
+        {
+            var questions = new List<GeneratedQuestion>();
+            var questionDistribution = DistributeQuestionTypes(questionCount, questionTypes);
+
+            foreach (var kvp in questionDistribution)
+            {
+                var typeQuestions = GenerateQuestionsByType(kvp.Key, kvp.Value, analysis);
+                questions.AddRange(typeQuestions);
+            }
+
+            return ShuffleSecurely(questions).Take(questionCount).ToList();
+        }
+
+        private static QuestionGenerationResult CreateSuccessfulQuestionGenerationResult(
+            string jobTitle,
+            string experience,
+            List<GeneratedQuestion> questions,
+            JobAnalysis analysis)
+        {
+            return new QuestionGenerationResult
+            {
+                Success = true,
+                Questions = questions,
+                Metadata = new Dictionary<string, object>
+                {
+                    { "jobTitle", jobTitle },
+                    { "experience", experience },
+                    { "questionCount", questions.Count },
+                    { "generatedAt", DateTime.UtcNow.ToString("O") },
+                    { "analysis", analysis }
+                },
+                Message = string.Format("Successfully generated {0} dynamic questions", questions.Count)
+            };
         }
 
         private JobAnalysis AnalyzeJob(string jobTitle, string jobDescription, string keyResponsibilities, string requiredQualifications, string experience)

@@ -574,50 +574,55 @@ namespace HR.Web.Services
             {
                 Name = "Project Manager Questionnaire",
                 Description = "Questionnaire for project management positions",
-                Questions = new List<GeneratedQuestion>
-                {
-                    new GeneratedQuestion
-                    {
-                        Text = "Describe your experience managing software projects.",
-                        Type = "Text",
-                        Category = "experience",
-                        IsRequired = true
-                    },
-                    new GeneratedQuestion
-                    {
-                        Text = "How do you handle project delays and budget overruns?",
-                        Type = "Text",
-                        Category = "risk-management",
-                        IsRequired = true
-                    },
-                    new GeneratedQuestion
-                    {
-                        Text = "What project management methodologies are you familiar with?",
-                        Type = "Choice",
-                        Category = "methodology",
-                        IsRequired = true,
-                        Options = new List<QuestionOption>
-                        {
-                            new QuestionOption { Text = "Waterfall only", Points = 3 },
-                            new QuestionOption { Text = "Agile/Scrum only", Points = 6 },
-                            new QuestionOption { Text = "Multiple methodologies", Points = 8 },
-                            new QuestionOption { Text = "Hybrid approaches based on project", Points = 10 }
-                        }
-                    },
-                    new GeneratedQuestion
-                    {
-                        Text = "How do you communicate project status to stakeholders?",
-                        Type = "Text",
-                        Category = "communication",
-                        IsRequired = true
-                    }
-                },
+                Questions = BuildProjectManagerQuestions(),
                 ScoringWeights = new Dictionary<string, decimal>
                 {
                     { "management", 0.4m },
                     { "communication", 0.3m },
                     { "planning", 0.2m },
                     { "technical", 0.1m }
+                }
+            };
+        }
+
+        private static List<GeneratedQuestion> BuildProjectManagerQuestions()
+        {
+            return new List<GeneratedQuestion>
+            {
+                new GeneratedQuestion
+                {
+                    Text = "Describe your experience managing software projects.",
+                    Type = "Text",
+                    Category = "experience",
+                    IsRequired = true
+                },
+                new GeneratedQuestion
+                {
+                    Text = "How do you handle project delays and budget overruns?",
+                    Type = "Text",
+                    Category = "risk-management",
+                    IsRequired = true
+                },
+                new GeneratedQuestion
+                {
+                    Text = "What project management methodologies are you familiar with?",
+                    Type = "Choice",
+                    Category = "methodology",
+                    IsRequired = true,
+                    Options = new List<QuestionOption>
+                    {
+                        new QuestionOption { Text = "Waterfall only", Points = 3 },
+                        new QuestionOption { Text = "Agile/Scrum only", Points = 6 },
+                        new QuestionOption { Text = "Multiple methodologies", Points = 8 },
+                        new QuestionOption { Text = "Hybrid approaches based on project", Points = 10 }
+                    }
+                },
+                new GeneratedQuestion
+                {
+                    Text = "How do you communicate project status to stakeholders?",
+                    Type = "Text",
+                    Category = "communication",
+                    IsRequired = true
                 }
             };
         }

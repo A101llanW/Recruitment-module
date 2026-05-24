@@ -118,20 +118,7 @@ namespace HR.Web.Helpers
             if (password.Length < MinPasswordLength || password.Length > MaxPasswordLength)
                 return false;
 
-            // Check for at least one uppercase letter
-            if (!password.Any(char.IsUpper))
-                return false;
-
-            // Check for at least one lowercase letter
-            if (!password.Any(char.IsLower))
-                return false;
-
-            // Check for at least one digit
-            if (!password.Any(char.IsDigit))
-                return false;
-
-            // Check for at least one special character
-            if (!password.Any(c => !char.IsLetterOrDigit(c)))
+            if (!HasRequiredCharacterClasses(password))
                 return false;
 
             // Check for common weak patterns
@@ -143,6 +130,14 @@ namespace HR.Web.Helpers
                 return false;
 
             return true;
+        }
+
+        private static bool HasRequiredCharacterClasses(string password)
+        {
+            return password.Any(char.IsUpper)
+                && password.Any(char.IsLower)
+                && password.Any(char.IsDigit)
+                && password.Any(c => !char.IsLetterOrDigit(c));
         }
 
         private static bool ContainsCommonPatterns(string password)

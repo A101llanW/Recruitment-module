@@ -158,13 +158,7 @@ namespace HR.Web.Services
             string combinedText = string.Join(" ", (answers ?? new List<ApplicationAnswer>()).Select(a => a.AnswerText ?? ""));
 
             // 1. Score based on interest reasons (if available)
-            if (!string.IsNullOrWhiteSpace(review.WhyInterested))
-            {
-                var reasons = review.WhyInterested.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-                var reasonCount = reasons.Length;
-                if (reasonCount >= 4) score += 6;
-                else if (reasonCount >= 2) score += 3;
-            }
+            score += ScoreInterestReasons(review);
 
             // 2. Vocabulary Diversity & Richness (The Semantic Score)
             decimal diversityScore = CalculateVocabularyScore(combinedText);
@@ -179,21 +173,50 @@ namespace HR.Web.Services
             score += signalScore;
 
             // 5. Evaluate dynamic answers quality (Legacy length-based + Numeric)
-            if (answers != null && answers.Any())
-            {
-                foreach (var answer in answers)
-                {
-                    if (string.IsNullOrWhiteSpace(answer.AnswerText)) continue;
+            score += ScoreDynamicAnswerRatings(answers);
 
-                    int rating;
-                    if (int.TryParse(answer.AnswerText, out rating))
-                    {
-                        score += rating / 2m; 
-                    }
+            return Math.Round(Math.Min(score, 30m), 2);
+        }
+
+        private static decimal ScoreInterestReasons(ApplicationReviewViewModel review)
+        {
+            if (string.IsNullOrWhiteSpace(review.WhyInterested))
+            {
+                return 0;
+            }
+
+            var reasonCount = review.WhyInterested.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Length;
+            if (reasonCount >= 4)
+            {
+                return 6;
+            }
+
+            return reasonCount >= 2 ? 3 : 0;
+        }
+
+        private static decimal ScoreDynamicAnswerRatings(List<ApplicationAnswer> answers)
+        {
+            if (answers == null || !answers.Any())
+            {
+                return 0;
+            }
+
+            decimal score = 0;
+            foreach (var answer in answers)
+            {
+                if (string.IsNullOrWhiteSpace(answer.AnswerText))
+                {
+                    continue;
+                }
+
+                int rating;
+                if (int.TryParse(answer.AnswerText, out rating))
+                {
+                    score += rating / 2m;
                 }
             }
 
-            return Math.Round(Math.Min(score, 30m), 2);
+            return score;
         }
 
         private decimal CalculateVocabularyScore(string text)
@@ -242,25 +265,45 @@ namespace HR.Web.Services
 
         private decimal DetectSignals(string text)
         {
-            if (string.IsNullOrWhiteSpace(text)) return 0;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return 0;
+            }
+
+            return ScorePositiveSignals(text) + ScoreNegativeSignals(text);
+        }
+
+        private static decimal ScorePositiveSignals(string text)
+        {
             decimal score = 0;
 
-            // --- GREEN FLAGS (+ Points) ---
-            // Results/Metrics detection
             if (System.Text.RegularExpressions.Regex.IsMatch(text, @"\d+%|\d+ students|\d+ years|achieved|delivered|improved"))
+            {
                 score += 4;
+            }
 
-            // Passion/Motivation detection
-            if (text.ToLower().Contains("passion") || text.ToLower().Contains("dedicated") || text.ToLower().Contains("committed"))
+            var lowerText = text.ToLower();
+            if (lowerText.Contains("passion") || lowerText.Contains("dedicated") || lowerText.Contains("committed"))
+            {
                 score += 3;
+            }
 
-            // --- RED FLAGS (- Points) ---
-            // Shouting (too much caps)
+            return score;
+        }
+
+        private static decimal ScoreNegativeSignals(string text)
+        {
+            decimal score = 0;
             int capsCount = text.Count(c => char.IsUpper(c));
-            if (capsCount > text.Length * 0.3) score -= 5;
+            if (capsCount > text.Length * 0.3)
+            {
+                score -= 5;
+            }
 
-            // Poor effort/punctuation
-            if (!text.Contains(".") && text.Length > 50) score -= 3;
+            if (!text.Contains(".") && text.Length > 50)
+            {
+                score -= 3;
+            }
 
             return score;
         }

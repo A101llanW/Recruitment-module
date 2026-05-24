@@ -51,19 +51,25 @@ namespace HR.Web.Services
         /// </summary>
         public decimal CalculateApplicationScore(Application application)
         {
+            if (application == null)
+            {
+                return 0;
+            }
+
+            var scoredApplication = application;
             var weightedScore = 0m;
 
-            var position = _uow.Positions.Get(application.PositionId);
+            var position = _uow.Positions.Get(scoredApplication.PositionId);
             var maxQuestionnaireStages = position != null ? Math.Max(1, position.QuestionnaireStageCount) : 1;
 
             var positionQuestionsQuery = _uow.Context.Set<PositionQuestion>()
-                .Where(pq => pq.PositionId == application.PositionId)
+                .Where(pq => pq.PositionId == scoredApplication.PositionId)
                 .Include(pq => pq.Question);
 
             List<PositionQuestion> positionQuestions;
             if (maxQuestionnaireStages > 1)
             {
-                var completedCap = application.LastCompletedQuestionnaireStage;
+                var completedCap = scoredApplication.LastCompletedQuestionnaireStage;
                 if (completedCap <= 0)
                 {
                     positionQuestions = new List<PositionQuestion>();
@@ -92,7 +98,7 @@ namespace HR.Web.Services
 
             // Get application answers
             var answers = _uow.Context.Set<ApplicationAnswer>()
-                .Where(aa => aa.ApplicationId == application.Id)
+                .Where(aa => aa.ApplicationId == scoredApplication.Id)
                 .ToList();
 
             foreach (var positionQuestion in positionQuestions)
@@ -103,7 +109,7 @@ namespace HR.Web.Services
                     continue;
                 }
 
-                var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId);
+                var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, scoredApplication.PositionId);
                 if (rawMaxScore <= 0)
                 {
                     continue;
@@ -112,7 +118,7 @@ namespace HR.Web.Services
                 var answer = answers.FirstOrDefault(a => a.QuestionId == positionQuestion.QuestionId);
                 if (answer != null)
                 {
-                    var rawQuestionScore = CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, application.PositionId);
+                    var rawQuestionScore = CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, scoredApplication.PositionId);
                     var normalizedScore = Clamp01(rawQuestionScore / rawMaxScore);
                     weightedScore += normalizedScore * questionWeight;
                 }
@@ -229,16 +235,23 @@ namespace HR.Web.Services
         /// </summary>
         public decimal CalculateQuestionScoreFallback(Question question, string answerText, int positionId)
         {
-            switch (question.Type.ToLower())
+            if (question == null || string.IsNullOrEmpty(answerText))
+            {
+                return 0;
+            }
+
+            var scoredQuestion = question;
+            var text = answerText;
+            switch (scoredQuestion.Type.ToLower())
             {
                 case "choice":
-                    return CalculateChoiceScore(question, answerText, positionId);
+                    return CalculateChoiceScore(scoredQuestion, text, positionId);
                 case "rating":
-                    return CalculateRatingScore(question, answerText);
+                    return CalculateRatingScore(scoredQuestion, text);
                 case "number":
-                    return CalculateNumberScore(question, answerText);
+                    return CalculateNumberScore(scoredQuestion, text);
                 case "text":
-                    return CalculateTextScore(question, answerText, positionId);
+                    return CalculateTextScore(scoredQuestion, text, positionId);
                 default:
                     return 0;
             }
@@ -351,41 +364,46 @@ namespace HR.Web.Services
         /// </summary>
         private decimal CalculateBasicTextScore(Question question, string answerText, int positionId)
         {
-            if (string.IsNullOrEmpty(answerText)) return 0;
+            if (question == null || string.IsNullOrEmpty(answerText))
+            {
+                return 0;
+            }
 
+            var scoredQuestion = question;
+            var text = answerText;
             var score = 0m;
-            var lowerText = answerText.ToLower();
+            var lowerText = text.ToLower();
             
             // Get position context for repetition checking and relevance
             var position = _uow.Context.Set<Position>().Find(positionId);
             var jobContext = position != null ? string.Format("{0} {1}", position.Description, position.Responsibilities).ToLower() : "";
 
             // 1. Enhanced length score
-            score += CalculateLengthScore(answerText);
+            score += CalculateLengthScore(text);
 
             // 2. Advanced keyword extraction with word boundaries
-            score += ExtractAndScoreKeywords(question, answerText, lowerText, jobContext);
+            score += ExtractAndScoreKeywords(scoredQuestion, text, lowerText, jobContext);
 
             // 3. Experience Intensity and Answer Strength
-            score += AnalyzeAnswerStrength(answerText, lowerText);
+            score += AnalyzeAnswerStrength(text, lowerText);
 
             // 4. Professional communication
             score += AnalyzeProfessionalCommunication(lowerText);
 
             // 5. Contextual relevance
-            score += AnalyzeContextualRelevance(question, answerText, lowerText);
+            score += AnalyzeContextualRelevance(scoredQuestion, text, lowerText);
 
             // 6. Semantic intensity (meaningful specificity and strength)
-            score += CalculateSemanticIntensityScore(question, answerText, lowerText, jobContext);
+            score += CalculateSemanticIntensityScore(scoredQuestion, text, lowerText, jobContext);
 
             // 7. Technical indicators
             score += AnalyzeTechnicalIndicators(lowerText);
 
             // 8. Structure and coherence
-            score += AnalyzeStructureAndCoherence(answerText, lowerText);
+            score += AnalyzeStructureAndCoherence(text, lowerText);
 
             // 9. Quality penalties (including Repetition Penalty)
-            score = ApplyQualityAdjustments(score, answerText, lowerText, jobContext);
+            score = ApplyQualityAdjustments(score, text, lowerText, jobContext);
 
             var finalScore = Math.Max(0, score); // Removed cap - unlimited points per question
             System.Diagnostics.Debug.WriteLine(string.Format("Final enhanced score: {0}", finalScore));
@@ -399,17 +417,23 @@ namespace HR.Web.Services
         /// </summary>
         private decimal CalculateLengthScore(string answerText)
         {
+            if (string.IsNullOrEmpty(answerText))
+            {
+                return 0m;
+            }
+
+            var text = answerText;
             var score = 0m;
             
             // More nuanced length scoring
-            if (answerText.Length < 10) score += 0.3m; // Very short - minimal credit
-            else if (answerText.Length < 25) score += 0.8m;
-            else if (answerText.Length < 50) score += 1.8m;
-            else if (answerText.Length < 100) score += 3.2m;
-            else if (answerText.Length < 200) score += 4.8m;
-            else if (answerText.Length < 300) score += 6.2m;
-            else if (answerText.Length < 500) score += 7.5m;
-            else if (answerText.Length < 800) score += 8.5m;
+            if (text.Length < 10) score += 0.3m; // Very short - minimal credit
+            else if (text.Length < 25) score += 0.8m;
+            else if (text.Length < 50) score += 1.8m;
+            else if (text.Length < 100) score += 3.2m;
+            else if (text.Length < 200) score += 4.8m;
+            else if (text.Length < 300) score += 6.2m;
+            else if (text.Length < 500) score += 7.5m;
+            else if (text.Length < 800) score += 8.5m;
             else score += 9m; // Diminishing returns for very long answers
 
             System.Diagnostics.Debug.WriteLine(string.Format("Enhanced length score: {0}", score));
@@ -834,33 +858,45 @@ namespace HR.Web.Services
             var combined = string.Format("{0} {1}", questionText ?? "", jobContext ?? "").ToLower();
             var phrases = new List<string>();
 
-            if (combined.Contains("barber") || combined.Contains("hair") || combined.Contains("salon") || combined.Contains("groom"))
-            {
-                phrases.AddRange(new[]
-                {
-                    "skin fade", "low fade", "high fade", "mid fade", "taper fade",
-                    "line up", "line-up", "beard lineup", "straight razor", "hot towel",
-                    "shear over comb", "clipper over comb", "texturizing shears",
-                    "beard trim", "beard shaping", "neck shave", "razor shave"
-                });
-            }
+            AddBarberDomainPhrases(combined, phrases);
+            AddDeveloperDomainPhrases(combined, phrases);
 
-            if (combined.Contains("developer") || combined.Contains("software") || combined.Contains("programming"))
-            {
-                phrases.AddRange(new[]
-                {
-                    "unit testing", "code review", "continuous integration",
-                    "api design", "database migration", "performance tuning"
-                });
-            }
-
-            // Generic phrases that indicate concrete experience
             phrases.AddRange(new[]
             {
                 "for example", "for instance", "in my role", "as a", "responsible for"
             });
 
             return phrases.Distinct().ToList();
+        }
+
+        private static void AddBarberDomainPhrases(string combined, List<string> phrases)
+        {
+            if (!combined.Contains("barber") && !combined.Contains("hair") && !combined.Contains("salon") && !combined.Contains("groom"))
+            {
+                return;
+            }
+
+            phrases.AddRange(new[]
+            {
+                "skin fade", "low fade", "high fade", "mid fade", "taper fade",
+                "line up", "line-up", "beard lineup", "straight razor", "hot towel",
+                "shear over comb", "clipper over comb", "texturizing shears",
+                "beard trim", "beard shaping", "neck shave", "razor shave"
+            });
+        }
+
+        private static void AddDeveloperDomainPhrases(string combined, List<string> phrases)
+        {
+            if (!combined.Contains("developer") && !combined.Contains("software") && !combined.Contains("programming"))
+            {
+                return;
+            }
+
+            phrases.AddRange(new[]
+            {
+                "unit testing", "code review", "continuous integration",
+                "api design", "database migration", "performance tuning"
+            });
         }
 
         /// <summary>

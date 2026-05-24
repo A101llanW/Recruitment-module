@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Web.Mvc;
 
 namespace HR.Web.ViewModels
 {
@@ -15,7 +16,10 @@ namespace HR.Web.ViewModels
         public string Category { get; set; }
         public string TokenHint { get; set; }
 
+        [AllowHtml]
         public string DefaultSubjectTemplate { get; set; }
+
+        [AllowHtml]
         public string DefaultBodyTemplate { get; set; }
     }
 }

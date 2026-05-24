@@ -456,6 +456,11 @@ namespace HR.Web.Controllers
 
         private User ResolveCurrentUserFromIdentity(string username)
         {
+            if (string.IsNullOrEmpty(username))
+            {
+                return null;
+            }
+
             var lowerUsername = username.ToLower();
             var companyId = TryExtractCompanyIdFromIdentity();
 

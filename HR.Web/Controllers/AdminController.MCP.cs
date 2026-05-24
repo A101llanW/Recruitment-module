@@ -61,6 +61,7 @@ namespace HR.Web.Controllers
         /// Add generated questions to sample questions collection
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult AddGeneratedQuestionsToSample(string questionsJson)
         {
             try
@@ -121,6 +122,7 @@ namespace HR.Web.Controllers
         /// Add questions to sample questions collection (direct addition without duplicate checking)
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult AddQuestionsToSample(string questionsJson)
         {
             try
@@ -177,26 +179,34 @@ namespace HR.Web.Controllers
             }
         }
 
+        private sealed class DuplicateDecisionDto
+        {
+            public string action { get; set; }
+            public string newText { get; set; }
+            public string type { get; set; }
+        }
+
         /// <summary>
         /// Process duplicate decisions and add approved questions
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult ProcessDuplicateDecisions(string decisionsJson)
         {
             try
             {
-                var decisions = JsonConvert.DeserializeObject<List<dynamic>>(decisionsJson);
+                var decisions = JsonConvert.DeserializeObject<List<DuplicateDecisionDto>>(decisionsJson) ?? new List<DuplicateDecisionDto>();
                 int addedCount = 0;
 
                 foreach (var decision in decisions)
                 {
-                    if (decision.action.ToString() == "keep")
+                    if (decision != null && string.Equals(decision.action, "keep", StringComparison.OrdinalIgnoreCase))
                     {
                         // Create the question even if it's similar to existing one
                         var question = new Question
                         {
-                            Text = decision.newText.ToString(),
-                            Type = decision.type.ToString(),
+                            Text = decision.newText,
+                            Type = decision.type,
                             IsActive = true,
                             CompanyId = _tenantService.GetCurrentUserCompanyId()
                         };
@@ -223,6 +233,7 @@ namespace HR.Web.Controllers
         /// Create a new position with assigned questions
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult CreatePositionWithQuestions(string positionTitle, string positionDescription, 
             string positionDepartment, string positionSalaryMin, string positionSalaryMax,
             string positionKeyResponsibilities, string positionRequiredQualifications, 
@@ -264,6 +275,7 @@ namespace HR.Web.Controllers
         /// Test connection to question service (for compatibility)
         /// </summary>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult AddGeneratedQuestionsToBank(string questionsJson)
         {
             try

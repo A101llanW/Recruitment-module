@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
@@ -10,6 +11,128 @@ namespace HR.Web.Helpers
     /// </summary>
     public static class EmailTemplateTokenChipSerializer
     {
+        private struct TokenAdminMetadata
+        {
+            public string Label;
+            public string Icon;
+            public string HelpText;
+        }
+
+        private static readonly Dictionary<string, TokenAdminMetadata> AdminTokenMetadata =
+            new Dictionary<string, TokenAdminMetadata>(StringComparer.OrdinalIgnoreCase)
+            {
+                {
+                    "CandidateName",
+                    new TokenAdminMetadata
+                    {
+                        Label = "Candidate name",
+                        Icon = "fa-user",
+                        HelpText = "The applicant's name."
+                    }
+                },
+                {
+                    "PositionTitle",
+                    new TokenAdminMetadata
+                    {
+                        Label = "Job title",
+                        Icon = "fa-briefcase",
+                        HelpText = "The role title."
+                    }
+                },
+                {
+                    "CompanyName",
+                    new TokenAdminMetadata
+                    {
+                        Label = "Company name",
+                        Icon = "fa-link",
+                        HelpText = "Your company name."
+                    }
+                },
+                {
+                    "CustomMessageBlock",
+                    new TokenAdminMetadata
+                    {
+                        Label = "Custom message",
+                        Icon = "fa-comment-alt",
+                        HelpText = "Extra wording from the send screen, if provided."
+                    }
+                },
+                {
+                    "InterviewDateTime",
+                    new TokenAdminMetadata
+                    {
+                        Label = "Interview date & time",
+                        Icon = "fa-clock",
+                        HelpText = "Interview date and time."
+                    }
+                },
+                {
+                    "InterviewMode",
+                    new TokenAdminMetadata
+                    {
+                        Label = "Interview mode",
+                        Icon = "fa-video",
+                        HelpText = "How the interview is held."
+                    }
+                },
+                {
+                    "InterviewerName",
+                    new TokenAdminMetadata
+                    {
+                        Label = "Interviewer name",
+                        Icon = "fa-user-tie",
+                        HelpText = "The interviewer's name."
+                    }
+                },
+                {
+                    "QuestionnaireStageLink",
+                    new TokenAdminMetadata
+                    {
+                        Label = "Questionnaire stage link",
+                        Icon = "fa-link",
+                        HelpText = "Link to the questionnaire stage HR opened for you."
+                    }
+                },
+                {
+                    "ResetLink",
+                    new TokenAdminMetadata
+                    {
+                        Label = "Reset link",
+                        Icon = "fa-key",
+                        HelpText = "Password reset link (filled in by the system)."
+                    }
+                },
+                {
+                    "SecurityCode",
+                    new TokenAdminMetadata
+                    {
+                        Label = "Security code",
+                        Icon = "fa-shield-alt",
+                        HelpText = "One-time code (filled in by the system)."
+                    }
+                }
+            };
+
+        private static readonly TokenAdminMetadata DefaultTokenMetadata = new TokenAdminMetadata
+        {
+            Label = null,
+            Icon = "fa-tag",
+            HelpText = "Filled in automatically when the email is sent."
+        };
+
+        private static readonly TokenAdminMetadata EmptyTokenMetadata = new TokenAdminMetadata
+        {
+            Label = "Field",
+            Icon = "fa-tag",
+            HelpText = "Filled in automatically when the email is sent."
+        };
+
+        private static readonly Dictionary<string, string> AdminTokenAliases =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "StageTwoLink", "QuestionnaireStageLink" }
+            };
+
         private static readonly Regex StorageTokenRegex = new Regex(@"\{\{([A-Za-z0-9_]+)\}\}", RegexOptions.Compiled);
 
         /// <summary>
@@ -117,35 +240,11 @@ namespace HR.Web.Helpers
         {
             if (string.IsNullOrEmpty(tokenName))
             {
-                return "Field";
+                return EmptyTokenMetadata.Label;
             }
 
-            switch (tokenName.Trim())
-            {
-                case "CandidateName":
-                    return "Candidate name";
-                case "PositionTitle":
-                    return "Job title";
-                case "CompanyName":
-                    return "Company name";
-                case "CustomMessageBlock":
-                    return "Custom message";
-                case "InterviewDateTime":
-                    return "Interview date & time";
-                case "InterviewMode":
-                    return "Interview mode";
-                case "InterviewerName":
-                    return "Interviewer name";
-                case "QuestionnaireStageLink":
-                case "StageTwoLink":
-                    return "Questionnaire stage link";
-                case "ResetLink":
-                    return "Reset link";
-                case "SecurityCode":
-                    return "Security code";
-                default:
-                    return tokenName;
-            }
+            var metadata = ResolveTokenMetadata(tokenName);
+            return metadata.Label ?? tokenName.Trim();
         }
 
         /// <summary>Font Awesome icon class fragment (e.g. fa-user) for admin UI.</summary>
@@ -153,35 +252,10 @@ namespace HR.Web.Helpers
         {
             if (string.IsNullOrEmpty(tokenName))
             {
-                return "fa-tag";
+                return EmptyTokenMetadata.Icon;
             }
 
-            switch (tokenName.Trim())
-            {
-                case "CandidateName":
-                    return "fa-user";
-                case "PositionTitle":
-                    return "fa-briefcase";
-                case "CompanyName":
-                    return "fa-link";
-                case "CustomMessageBlock":
-                    return "fa-comment-alt";
-                case "InterviewDateTime":
-                    return "fa-clock";
-                case "InterviewMode":
-                    return "fa-video";
-                case "InterviewerName":
-                    return "fa-user-tie";
-                case "QuestionnaireStageLink":
-                case "StageTwoLink":
-                    return "fa-link";
-                case "ResetLink":
-                    return "fa-key";
-                case "SecurityCode":
-                    return "fa-shield-alt";
-                default:
-                    return "fa-tag";
-            }
+            return ResolveTokenMetadata(tokenName).Icon;
         }
 
         /// <summary>Tooltip / aria description for admin insert buttons.</summary>
@@ -189,35 +263,23 @@ namespace HR.Web.Helpers
         {
             if (string.IsNullOrEmpty(tokenName))
             {
-                return "Filled in automatically when the email is sent.";
+                return EmptyTokenMetadata.HelpText;
             }
 
-            switch (tokenName.Trim())
+            return ResolveTokenMetadata(tokenName).HelpText;
+        }
+
+        private static TokenAdminMetadata ResolveTokenMetadata(string tokenName)
+        {
+            var name = tokenName.Trim();
+            string canonicalName;
+            if (AdminTokenAliases.TryGetValue(name, out canonicalName))
             {
-                case "CandidateName":
-                    return "The applicant's name.";
-                case "PositionTitle":
-                    return "The role title.";
-                case "CompanyName":
-                    return "Your company name.";
-                case "CustomMessageBlock":
-                    return "Extra wording from the send screen, if provided.";
-                case "InterviewDateTime":
-                    return "Interview date and time.";
-                case "InterviewMode":
-                    return "How the interview is held.";
-                case "InterviewerName":
-                    return "The interviewer's name.";
-                case "QuestionnaireStageLink":
-                case "StageTwoLink":
-                    return "Link to the questionnaire stage HR opened for you.";
-                case "ResetLink":
-                    return "Password reset link (filled in by the system).";
-                case "SecurityCode":
-                    return "One-time code (filled in by the system).";
-                default:
-                    return "Filled in automatically when the email is sent.";
+                name = canonicalName;
             }
+
+            TokenAdminMetadata metadata;
+            return AdminTokenMetadata.TryGetValue(name, out metadata) ? metadata : DefaultTokenMetadata;
         }
     }
 }

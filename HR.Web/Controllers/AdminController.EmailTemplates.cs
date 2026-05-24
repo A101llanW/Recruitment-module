@@ -25,7 +25,6 @@ namespace HR.Web.Controllers
         [HttpPost]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
-        [ValidateInput(false)]
         public ActionResult SaveEmailTemplates(EmailTemplateManagementViewModel model)
         {
             if (!_rolePermissionService.CanCurrentUserManageRoleDefinitions())

@@ -2,19 +2,20 @@
 using System.Collections.Specialized;
 using System.Web;
 using System.Web.Mvc;
+using HR.Web.Helpers;
 
 namespace HR.Web.Controllers
 {
     public partial class AccountController
     {
-        private ActionResult BuildSafeReturnRedirect(string returnUrl, string tenantSlug)
+        private ActionResult BuildSafeReturnRedirect(Uri returnUri, string tenantSlug)
         {
-            if (!TryParseSafeLocalReturnUri(returnUrl, out var parsedUri))
+            if (returnUri == null)
             {
                 return null;
             }
 
-            var segments = SplitPathSegments(parsedUri.AbsolutePath);
+            var segments = SplitPathSegments(returnUri.AbsolutePath);
             if (segments.Length == 0)
             {
                 return null;
@@ -22,23 +23,14 @@ namespace HR.Web.Controllers
 
             ResolveRouteSegments(segments, out var pathTenant, out var controllerSegment, out var actionSegment);
             var resolvedTenant = ResolveTenantSlug(tenantSlug, pathTenant);
-            return BuildWhitelistedRedirect(controllerSegment, actionSegment, segments.Length, resolvedTenant, parsedUri.Query);
+            return BuildWhitelistedRedirect(controllerSegment, actionSegment, segments.Length, resolvedTenant, returnUri.Query);
         }
 
-        private bool TryParseSafeLocalReturnUri(string returnUrl, out Uri parsedUri)
+        private ActionResult BuildSafeReturnRedirect(string returnUrl, string tenantSlug)
         {
-            parsedUri = null;
-            if (string.IsNullOrWhiteSpace(returnUrl) || !Url.IsLocalUrl(returnUrl))
-            {
-                return false;
-            }
-
-            if (returnUrl.StartsWith("//", StringComparison.Ordinal) || returnUrl.StartsWith(@"/\", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            return Uri.TryCreate("https://local.test" + returnUrl, UriKind.Absolute, out parsedUri);
+            return LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedUri)
+                ? BuildSafeReturnRedirect(parsedUri, tenantSlug)
+                : null;
         }
 
         private static string[] SplitPathSegments(string path)

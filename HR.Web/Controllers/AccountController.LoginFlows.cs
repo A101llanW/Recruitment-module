@@ -19,7 +19,7 @@ namespace HR.Web.Controllers
             public string Username { get; set; }
             public string Password { get; set; }
             public string Captcha { get; set; }
-            public string ReturnUrl { get; set; }
+            public Uri ReturnUrl { get; set; }
             public string UrlTenantToken { get; set; }
             public string ClientIp { get; set; }
             public bool IsGlobalSuperAdmin { get; set; }
@@ -44,6 +44,10 @@ namespace HR.Web.Controllers
         private ActionResult HandleLoginPost(string username, string password, string captcha, string role, string returnUrl)
         {
             _ = role;
+            username = username ?? string.Empty;
+            password = password ?? string.Empty;
+            captcha = captcha ?? string.Empty;
+            returnUrl = returnUrl ?? string.Empty;
 
             try
             {
@@ -101,13 +105,14 @@ namespace HR.Web.Controllers
         private LoginRequestModel BuildLoginRequest(string username, string password, string captcha, string returnUrl)
         {
             var urlTenantToken = RouteData.Values["tenant"] as string;
+            LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedReturnUrl);
 
             return new LoginRequestModel
             {
                 Username = username,
                 Password = password,
                 Captcha = captcha,
-                ReturnUrl = returnUrl,
+                ReturnUrl = parsedReturnUrl,
                 UrlTenantToken = urlTenantToken,
                 ClientIp = Request.UserHostAddress,
                 IsGlobalSuperAdmin = !string.IsNullOrEmpty(username) &&
@@ -160,12 +165,18 @@ namespace HR.Web.Controllers
             Session.Remove("CaptchaId");
         }
 
-        private ActionResult BuildCaptchaFailureResult(string message, string returnUrl)
+        private ActionResult BuildCaptchaFailureResult(string message, Uri returnUrl)
         {
             ModelState.AddModelError("", message);
-            ViewBag.ReturnUrl = returnUrl;
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(returnUrl);
             ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(RouteData.Values["tenant"] as string);
             return View();
+        }
+
+        private ActionResult BuildCaptchaFailureResult(string message, string returnUrl)
+        {
+            LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedReturnUrl);
+            return BuildCaptchaFailureResult(message, parsedReturnUrl);
         }
 
         private ActionResult ValidateLoginInputs(LoginRequestModel request, int? targetCompanyId)
@@ -191,7 +202,7 @@ namespace HR.Web.Controllers
             ModelState.AddModelError("", message);
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, failureReason);
             AuditSvc.LogLogin(request.Username, false, failureReason);
-            ViewBag.ReturnUrl = request.ReturnUrl;
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(request.ReturnUrl);
             ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
             return View();
         }
@@ -276,7 +287,7 @@ namespace HR.Web.Controllers
             {
                 ViewBag.MultiCandidates = candidates;
                 ModelState.AddModelError("", "We found multiple accounts for this email. Please select the correct portal below.");
-                ViewBag.ReturnUrl = request.ReturnUrl;
+                ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(request.ReturnUrl);
                 ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
                 return View();
             }
@@ -340,7 +351,7 @@ namespace HR.Web.Controllers
         private ActionResult BuildIdentifierNotFoundFailure(LoginRequestModel request, int? targetCompanyId)
         {
             ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
-            ViewBag.ReturnUrl = request.ReturnUrl;
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(request.ReturnUrl);
 
             if (targetCompanyId.HasValue)
             {
@@ -449,7 +460,7 @@ namespace HR.Web.Controllers
                 StorePendingLegalLogin(request, user);
                 PopulateLegalConsentModalViewBag(request, user);
                 ConfigureLoginPortalViewBag(request);
-                ViewBag.ReturnUrl = request.ReturnUrl;
+                ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(request.ReturnUrl);
                 return View("Login");
             }
 
@@ -496,9 +507,9 @@ namespace HR.Web.Controllers
                 Session.Remove(LegalConsentSession.PendingCompanyIdSession);
             }
 
-            if (!string.IsNullOrWhiteSpace(request.ReturnUrl))
+            if (request.ReturnUrl != null)
             {
-                Session[LegalConsentSession.PendingReturnUrlSession] = request.ReturnUrl;
+                Session[LegalConsentSession.PendingReturnUrlSession] = LocalReturnUrlHelper.ToReturnUrlString(request.ReturnUrl);
             }
             else
             {
@@ -523,12 +534,13 @@ namespace HR.Web.Controllers
         {
             var urlTenantToken = RouteData.Values["tenant"] as string;
             var returnUrl = Session[LegalConsentSession.PendingReturnUrlSession] as string;
+            LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedReturnUrl);
             return new LoginRequestModel
             {
                 Username = user.UserName,
                 Password = null,
                 Captcha = null,
-                ReturnUrl = returnUrl,
+                ReturnUrl = parsedReturnUrl,
                 UrlTenantToken = urlTenantToken,
                 ClientIp = Request.UserHostAddress,
                 IsGlobalSuperAdmin = false,
@@ -576,7 +588,7 @@ namespace HR.Web.Controllers
             {
                 ModelState.AddModelError("", "Please accept the Terms & Conditions and Privacy Policy to continue.");
                 PopulateLegalConsentModalViewBag(resumeRequest, user);
-                ViewBag.ReturnUrl = resumeRequest.ReturnUrl;
+                ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(resumeRequest.ReturnUrl);
                 return View("Login");
             }
 

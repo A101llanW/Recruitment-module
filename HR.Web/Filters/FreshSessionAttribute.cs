@@ -33,27 +33,22 @@ namespace HR.Web.Filters
                     filterContext.HttpContext.Response.Cookies.Add(tempCookie);
                 }
 
-                // Redirect to clean URL without fresh parameter
+                // Redirect to clean URL without fresh parameter (route-based, not raw user URL).
                 var request = filterContext.HttpContext.Request;
+                var routeValues = new System.Web.Routing.RouteValueDictionary(filterContext.RouteData.Values);
                 var query = HttpUtility.ParseQueryString(request.QueryString.ToString());
                 query.Remove("fresh");
-
-                var path = request.Url != null ? request.Url.AbsolutePath : "/";
-                if (string.IsNullOrEmpty(path) || !path.StartsWith("/", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal))
+                foreach (string key in query.AllKeys ?? Array.Empty<string>())
                 {
-                    path = "/";
+                    if (string.IsNullOrEmpty(key))
+                    {
+                        continue;
+                    }
+
+                    routeValues[key] = query[key];
                 }
 
-                var queryString = query.ToString();
-                var redirectUrl = string.IsNullOrEmpty(queryString) ? path : path + "?" + queryString;
-
-                var urlHelper = new UrlHelper(filterContext.RequestContext);
-                if (!urlHelper.IsLocalUrl(redirectUrl))
-                {
-                    redirectUrl = "/";
-                }
-
-                filterContext.Result = new RedirectResult(redirectUrl);
+                filterContext.Result = new RedirectToRouteResult(routeValues);
                 return;
             }
 

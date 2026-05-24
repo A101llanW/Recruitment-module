@@ -19,10 +19,16 @@ namespace HR.Web.Controllers
 
         private ActionResult HandleRegisterGet(int? companyId, bool isSuperAdmin, string returnUrl)
         {
+            LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedReturnUri);
+            return HandleRegisterGet(companyId, isSuperAdmin, parsedReturnUri);
+        }
+
+        private ActionResult HandleRegisterGet(int? companyId, bool isSuperAdmin, Uri returnUri)
+        {
             ViewBag.IsSuperAdmin = isSuperAdmin;
 
             var viewModel = CreateRegisterViewModel(companyId, isSuperAdmin);
-            ApplyRegisterApplicationContext(viewModel, companyId, returnUrl);
+            ApplyRegisterApplicationContext(viewModel, companyId, returnUri);
             return View(viewModel);
         }
 
@@ -40,29 +46,32 @@ namespace HR.Web.Controllers
             return _uow.Companies.GetAll().Where(c => c.IsActive).OrderBy(c => c.Name).ToList();
         }
 
-        private void ApplyRegisterApplicationContext(RegisterViewModel viewModel, int? companyId, string returnUrl)
+        private void ApplyRegisterApplicationContext(RegisterViewModel viewModel, int? companyId, Uri returnUri)
         {
             if (TempData["ApplicationMessage"] != null)
             {
                 ViewBag.ApplicationMessage = TempData["ApplicationMessage"].ToString();
             }
 
-            var effectiveReturnUrl = !string.IsNullOrWhiteSpace(returnUrl)
-                ? returnUrl
-                : (TempData["ReturnUrl"] != null ? TempData["ReturnUrl"].ToString() : null);
-            ViewBag.ReturnUrl = effectiveReturnUrl;
+            Uri effectiveReturnUri = returnUri;
+            if (effectiveReturnUri == null && TempData["ReturnUrl"] != null)
+            {
+                LocalReturnUrlHelper.TryParseLocalReturnUri(TempData["ReturnUrl"].ToString(), Url, out effectiveReturnUri);
+            }
 
-            if (companyId.HasValue || string.IsNullOrEmpty(effectiveReturnUrl))
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(effectiveReturnUri);
+
+            if (companyId.HasValue || effectiveReturnUri == null)
             {
                 return;
             }
 
-            TryPopulateCompanyFromReturnUrl(viewModel, effectiveReturnUrl);
+            TryPopulateCompanyFromReturnUrl(viewModel, effectiveReturnUri);
         }
 
-        private void TryPopulateCompanyFromReturnUrl(RegisterViewModel viewModel, string returnUrl)
+        private void TryPopulateCompanyFromReturnUrl(RegisterViewModel viewModel, Uri returnUri)
         {
-            var positionId = ExtractPositionIdFromReturnUrl(returnUrl);
+            var positionId = LocalReturnUrlHelper.ExtractPositionId(returnUri);
             if (!positionId.HasValue)
             {
                 return;
@@ -75,35 +84,35 @@ namespace HR.Web.Controllers
             }
         }
 
-        private static int? ExtractPositionIdFromReturnUrl(string returnUrl)
-        {
-            var queryStart = returnUrl.IndexOf('?');
-            if (queryStart < 0)
-            {
-                return null;
-            }
-
-            var query = HttpUtility.ParseQueryString(returnUrl.Substring(queryStart));
-            return int.TryParse(query["positionId"], out var positionId) ? positionId : (int?)null;
-        }
-
         private ActionResult HandleRegisterPost(RegisterViewModel model, bool isSuperAdmin, string returnUrl)
         {
+            var resolvedReturnUri = ResolveRegisterReturnUrl(returnUrl);
+            return HandleRegisterPost(model, isSuperAdmin, resolvedReturnUri);
+        }
+
+        private ActionResult HandleRegisterPost(RegisterViewModel model, bool isSuperAdmin, Uri returnUri)
+        {
             ViewBag.IsSuperAdmin = isSuperAdmin;
-            var resolvedReturnUrl = ResolveRegisterReturnUrl(returnUrl);
+
+            if (model == null)
+            {
+                return ReturnRegisterView(new RegisterViewModel(), isSuperAdmin, returnUri);
+            }
+
+            var registrationModel = model;
 
             if (!ModelState.IsValid)
             {
-                return ReturnRegisterView(model, isSuperAdmin, resolvedReturnUrl);
+                return ReturnRegisterView(registrationModel, isSuperAdmin, returnUri);
             }
 
             if (!model.AcceptLegalTerms)
             {
                 ModelState.AddModelError("AcceptLegalTerms", "You must agree to the candidate Terms & Conditions and Privacy Policy to continue.");
-                return ReturnRegisterView(model, isSuperAdmin, resolvedReturnUrl);
+                return ReturnRegisterView(model, isSuperAdmin, returnUri);
             }
 
-            var companyResolutionFailure = EnsureRegistrationCompanyContext(model, isSuperAdmin, resolvedReturnUrl);
+            var companyResolutionFailure = EnsureRegistrationCompanyContext(model, isSuperAdmin, returnUri);
             if (companyResolutionFailure != null)
             {
                 return companyResolutionFailure;
@@ -112,7 +121,7 @@ namespace HR.Web.Controllers
             var validationError = ValidateRegistrationRules(model);
             if (validationError != null)
             {
-                return ReturnRegisterValidationError(model, isSuperAdmin, resolvedReturnUrl, validationError);
+                return ReturnRegisterValidationError(model, isSuperAdmin, returnUri, validationError);
             }
 
             try
@@ -129,7 +138,7 @@ namespace HR.Web.Controllers
                 SignInRegisteredUser(user);
                 SetPreferredTenantAfterRegistration(model.CompanyId);
 
-                var safeRegisterReturn = ResolveRegisterSafeReturn(resolvedReturnUrl);
+                var safeRegisterReturn = ResolveRegisterSafeReturn(returnUri);
                 if (safeRegisterReturn != null)
                 {
                     return safeRegisterReturn;
@@ -142,15 +151,15 @@ namespace HR.Web.Controllers
             {
                 AuditSvc.LogAction(User.Identity.Name, "REGISTER_ERROR", "Account", "", "Registration failed: " + ex.Message);
                 ModelState.AddModelError("", "Registration failed. Please try again.");
-                return ReturnRegisterView(model, isSuperAdmin, resolvedReturnUrl);
+                return ReturnRegisterView(model, isSuperAdmin, returnUri);
             }
         }
 
-        private ActionResult EnsureRegistrationCompanyContext(RegisterViewModel model, bool isSuperAdmin, string returnUrl)
+        private ActionResult EnsureRegistrationCompanyContext(RegisterViewModel model, bool isSuperAdmin, Uri returnUri)
         {
             if (isSuperAdmin)
             {
-                return EnsureSuperAdminCompanySelection(model, returnUrl);
+                return EnsureSuperAdminCompanySelection(model, returnUri);
             }
 
             if (model.CompanyId.HasValue)
@@ -166,10 +175,10 @@ namespace HR.Web.Controllers
             }
 
             ModelState.AddModelError("", "Unable to determine company for registration. Please contact support.");
-            return ReturnRegisterView(model, isSuperAdmin, returnUrl);
+            return ReturnRegisterView(model, isSuperAdmin, returnUri);
         }
 
-        private ActionResult EnsureSuperAdminCompanySelection(RegisterViewModel model, string returnUrl)
+        private ActionResult EnsureSuperAdminCompanySelection(RegisterViewModel model, Uri returnUri)
         {
             if (model.CompanyId.HasValue)
             {
@@ -177,7 +186,7 @@ namespace HR.Web.Controllers
             }
 
             ModelState.AddModelError("CompanyId", "Company selection is required for SuperAdmin registration.");
-            return ReturnRegisterView(model, isSuperAdmin: true, returnUrl: returnUrl);
+            return ReturnRegisterView(model, isSuperAdmin: true, returnUri: returnUri);
         }
 
         private int? ResolveCompanyIdFromTenantRoute()
@@ -288,20 +297,20 @@ namespace HR.Web.Controllers
             };
         }
 
-        private ActionResult ReturnRegisterValidationError(RegisterViewModel model, bool isSuperAdmin, string returnUrl, RegistrationValidationError validationError)
+        private ActionResult ReturnRegisterValidationError(RegisterViewModel model, bool isSuperAdmin, Uri returnUri, RegistrationValidationError validationError)
         {
             ModelState.AddModelError(validationError.Key, validationError.Message);
-            return ReturnRegisterView(model, isSuperAdmin, returnUrl);
+            return ReturnRegisterView(model, isSuperAdmin, returnUri);
         }
 
-        private ActionResult ReturnRegisterView(RegisterViewModel model, bool isSuperAdmin, string returnUrl)
+        private ActionResult ReturnRegisterView(RegisterViewModel model, bool isSuperAdmin, Uri returnUri)
         {
             model.Companies = isSuperAdmin ? GetActiveCompanies() : new List<Company>();
-            ViewBag.ReturnUrl = returnUrl;
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(returnUri);
 
-            if (!model.CompanyId.HasValue && !string.IsNullOrWhiteSpace(returnUrl))
+            if (!model.CompanyId.HasValue && returnUri != null)
             {
-                TryPopulateCompanyFromReturnUrl(model, returnUrl);
+                TryPopulateCompanyFromReturnUrl(model, returnUri);
             }
 
             return View("Register", model);
@@ -383,18 +392,19 @@ namespace HR.Web.Controllers
             Response.Cookies.Add(tenantCookie);
         }
 
-        private ActionResult ResolveRegisterSafeReturn(string returnUrl)
+        private ActionResult ResolveRegisterSafeReturn(Uri returnUri)
         {
             var tenantToken = RouteData.Values["tenant"] as string;
-            var resolvedReturnUrl = ResolveRegisterReturnUrl(returnUrl);
-            return BuildSafeReturnRedirect(resolvedReturnUrl, tenantToken);
+            return BuildSafeReturnRedirect(returnUri, tenantToken);
         }
 
-        private string ResolveRegisterReturnUrl(string returnUrl)
+        private Uri ResolveRegisterReturnUrl(string returnUrl)
         {
-            return !string.IsNullOrWhiteSpace(returnUrl)
+            var raw = !string.IsNullOrWhiteSpace(returnUrl)
                 ? returnUrl
                 : Request.Form["ReturnUrl"];
+            LocalReturnUrlHelper.TryParseLocalReturnUri(raw, Url, out var parsedUri);
+            return parsedUri;
         }
     }
 }

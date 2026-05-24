@@ -118,8 +118,9 @@ namespace HR.Web.Services
                     DateTime.Now, to, ex.Message, Environment.NewLine, ex.StackTrace);
                 System.IO.File.AppendAllText(logPath, logMessage);
             }
-            catch
+            catch (Exception)
             {
+                // Best-effort local log write only; email failure is already traced below.
             }
 
             System.Diagnostics.Debug.WriteLine("Email sending failed: " + ex.Message);

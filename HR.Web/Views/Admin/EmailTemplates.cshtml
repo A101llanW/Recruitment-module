@@ -482,18 +482,61 @@
             clearEmailComposeEditing();
         }, true);
 
-        function getChipHtmlFromButton(btn) {
+        function clearElement(el) {
+            while (el && el.firstChild) {
+                el.removeChild(el.firstChild);
+            }
+        }
+
+        function cloneChipNodeFromButton(btn) {
             if (!btn) {
-                return '';
+                return null;
             }
             var tpl = btn.nextElementSibling;
             if (!tpl || !tpl.tagName || tpl.tagName.toUpperCase() !== 'TEMPLATE') {
-                return '';
+                return null;
             }
             if (!tpl.content || !tpl.content.firstElementChild) {
+                return null;
+            }
+            return tpl.content.firstElementChild.cloneNode(true);
+        }
+
+        function readComposeHtml(div) {
+            if (!div) {
                 return '';
             }
-            return tpl.content.firstElementChild.outerHTML;
+            var html = '';
+            for (var i = 0; i < div.childNodes.length; i++) {
+                var node = div.childNodes[i];
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    html += node.outerHTML;
+                } else if (node.nodeType === Node.TEXT_NODE) {
+                    html += node.textContent;
+                }
+            }
+            return html;
+        }
+
+        function writeComposeHtml(div, html) {
+            clearElement(div);
+            if (!html) {
+                return;
+            }
+            var parser = new DOMParser();
+            var doc = parser.parseFromString('<div>' + html + '</div>', 'text/html');
+            var wrapper = doc.body.firstChild;
+            if (!wrapper) {
+                return;
+            }
+            while (wrapper.firstChild) {
+                div.appendChild(document.importNode(wrapper.firstChild, true));
+            }
+        }
+
+        function getChipHtmlFromButton(btn) {
+            var chipNode = cloneChipNodeFromButton(btn);
+            return chipNode ? chipNode.outerHTML : '';
         }
 
         function getTinyMceEditorForTextareaId(textareaId) {
@@ -527,8 +570,8 @@
         }
 
         function insertChipIntoSubject(compose, btn) {
-            var html = getChipHtmlFromButton(btn);
-            if (!html) {
+            var chipNode = cloneChipNodeFromButton(btn);
+            if (!chipNode) {
                 return;
             }
             var id = compose.getAttribute('data-subject-compose-id');
@@ -540,29 +583,22 @@
             div.focus();
             restoreSubjectSelection(div);
             try {
-                document.execCommand('insertHTML', false, html);
+                document.execCommand('insertHTML', false, chipNode.outerHTML);
             } catch (e) {
                 var sel = window.getSelection ? window.getSelection() : null;
                 if (sel && sel.rangeCount > 0) {
                     var range = sel.getRangeAt(0);
-                    var temp = document.createElement('div');
-                    temp.innerHTML = html;
-                    var frag = document.createDocumentFragment();
-                    var child;
-                    while ((child = temp.firstChild)) {
-                        frag.appendChild(child);
-                    }
                     range.deleteContents();
-                    range.insertNode(frag);
+                    range.insertNode(chipNode.cloneNode(true));
                     range.collapse(false);
                     sel.removeAllRanges();
                     sel.addRange(range);
                 } else {
-                    div.innerHTML += html;
+                    div.appendChild(chipNode.cloneNode(true));
                 }
             }
             if (ta) {
-                ta.value = div.innerHTML;
+                ta.value = readComposeHtml(div);
             }
             saveSubjectSelection(div);
         }
@@ -661,7 +697,7 @@
                 var sid = div.getAttribute('data-subject-storage-id');
                 var ta = document.getElementById(sid);
                 if (ta) {
-                    ta.value = div.innerHTML;
+                    ta.value = readComposeHtml(div);
                 }
             });
         }
@@ -680,11 +716,11 @@
                 var sid = div.getAttribute('data-subject-storage-id');
                 var ta = document.getElementById(sid);
                 if (ta && div) {
-                    div.innerHTML = ta.value;
+                    writeComposeHtml(div, ta.value);
                 }
                 div.addEventListener('input', function () {
                     if (ta) {
-                        ta.value = div.innerHTML;
+                        ta.value = readComposeHtml(div);
                     }
                     saveSubjectSelection(div);
                 });

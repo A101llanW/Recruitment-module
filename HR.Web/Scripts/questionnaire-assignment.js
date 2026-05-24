@@ -3,11 +3,33 @@ function initQuestionnaireAssignmentEditor(options) {
     options = options || {};
         var form = document.getElementById(options.formId) || document.getElementById('positionCreateForm') || document.getElementById('positionEditForm') || document.getElementById('templateEditForm');
         if (!form) return;
+        function clearElement(el) {
+            while (el && el.firstChild) {
+                el.removeChild(el.firstChild);
+            }
+        }
 
-        var payloadInput = document.getElementById('questionWeightsPayload');
+        function mapGet(map, key, defaultValue) {
+            return map.has(key) ? map.get(key) : defaultValue;
+        }
+
+        function mapSet(map, key, value) {
+            map.set(key, value);
+        }
+
+        function mapDelete(map, key) {
+            map.delete(key);
+        }
+
+        function mapIsTrue(map, key) {
+            return map.get(key) === true;
+        }
+
+
+        var weightsFieldEl = document.getElementById('questionWeightsPayload');
         var stagesPayloadInput = document.getElementById('questionStagesPayload');
         var stageCountInput = document.getElementById(options.stageCountInputId || 'questionnaireStageCountInput');
-        var hasSecondaryCheckbox = document.getElementById(options.hasSecondaryStageCheckboxId || 'hasSecondaryStageCheckbox');
+        var secondaryStageToggleEl = document.getElementById(options.hasSecondaryStageCheckboxId || 'hasSecondaryStageCheckbox');
         var stageCountSection = document.getElementById(options.stageCountSectionId || 'questionnaireStageCountSection');
         var legendRow = document.getElementById('questionnaireStageLegendRow');
         var legendEl = document.getElementById('questionnaireStageLegend');
@@ -18,10 +40,10 @@ function initQuestionnaireAssignmentEditor(options) {
         var weightEmpty = document.getElementById('questionWeightEmpty');
         var questionCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.question-checkbox'));
         var selectedQuestionsHiddenContainer = document.getElementById('selectedQuestionsHiddenContainer');
-        var questionWeights = {};
-        var questionLocks = {};
-        var questionStages = {};
-        var isQuestionSelected = {};
+        var questionWeights = new Map();
+        var questionLocks = new Map();
+        var questionStages = new Map();
+        var isQuestionSelected = new Map();
         var activeQuestionnaireEditorStage = 1;
 
         function clamp(v, min, max) {
@@ -43,7 +65,7 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         function getQuestionnaireStageCount() {
-            if (hasSecondaryCheckbox && !hasSecondaryCheckbox.checked) {
+            if (secondaryStageToggleEl && !secondaryStageToggleEl.checked) {
                 return 1;
             }
             return readStageCountFromInput();
@@ -63,7 +85,7 @@ function initQuestionnaireAssignmentEditor(options) {
                 return;
             }
             var n = getQuestionnaireStageCount();
-            legendEl.innerHTML = '';
+            clearElement(legendEl);
             if (n <= 1) {
                 legendRow.classList.add('d-none');
                 return;
@@ -91,7 +113,7 @@ function initQuestionnaireAssignmentEditor(options) {
 
         function selectedCheckboxes() {
             return questionCheckboxes.filter(function (cb) {
-                return isQuestionSelected[cb.value] === true;
+                return mapIsTrue(isQuestionSelected, cb.value);
             });
         }
 
@@ -99,11 +121,11 @@ function initQuestionnaireAssignmentEditor(options) {
             var qid = cb.value;
             var n = getQuestionnaireStageCount();
             if (n <= 1) {
-                cb.checked = isQuestionSelected[qid] === true;
+                cb.checked = mapIsTrue(isQuestionSelected, qid);
                 return;
             }
-            cb.checked = isQuestionSelected[qid] === true &&
-                parseInt(questionStages[qid], 10) === activeQuestionnaireEditorStage;
+            cb.checked = mapIsTrue(isQuestionSelected, qid) &&
+                parseInt(mapGet(questionStages, qid, 1), 10) === activeQuestionnaireEditorStage;
         }
 
         function syncAllCheckboxVisuals() {
@@ -130,8 +152,8 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         function updateStageCountSectionVisibility() {
-            if (stageCountSection && hasSecondaryCheckbox) {
-                if (hasSecondaryCheckbox.checked) {
+            if (stageCountSection && secondaryStageToggleEl) {
+                if (secondaryStageToggleEl.checked) {
                     stageCountSection.classList.remove('d-none');
                 } else {
                     stageCountSection.classList.add('d-none');
@@ -143,10 +165,10 @@ function initQuestionnaireAssignmentEditor(options) {
             if (!selectedQuestionsHiddenContainer) {
                 return;
             }
-            selectedQuestionsHiddenContainer.innerHTML = '';
+            clearElement(selectedQuestionsHiddenContainer);
             questionCheckboxes.forEach(function (cb) {
                 var qid = cb.value;
-                if (isQuestionSelected[qid] !== true) {
+                if (!mapIsTrue(isQuestionSelected, qid)) {
                     return;
                 }
                 var h = document.createElement('input');
@@ -172,14 +194,14 @@ function initQuestionnaireAssignmentEditor(options) {
             }
             var pairs = selected.map(function (cb) {
                 var qid = cb.value;
-                var st = parseInt(questionStages[qid], 10);
+                var st = parseInt(mapGet(questionStages, qid, 1), 10);
                 if (isNaN(st) || st < 1) {
                     st = 1;
                 }
                 if (st > maxS) {
                     st = maxS;
                 }
-                questionStages[qid] = st;
+                mapSet(questionStages, qid, st);
                 return qid + '=' + st;
             });
             stagesPayloadInput.value = pairs.join(';');
@@ -195,29 +217,29 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         function ensureWeight(questionId) {
-            var current = parseIntSafe(questionWeights[questionId], NaN);
+            var current = parseIntSafe(mapGet(questionWeights, questionId, 0), NaN);
             if (isNaN(current)) {
                 current = 0;
             }
-            questionWeights[questionId] = clamp(current, 0, 100);
+            mapSet(questionWeights, questionId, clamp(current, 0, 100));
         }
 
         function sumByIds(questionIds) {
             return questionIds.reduce(function (sum, questionId) {
                 ensureWeight(questionId);
-                return sum + questionWeights[questionId];
+                return sum + mapGet(questionWeights, questionId, 0);
             }, 0);
         }
 
         function normalizeIntegerDistribution(questionIds, targetTotal, basisAccessor) {
             var sanitizedTarget = clamp(parseIntSafe(targetTotal, 0), 0, 100);
             if (!questionIds.length) {
-                return {};
+                return new Map();
             }
 
             if (questionIds.length === 1) {
-                var single = {};
-                single[questionIds[0]] = sanitizedTarget;
+                var single = new Map();
+                single.set(questionIds[0], sanitizedTarget);
                 return single;
             }
 
@@ -231,9 +253,9 @@ function initQuestionnaireAssignmentEditor(options) {
             if (totalBasis <= 0) {
                 var evenBase = Math.floor(sanitizedTarget / questionIds.length);
                 var evenRemainder = sanitizedTarget - (evenBase * questionIds.length);
-                var evenResult = {};
+                var evenResult = new Map();
                 questionIds.forEach(function (questionId, index) {
-                    evenResult[questionId] = evenBase + (index < evenRemainder ? 1 : 0);
+                    evenResult.set(questionId, evenBase + (index < evenRemainder ? 1 : 0));
                 });
                 return evenResult;
             }
@@ -257,24 +279,24 @@ function initQuestionnaireAssignmentEditor(options) {
             }
             allocation.sort(function (a, b) { return a.index - b.index; });
 
-            var result = {};
+            var result = new Map();
             allocation.forEach(function (item) {
-                result[item.id] = clamp(item.value, 0, 100);
+                result.set(item.id, clamp(item.value, 0, 100));
             });
             return result;
         }
 
         function updatePayload(selected) {
             var pairs = selected.map(function (cb) {
-                return cb.value + '=' + (questionWeights[cb.value] || 0);
+                return cb.value + '=' + (mapGet(questionWeights, cb.value, 0));
             });
-            payloadInput.value = pairs.join(';');
+            weightsFieldEl.value = pairs.join(';');
         }
 
         function updateBudgetUi(selected) {
             var total = selected.reduce(function (sum, cb) {
                 ensureWeight(cb.value);
-                return sum + questionWeights[cb.value];
+                return sum + mapGet(questionWeights, cb.value, 0);
             }, 0);
             var boundedTotal = clamp(total, 0, 100);
             budgetText.textContent = total + ' / 100 allocated';
@@ -287,7 +309,7 @@ function initQuestionnaireAssignmentEditor(options) {
             }
 
             var unlockedCount = selected.filter(function (cb) {
-                return questionLocks[cb.value] !== true;
+                return !mapIsTrue(questionLocks, cb.value);
             }).length;
 
             redistributeButton.disabled = !selected.length || unlockedCount === 0;
@@ -301,16 +323,16 @@ function initQuestionnaireAssignmentEditor(options) {
             var ids = selectedIds(selected);
             ids.forEach(ensureWeight);
 
-            var lockedIds = ids.filter(function (questionId) { return questionLocks[questionId] === true; });
-            var unlockedIds = ids.filter(function (questionId) { return questionLocks[questionId] !== true; });
+            var lockedIds = ids.filter(function (questionId) { return mapIsTrue(questionLocks, questionId); });
+            var unlockedIds = ids.filter(function (questionId) { return !mapIsTrue(questionLocks, questionId); });
             if (!unlockedIds.length) {
                 return;
             }
 
             var lockedTotal = sumByIds(lockedIds);
             if (lockedTotal > 100) {
-                var compressedLocked = normalizeIntegerDistribution(lockedIds, 100, function (questionId) { return questionWeights[questionId]; });
-                lockedIds.forEach(function (questionId) { questionWeights[questionId] = compressedLocked[questionId]; });
+                var compressedLocked = normalizeIntegerDistribution(lockedIds, 100, function (questionId) { return mapGet(questionWeights, questionId, 0); });
+                lockedIds.forEach(function (questionId) { mapSet(questionWeights, questionId, compressedLocked.get(questionId)); });
                 lockedTotal = 100;
             }
 
@@ -318,7 +340,7 @@ function initQuestionnaireAssignmentEditor(options) {
             var base = Math.floor(unlockedTarget / unlockedIds.length);
             var remainder = unlockedTarget - (base * unlockedIds.length);
             unlockedIds.forEach(function (questionId, index) {
-                questionWeights[questionId] = base + (index < remainder ? 1 : 0);
+                mapSet(questionWeights, questionId, base + (index < remainder ? 1 : 0));
             });
         }
 
@@ -327,7 +349,7 @@ function initQuestionnaireAssignmentEditor(options) {
                 weightEmpty.style.display = '';
                 budgetText.textContent = '0 / 100 allocated';
                 budgetBar.style.width = '0%';
-                payloadInput.value = '';
+                weightsFieldEl.value = '';
                 if (stagesPayloadInput) {
                     stagesPayloadInput.value = '';
                 }
@@ -345,14 +367,14 @@ function initQuestionnaireAssignmentEditor(options) {
                     return;
                 }
 
-                var locked = questionLocks[questionId] === true;
+                var locked = mapIsTrue(questionLocks, questionId);
                 row.classList.toggle('locked', locked);
 
                 var slider = row.querySelector('.question-weight-slider');
                 var number = row.querySelector('.question-weight-number');
                 var value = row.querySelector('.question-weight-value');
                 var icon = row.querySelector('.question-weight-lock i');
-                var current = questionWeights[questionId];
+                var current = mapGet(questionWeights, questionId, 0);
 
                 if (slider) {
                     slider.value = current;
@@ -392,7 +414,7 @@ function initQuestionnaireAssignmentEditor(options) {
                 return;
             }
 
-            if (questionLocks[questionId] === true) {
+            if (mapIsTrue(questionLocks, questionId)) {
                 syncWeightUi(selected);
                 return;
             }
@@ -403,7 +425,7 @@ function initQuestionnaireAssignmentEditor(options) {
             function sumWeightsByIds(questionIds) {
                 return questionIds.reduce(function (sum, id) {
                     ensureWeight(id);
-                    return sum + (questionWeights[id] || 0);
+                    return sum + (mapGet(questionWeights, id, 0));
                 }, 0);
             }
 
@@ -415,7 +437,7 @@ function initQuestionnaireAssignmentEditor(options) {
                 var pool = poolIds
                     .map(function (id, index) {
                         ensureWeight(id);
-                        return { id: id, index: index, weight: questionWeights[id] || 0 };
+                        return { id: id, index: index, weight: mapGet(questionWeights, id, 0) };
                     })
                     .filter(function (item) { return item.weight > 0; });
 
@@ -453,25 +475,25 @@ function initQuestionnaireAssignmentEditor(options) {
 
                 reductions.sort(function (a, b) { return a.index - b.index; });
                 reductions.forEach(function (item) {
-                    questionWeights[item.id] = clamp((questionWeights[item.id] || 0) - item.value, 0, 100);
+                    mapSet(questionWeights, item.id, clamp((mapGet(questionWeights, item.id, 0)) - item.value, 0, 100));
                 });
             }
 
-            var lockedIds = ids.filter(function (id) { return questionLocks[id] === true; });
+            var lockedIds = ids.filter(function (id) { return mapIsTrue(questionLocks, id); });
             var lockedTotal = sumWeightsByIds(lockedIds);
             var maxForThis = clamp(100 - lockedTotal, 0, 100);
 
-            var current = questionWeights[questionId] || 0;
+            var current = mapGet(questionWeights, questionId, 0);
             var desired = clamp(parseIntSafe(rawValue, 0), 0, maxForThis);
 
             if (desired <= current) {
-                questionWeights[questionId] = desired;
+                mapSet(questionWeights, questionId, desired);
                 syncWeightUi(selected);
                 return;
             }
 
-            questionWeights[questionId] = desired;
-            var otherUnlockedIds = ids.filter(function (id) { return id !== questionId && questionLocks[id] !== true; });
+            mapSet(questionWeights, questionId, desired);
+            var otherUnlockedIds = ids.filter(function (id) { return id !== questionId && !mapIsTrue(questionLocks, id); });
             var otherUnlockedTotal = sumWeightsByIds(otherUnlockedIds);
             var totalAfter = lockedTotal + desired + otherUnlockedTotal;
             var reductionNeeded = Math.max(0, totalAfter - 100);
@@ -481,7 +503,7 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         function toggleLock(questionId) {
-            questionLocks[questionId] = !(questionLocks[questionId] === true);
+            mapSet(questionLocks, questionId, !mapIsTrue(questionLocks, questionId));
             var selected = selectedCheckboxes();
             syncWeightUi(selected);
         }
@@ -506,7 +528,7 @@ function initQuestionnaireAssignmentEditor(options) {
             lockButton.type = 'button';
             lockButton.className = 'btn btn-sm btn-outline-secondary question-weight-lock mr-2';
             lockButton.title = 'Lock weight';
-            lockButton.innerHTML = "<i class='fas fa-lock-open'></i>";
+            var lockIcon = document.createElement('i'); lockIcon.className = 'fas fa-lock-open'; lockButton.appendChild(lockIcon);
             lockButton.addEventListener('click', function () {
                 toggleLock(questionId);
             });
@@ -517,7 +539,7 @@ function initQuestionnaireAssignmentEditor(options) {
             slider.max = '100';
             slider.step = '1';
             slider.className = 'flex-grow-1 question-weight-slider';
-            slider.value = questionWeights[questionId];
+            slider.value = mapGet(questionWeights, questionId, 0);
             slider.addEventListener('input', function () {
                 setFocusedWeight(questionId, slider.value);
             });
@@ -532,7 +554,7 @@ function initQuestionnaireAssignmentEditor(options) {
             number.step = '1';
             number.className = 'form-control form-control-sm ml-2 question-weight-number';
             number.style.maxWidth = '72px';
-            number.value = questionWeights[questionId];
+            number.value = mapGet(questionWeights, questionId, 0);
             number.addEventListener('input', function () {
                 setFocusedWeight(questionId, number.value);
             });
@@ -542,7 +564,7 @@ function initQuestionnaireAssignmentEditor(options) {
 
             var value = document.createElement('span');
             value.className = 'question-weight-value ml-2';
-            value.textContent = questionWeights[questionId] + ' pts';
+            value.textContent = mapGet(questionWeights, questionId, 0) + ' pts';
 
             controls.appendChild(lockButton);
             controls.appendChild(slider);
@@ -557,7 +579,7 @@ function initQuestionnaireAssignmentEditor(options) {
 
         function renderRows() {
             var selected = selectedCheckboxes();
-            weightRows.innerHTML = '';
+            clearElement(weightRows);
 
             if (!selected.length) {
                 syncWeightUi(selected);
@@ -567,21 +589,21 @@ function initQuestionnaireAssignmentEditor(options) {
             selected.forEach(function (cb) {
                 ensureWeight(cb.value);
                 var qid = cb.value;
-                if (questionStages[qid] == null || isNaN(parseInt(questionStages[qid], 10))) {
-                    questionStages[qid] = 1;
+                if (!questionStages.has(qid) || isNaN(parseInt(mapGet(questionStages, qid, 1), 10))) {
+                    mapSet(questionStages, qid, 1);
                 }
             });
 
             var ids = selectedIds(selected);
-            var total = ids.reduce(function (sum, id) { return sum + (questionWeights[id] || 0); }, 0);
+            var total = ids.reduce(function (sum, id) { return sum + (mapGet(questionWeights, id, 0)); }, 0);
             if (total <= 0) {
                 if (ids.length === 1) {
-                    questionWeights[ids[0]] = 100;
+                    mapSet(questionWeights, ids[0], 100);
                 } else {
                     var base = Math.floor(100 / ids.length);
                     var rem = 100 - (base * ids.length);
                     ids.forEach(function (id, idx) {
-                        questionWeights[id] = base + (idx < rem ? 1 : 0);
+                        mapSet(questionWeights, id, base + (idx < rem ? 1 : 0));
                     });
                 }
             }
@@ -603,21 +625,21 @@ function initQuestionnaireAssignmentEditor(options) {
                 checkboxes.forEach(function (box) {
                     var qid = box.value;
                     if (nStages <= 1) {
-                        isQuestionSelected[qid] = want;
+                        mapSet(isQuestionSelected, qid, want);
                         if (want) {
-                            questionStages[qid] = 1;
+                            mapSet(questionStages, qid, 1);
                         } else {
-                            delete questionStages[qid];
+                            mapDelete(questionStages, qid);
                         }
                         box.checked = want;
                     } else {
                         if (want) {
-                            isQuestionSelected[qid] = true;
-                            questionStages[qid] = activeQuestionnaireEditorStage;
-                        } else if (isQuestionSelected[qid] === true &&
-                            parseInt(questionStages[qid], 10) === activeQuestionnaireEditorStage) {
-                            isQuestionSelected[qid] = false;
-                            delete questionStages[qid];
+                            mapSet(isQuestionSelected, qid, true);
+                            mapSet(questionStages, qid, activeQuestionnaireEditorStage);
+                        } else if (mapIsTrue(isQuestionSelected, qid) &&
+                            parseInt(mapGet(questionStages, qid, 1), 10) === activeQuestionnaireEditorStage) {
+                            mapSet(isQuestionSelected, qid, false);
+                            mapDelete(questionStages, qid);
                         }
                         syncCheckboxVisualFor(box);
                     }
@@ -636,33 +658,33 @@ function initQuestionnaireAssignmentEditor(options) {
             var qid = cb.value;
             var initial = parseFloat(cb.getAttribute('data-initial-weight'));
             if (!isNaN(initial)) {
-                questionWeights[qid] = clamp(initial, 0, 100);
+                mapSet(questionWeights, qid, clamp(initial, 0, 100));
             }
             if (cb.checked) {
-                isQuestionSelected[qid] = true;
+                mapSet(isQuestionSelected, qid, true);
                 var initStage = parseInt(cb.getAttribute('data-initial-stage'), 10);
                 var cap = getQuestionnaireStageCount();
                 var st = (!isNaN(initStage) && initStage > 0) ? initStage : 1;
-                questionStages[qid] = Math.min(cap, Math.max(1, st));
+                mapSet(questionStages, qid, Math.min(cap, Math.max(1, st)));
             }
             cb.addEventListener('change', function () {
                 var nStages = getQuestionnaireStageCount();
                 var want = cb.checked;
                 if (nStages <= 1) {
-                    isQuestionSelected[qid] = want;
+                    mapSet(isQuestionSelected, qid, want);
                     if (want) {
-                        questionStages[qid] = 1;
+                        mapSet(questionStages, qid, 1);
                     } else {
-                        delete questionStages[qid];
+                        mapDelete(questionStages, qid);
                     }
                 } else {
                     if (want) {
-                        isQuestionSelected[qid] = true;
-                        questionStages[qid] = activeQuestionnaireEditorStage;
-                    } else if (isQuestionSelected[qid] === true &&
-                        parseInt(questionStages[qid], 10) === activeQuestionnaireEditorStage) {
-                        isQuestionSelected[qid] = false;
-                        delete questionStages[qid];
+                        mapSet(isQuestionSelected, qid, true);
+                        mapSet(questionStages, qid, activeQuestionnaireEditorStage);
+                    } else if (mapIsTrue(isQuestionSelected, qid) &&
+                        parseInt(mapGet(questionStages, qid, 1), 10) === activeQuestionnaireEditorStage) {
+                        mapSet(isQuestionSelected, qid, false);
+                        mapDelete(questionStages, qid);
                     }
                     syncCheckboxVisualFor(cb);
                 }
@@ -705,10 +727,10 @@ function initQuestionnaireAssignmentEditor(options) {
         });
 
         function syncHasSecondaryFromStageCount() {
-            if (!hasSecondaryCheckbox || !stageCountInput) {
+            if (!secondaryStageToggleEl || !stageCountInput) {
                 return;
             }
-            hasSecondaryCheckbox.checked = readStageCountFromInput() > 1;
+            secondaryStageToggleEl.checked = readStageCountFromInput() > 1;
         }
 
         function applyHasSecondaryCheckbox(checked) {
@@ -729,9 +751,9 @@ function initQuestionnaireAssignmentEditor(options) {
             renderRows();
         }
 
-        if (hasSecondaryCheckbox && stageCountInput) {
-            hasSecondaryCheckbox.addEventListener('change', function () {
-                applyHasSecondaryCheckbox(hasSecondaryCheckbox.checked);
+        if (secondaryStageToggleEl && stageCountInput) {
+            secondaryStageToggleEl.addEventListener('change', function () {
+                applyHasSecondaryCheckbox(secondaryStageToggleEl.checked);
             });
         }
 
@@ -761,8 +783,8 @@ function initQuestionnaireAssignmentEditor(options) {
         }
         var desiredStageCount = parseInt(template.stageCount, 10);
         if (!isNaN(desiredStageCount) && desiredStageCount > getQuestionnaireStageCount()) {
-            if (hasSecondaryCheckbox) {
-                hasSecondaryCheckbox.checked = desiredStageCount > 1;
+            if (secondaryStageToggleEl) {
+                secondaryStageToggleEl.checked = desiredStageCount > 1;
             }
             if (stageCountInput) {
                 stageCountInput.value = String(desiredStageCount);
@@ -772,14 +794,14 @@ function initQuestionnaireAssignmentEditor(options) {
         }
         template.questions.forEach(function (item) {
             var qid = String(item.questionId);
-            if (isQuestionSelected[qid] === true) {
+            if (mapIsTrue(isQuestionSelected, qid)) {
                 return;
             }
-            isQuestionSelected[qid] = true;
+            mapSet(isQuestionSelected, qid, true);
             var weight = parseFloat(item.weight);
-            questionWeights[qid] = clamp(isNaN(weight) ? 0 : Math.round(weight), 0, 100);
+            mapSet(questionWeights, qid, clamp(isNaN(weight) ? 0 : Math.round(weight), 0, 100));
             var stage = parseInt(item.stageNumber, 10);
-            questionStages[qid] = isNaN(stage) || stage < 1 ? 1 : stage;
+            mapSet(questionStages, qid, isNaN(stage) || stage < 1 ? 1 : stage);
         });
         syncAllCheckboxVisuals();
         syncGroupSelectHeaders();

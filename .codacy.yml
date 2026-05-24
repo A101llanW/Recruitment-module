@@ -8,3 +8,14 @@ exclude_paths:
   - "HR.Web/App_Data/**"
   - "HR.Web/Scripts/**/*.min.js"
   - "**/*.md"
+  # HR schema/migration SQL — not Oracle RAC_* tables; Semgrep_codacy.generic.sql.rac-table-access is inapplicable
+  - "Infrastructure/*.sql"
+  - "Infrastructure/**/*.sql"
+  - "HR.Web/Migrations/**"
+  - "HR.Web/Scripts/*.sql"
+  - "HR.Web/Data/DatabaseSchemaEnsure.cs"
+  # Dev/setup PowerShell — SecureString warnings are false positives for local tooling
+  - "tools/**"
+  - "Infrastructure/**/*.ps1"
+  - "HR.Web/Scripts/*.ps1"
+  - "HR.Web/Migrations/**/*.ps1"

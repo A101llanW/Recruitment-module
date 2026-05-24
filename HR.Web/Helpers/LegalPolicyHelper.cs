@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using HR.Web.Models;
 
 namespace HR.Web.Helpers
@@ -15,6 +16,18 @@ namespace HR.Web.Helpers
 
     public static class LegalPolicyHelper
     {
+        private static readonly Dictionary<string, LegalRelationshipKind> RelationshipTokens =
+            new Dictionary<string, LegalRelationshipKind>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "applicant", LegalRelationshipKind.Applicant },
+                { "companyadmin", LegalRelationshipKind.CompanyAdmin },
+                { "company_admin", LegalRelationshipKind.CompanyAdmin },
+                { "admin", LegalRelationshipKind.CompanyAdmin },
+                { "superadmin", LegalRelationshipKind.SuperAdmin },
+                { "super_admin", LegalRelationshipKind.SuperAdmin },
+                { "operator", LegalRelationshipKind.SuperAdmin }
+            };
+
         public const string CompanyName = "Nanosoft";
         public const string ContactEmail = "nanosoft.africa@gmail.com";
         public const string ContactAddress = "Nairobi, Kenya";
@@ -88,27 +101,8 @@ namespace HR.Web.Helpers
                 return null;
             }
 
-            var t = token.Trim();
-            if (string.Equals(t, "applicant", StringComparison.OrdinalIgnoreCase))
-            {
-                return LegalRelationshipKind.Applicant;
-            }
-
-            if (string.Equals(t, "companyadmin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(t, "company_admin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(t, "admin", StringComparison.OrdinalIgnoreCase))
-            {
-                return LegalRelationshipKind.CompanyAdmin;
-            }
-
-            if (string.Equals(t, "superadmin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(t, "super_admin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(t, "operator", StringComparison.OrdinalIgnoreCase))
-            {
-                return LegalRelationshipKind.SuperAdmin;
-            }
-
-            return null;
+            LegalRelationshipKind kind;
+            return RelationshipTokens.TryGetValue(token.Trim(), out kind) ? (LegalRelationshipKind?)kind : null;
         }
 
         public static string ToRelationshipQueryValue(LegalRelationshipKind relationship)

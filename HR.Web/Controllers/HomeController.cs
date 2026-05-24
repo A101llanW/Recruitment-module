@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Web;
 using System.Web.Mvc;
 using System.Web.Security;
 using HR.Web.Data;
@@ -97,24 +98,26 @@ namespace HR.Web.Controllers
             return LegalRelationshipKind.Applicant;
         }
 
-        private int? TryReadCompanyIdFromFormsUserData()
+        private static FormsAuthenticationTicket TryDecryptFormsTicket(HttpCookie cookie)
         {
-            var cookie = Request.Cookies[FormsAuthentication.FormsCookieName];
             if (cookie == null || string.IsNullOrEmpty(cookie.Value))
             {
                 return null;
             }
 
-            FormsAuthenticationTicket ticket;
             try
             {
-                ticket = FormsAuthentication.Decrypt(cookie.Value);
+                return FormsAuthentication.Decrypt(cookie.Value);
             }
             catch
             {
                 return null;
             }
+        }
 
+        private int? TryReadCompanyIdFromFormsUserData()
+        {
+            var ticket = TryDecryptFormsTicket(Request.Cookies[FormsAuthentication.FormsCookieName]);
             if (ticket == null || string.IsNullOrEmpty(ticket.UserData))
             {
                 return null;

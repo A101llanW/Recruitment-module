@@ -15,32 +15,51 @@ namespace HR.Web.Helpers
     {
         private const string DefaultBaseUrl = "http://localhost:5002";
 
+        public static Uri GetBaseUri(HttpRequestBase request)
+        {
+            return ResolveBaseUri(request != null ? request.Url : null);
+        }
+
+        public static Uri GetBaseUri(HttpRequest request)
+        {
+            return ResolveBaseUri(request != null ? request.Url : null);
+        }
+
         public static string GetBaseUrl(HttpRequestBase request)
         {
-            return ResolveBaseUrl(request != null ? request.Url : null);
+            return GetBaseUri(request).ToString().TrimEnd('/');
         }
 
         public static string GetBaseUrl(HttpRequest request)
         {
-            return ResolveBaseUrl(request != null ? request.Url : null);
+            return GetBaseUri(request).ToString().TrimEnd('/');
         }
 
-        private static string ResolveBaseUrl(Uri requestUrl)
+        private static Uri ResolveBaseUri(Uri requestUrl)
         {
             var configuredBaseUrl = GetConfiguredBaseUrl();
             var requestBaseUrl = BuildRequestBaseUrl(requestUrl);
 
+            string resolved;
             if (!string.IsNullOrWhiteSpace(configuredBaseUrl))
             {
                 if (ShouldPreferRequestUrl(configuredBaseUrl, requestUrl))
                 {
-                    return requestBaseUrl ?? configuredBaseUrl;
+                    resolved = requestBaseUrl ?? configuredBaseUrl;
                 }
-
-                return configuredBaseUrl;
+                else
+                {
+                    resolved = configuredBaseUrl;
+                }
+            }
+            else
+            {
+                resolved = requestBaseUrl ?? DefaultBaseUrl;
             }
 
-            return requestBaseUrl ?? DefaultBaseUrl;
+            return Uri.TryCreate(resolved, UriKind.Absolute, out var parsedUri)
+                ? parsedUri
+                : new Uri(DefaultBaseUrl, UriKind.Absolute);
         }
 
         private static string GetConfiguredBaseUrl()
