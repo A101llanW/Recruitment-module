@@ -139,10 +139,17 @@ namespace HR.Web.Controllers
                     },
                     application.CompanyId);
 
+                if (rendered == null)
+                {
+                    TempData["ApplicationEmailError"] = "The stage was opened, but the invitation email template could not be rendered.";
+                    return RedirectToAction("Index");
+                }
+
+                var emailContent = rendered;
                 await _email.SendAsync(
                     recipientEmail.Trim(),
-                    rendered.Subject,
-                    WrapCandidateEmailDocument(rendered.BodyHtml));
+                    emailContent.Subject ?? "Questionnaire invitation",
+                    WrapCandidateEmailDocument(emailContent.BodyHtml ?? string.Empty));
             }
             catch (Exception ex)
             {
@@ -162,10 +169,10 @@ namespace HR.Web.Controllers
 
             if (!string.IsNullOrEmpty(slug))
             {
-                return Url.Action("Questionnaire", "Applications", new { tenant = slug, positionId = positionId });
+                return Url.Action("Questionnaire", "Applications", new { tenant = slug, positionId = positionId }) ?? string.Empty;
             }
 
-            return Url.Action("Questionnaire", "Applications", new { positionId = positionId });
+            return Url.Action("Questionnaire", "Applications", new { positionId = positionId }) ?? string.Empty;
         }
 
         private static Uri EnsureQuestionnaireInviteBaseUrl(Uri value)

@@ -123,6 +123,11 @@ namespace HR.Web.Controllers
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
 
+            if (model == null)
+            {
+                return View("RoleManagement", BuildRoleManagementPageViewModel(new RoleManagementPageViewModel()));
+            }
+
             var scope = GetRoleManagementScopeContext();
             var actorCompanyId = scope.CompanyId;
             var scopedCompanyId = scope.IsGlobalSuperAdmin ? model.CompanyId : actorCompanyId;
@@ -141,7 +146,7 @@ namespace HR.Web.Controllers
                 CompanyId = scopedCompanyId,
                 Name = model.Name != null ? model.Name.Trim() : null,
                 Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description.Trim(),
-                CreatedByUserName = User.Identity.Name,
+                CreatedByUserName = GetAuditActorName(),
                 CreatedDate = DateTime.Now,
                 IsActive = true
             };
@@ -149,7 +154,8 @@ namespace HR.Web.Controllers
             _uow.RoleDefinitions.Add(roleDefinition);
             _uow.Complete();
 
-            foreach (var permission in model.ModulePermissions.Where(p => !string.Equals(p.AccessLevel, RoleAccessLevels.None, StringComparison.OrdinalIgnoreCase)))
+            foreach (var permission in (model.ModulePermissions ?? Enumerable.Empty<RolePermissionInputViewModel>())
+                .Where(p => !string.Equals(p.AccessLevel, RoleAccessLevels.None, StringComparison.OrdinalIgnoreCase)))
             {
                 _uow.RolePermissions.Add(new RolePermission
                 {
@@ -163,7 +169,7 @@ namespace HR.Web.Controllers
             var scopeCompany = scopedCompanyId.HasValue ? _uow.Companies.Get(scopedCompanyId.Value) : null;
             var scopeName = scopeCompany != null ? scopeCompany.Name : "Global";
             _auditService.LogAction(
-                User.Identity.Name,
+                GetAuditActorName(),
                 "ROLE_TEMPLATE_CREATED",
                 "RoleManagement",
                 roleDefinition.Id.ToString(),
@@ -182,6 +188,11 @@ namespace HR.Web.Controllers
             if (!_rolePermissionService.CanCurrentUserManageRoleDefinitions())
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            if (model == null)
+            {
+                return HttpNotFound();
             }
 
             if (!model.EditingRoleId.HasValue || model.EditingRoleId.Value <= 0)
@@ -221,11 +232,12 @@ namespace HR.Web.Controllers
             role.Name = model.Name != null ? model.Name.Trim() : null;
             role.Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description.Trim();
 
-            var existingPermissions = role.RolePermissions.ToList();
+            var existingPermissions = (role.RolePermissions ?? Enumerable.Empty<RolePermission>()).ToList();
             _uow.Context.Set<RolePermission>().RemoveRange(existingPermissions);
             _uow.Complete();
 
-            foreach (var permission in model.ModulePermissions.Where(p => !string.Equals(p.AccessLevel, RoleAccessLevels.None, StringComparison.OrdinalIgnoreCase)))
+            foreach (var permission in (model.ModulePermissions ?? Enumerable.Empty<RolePermissionInputViewModel>())
+                .Where(p => !string.Equals(p.AccessLevel, RoleAccessLevels.None, StringComparison.OrdinalIgnoreCase)))
             {
                 _uow.RolePermissions.Add(new RolePermission
                 {
@@ -237,7 +249,7 @@ namespace HR.Web.Controllers
 
             _uow.Complete();
             _auditService.LogAction(
-                User.Identity.Name,
+                GetAuditActorName(),
                 "ROLE_TEMPLATE_UPDATED",
                 "RoleManagement",
                 role.Id.ToString(),
@@ -283,13 +295,13 @@ namespace HR.Web.Controllers
             }
 
             var roleName = role.Name;
-            var permissions = role.RolePermissions.ToList();
+            var permissions = (role.RolePermissions ?? Enumerable.Empty<RolePermission>()).ToList();
             _uow.Context.Set<RolePermission>().RemoveRange(permissions);
             _uow.RoleDefinitions.Remove(role);
             _uow.Complete();
 
             _auditService.LogAction(
-                User.Identity.Name,
+                GetAuditActorName(),
                 "ROLE_TEMPLATE_DELETED",
                 "RoleManagement",
                 id.ToString(),
@@ -302,6 +314,7 @@ namespace HR.Web.Controllers
 
         private RoleManagementPageViewModel BuildRoleManagementPageViewModel(RoleManagementPageViewModel model)
         {
+            model = model ?? new RoleManagementPageViewModel();
             var scope = GetRoleManagementScopeContext();
 
             model.IsActualSuperAdmin = scope.IsGlobalSuperAdmin;
@@ -359,7 +372,7 @@ namespace HR.Web.Controllers
                 CreatedByUserName = role.CreatedByUserName,
                 CanDelete = CanManageRoleDefinition(role, scope),
                 AssignedUsersCount = role.Users != null ? role.Users.Count : 0,
-                Permissions = role.RolePermissions
+                Permissions = (role.RolePermissions ?? Enumerable.Empty<RolePermission>())
                     .OrderBy(p => p.ModuleKey)
                     .Select(p =>
                     {
@@ -393,7 +406,8 @@ namespace HR.Web.Controllers
             model.ModulePermissions = RoleModuleCatalog.All
                 .Select(module =>
                 {
-                    var existingPermission = role.RolePermissions.FirstOrDefault(p => string.Equals(p.ModuleKey, module.Key, StringComparison.OrdinalIgnoreCase));
+                    var rolePermissions = role.RolePermissions ?? Enumerable.Empty<RolePermission>();
+                    var existingPermission = rolePermissions.FirstOrDefault(p => string.Equals(p.ModuleKey, module.Key, StringComparison.OrdinalIgnoreCase));
                     var accessLevel = existingPermission != null ? existingPermission.AccessLevel : RoleAccessLevels.None;
                     return new RolePermissionInputViewModel
                     {
@@ -413,6 +427,11 @@ namespace HR.Web.Controllers
 
         private void NormalizeRolePermissionSelections(RoleManagementPageViewModel model)
         {
+            if (model == null)
+            {
+                return;
+            }
+
             model.ModulePermissions = BuildModulePermissionInputs(model.ModulePermissions);
 
             foreach (var permission in model.ModulePermissions)
@@ -473,6 +492,12 @@ namespace HR.Web.Controllers
 
         private void ValidateRoleDefinitionModel(RoleManagementPageViewModel model, int? scopedCompanyId, int? editingRoleId)
         {
+            if (model == null)
+            {
+                ModelState.AddModelError("", "Role template data is required.");
+                return;
+            }
+
             var scope = GetRoleManagementScopeContext();
             if (!scopedCompanyId.HasValue && !scope.IsGlobalSuperAdmin)
             {

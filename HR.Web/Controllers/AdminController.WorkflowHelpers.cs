@@ -101,6 +101,11 @@ namespace HR.Web.Controllers
 
         private ActionResult HandleEditQuestion(QuestionAdminViewModel model)
         {
+            if (model == null)
+            {
+                return RedirectToAction("Questions");
+            }
+
             if (!ModelState.IsValid)
             {
                 return View(model);
@@ -126,7 +131,7 @@ namespace HR.Web.Controllers
             catch (Exception ex)
             {
                 var action = isUpdate ? "UPDATE" : "CREATE";
-                _auditService.LogAction(User.Identity.Name, action, "Admin",
+                _auditService.LogAction(GetAuditActorName(), action, "Admin",
                     model.Id.HasValue ? model.Id.Value.ToString() : "new",
                     wasSuccessful: false, errorMessage: ex.Message);
                 TempData["Error"] = "Error saving question: " + ex.Message;
@@ -140,19 +145,25 @@ namespace HR.Web.Controllers
             question = null;
             oldValues = new object();
 
+            if (model == null)
+            {
+                return RedirectToAction("Questions");
+            }
+
+            var questionModel = model;
             if (isUpdate)
             {
-                question = _uow.Questions.Get(model.Id.Value);
+                question = _uow.Questions.Get(questionModel.Id.Value);
                 if (question == null)
                 {
                     return HttpNotFound();
                 }
 
                 oldValues = new { Text = question.Text, Type = question.Type, IsActive = question.IsActive, AllowMultipleChoices = question.AllowMultipleChoices };
-                question.Text = model.Text;
-                question.Type = model.Type;
-                question.IsActive = model.IsActive;
-                question.AllowMultipleChoices = string.Equals(model.Type, "Choice", StringComparison.OrdinalIgnoreCase) && model.AllowMultipleChoices;
+                question.Text = questionModel.Text;
+                question.Type = questionModel.Type;
+                question.IsActive = questionModel.IsActive;
+                question.AllowMultipleChoices = string.Equals(questionModel.Type, "Choice", StringComparison.OrdinalIgnoreCase) && questionModel.AllowMultipleChoices;
                 _uow.Questions.Update(question);
 
                 var questionId = question.Id;
@@ -163,10 +174,10 @@ namespace HR.Web.Controllers
             {
                 question = new Question
                 {
-                    Text = model.Text,
-                    Type = model.Type,
-                    IsActive = model.IsActive,
-                    AllowMultipleChoices = string.Equals(model.Type, "Choice", StringComparison.OrdinalIgnoreCase) && model.AllowMultipleChoices
+                    Text = questionModel.Text,
+                    Type = questionModel.Type,
+                    IsActive = questionModel.IsActive,
+                    AllowMultipleChoices = string.Equals(questionModel.Type, "Choice", StringComparison.OrdinalIgnoreCase) && questionModel.AllowMultipleChoices
                 };
 
                 var companyId = _tenantService.GetCurrentUserCompanyId();
@@ -194,7 +205,7 @@ namespace HR.Web.Controllers
 
             foreach (var opt in options)
             {
-                if (string.IsNullOrWhiteSpace(opt.Text))
+                if (opt == null || string.IsNullOrWhiteSpace(opt.Text))
                 {
                     continue;
                 }
@@ -215,21 +226,27 @@ namespace HR.Web.Controllers
 
         private void LogQuestionSaved(Question question, object oldValues, List<object> options, bool isUpdate)
         {
+            if (question == null)
+            {
+                return;
+            }
+
+            var savedQuestion = question;
             var newValues = new
             {
-                Text = question.Text,
-                Type = question.Type,
-                IsActive = question.IsActive,
+                Text = savedQuestion.Text,
+                Type = savedQuestion.Type,
+                IsActive = savedQuestion.IsActive,
                 Options = options
             };
 
             if (isUpdate)
             {
-                _auditService.LogUpdate(User.Identity.Name, "Admin", question.Id.ToString(), oldValues, newValues);
+                _auditService.LogUpdate(GetAuditActorName(), "Admin", savedQuestion.Id.ToString(), oldValues, newValues);
             }
             else
             {
-                _auditService.LogCreate(User.Identity.Name, "Admin", question.Id.ToString(), newValues);
+                _auditService.LogCreate(GetAuditActorName(), "Admin", savedQuestion.Id.ToString(), newValues);
             }
         }
 
@@ -280,8 +297,12 @@ namespace HR.Web.Controllers
                 NewQuestions = new List<object>()
             };
 
-            foreach (var question in questions)
+            foreach (var question in questions ?? Enumerable.Empty<Dictionary<string, object>>())
             {
+                if (question == null)
+                {
+                    continue;
+                }
                 var questionText = GetQuestionField(question, "text");
                 var questionType = GetQuestionField(question, "type");
                 var similarQuestion = FindSimilarQuestion(existingQuestions, questionText);
@@ -308,6 +329,11 @@ namespace HR.Web.Controllers
 
         private static string GetQuestionField(Dictionary<string, object> question, string key)
         {
+            if (question == null || string.IsNullOrEmpty(key))
+            {
+                return string.Empty;
+            }
+
             return question.ContainsKey(key) && question[key] != null ? question[key].ToString() : string.Empty;
         }
 
@@ -340,6 +366,11 @@ namespace HR.Web.Controllers
 
         private ActionResult HandleCreateUser(CreateUserViewModel model)
         {
+            if (model == null)
+            {
+                return ReturnCreateUserView(new CreateUserViewModel());
+            }
+
             if (!_tenantService.IsActualSuperAdmin())
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
@@ -384,16 +415,23 @@ namespace HR.Web.Controllers
 
         private ActionResult ReturnCreateUserView(CreateUserViewModel model)
         {
-            model.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
-            model.AvailableRoleOptions = BuildAvailableRoleOptions(true, null, model.CompanyId, false, model.SelectedRoleKey);
-            return View("CreateUser", model);
+            var viewModel = model ?? new CreateUserViewModel();
+            viewModel.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
+            viewModel.AvailableRoleOptions = BuildAvailableRoleOptions(true, null, viewModel.CompanyId, false, viewModel.SelectedRoleKey);
+            return View("CreateUser", viewModel);
         }
 
         private bool ValidateCreateUserUniqueness(CreateUserViewModel model)
         {
+            if (model == null)
+            {
+                return false;
+            }
+
+            var userModel = model;
             var existingUserInCompany = _uow.Users.GetAll().FirstOrDefault(u =>
-                u.UserName.Equals(model.UserName, StringComparison.OrdinalIgnoreCase) &&
-                u.CompanyId == model.CompanyId);
+                u.UserName.Equals(userModel.UserName, StringComparison.OrdinalIgnoreCase) &&
+                u.CompanyId == userModel.CompanyId);
             if (existingUserInCompany != null)
             {
                 ModelState.AddModelError("UserName", "Username already exists within this company.");
@@ -427,16 +465,18 @@ namespace HR.Web.Controllers
 
         private void CreateApplicantForClientRole(CreateUserViewModel model, int? companyId)
         {
-            if (model.Role != "Client")
+            if (model == null || model.Role != "Client")
             {
                 return;
             }
 
+            var userModel = model;
+
             var applicant = new Applicant
             {
-                FullName = string.Format("{0} {1}", model.FirstName, model.LastName),
-                Email = model.Email,
-                Phone = model.Phone,
+                FullName = string.Format("{0} {1}", userModel.FirstName, userModel.LastName),
+                Email = userModel.Email,
+                Phone = userModel.Phone,
                 CompanyId = companyId
             };
             _uow.Applicants.Add(applicant);
@@ -445,14 +485,20 @@ namespace HR.Web.Controllers
 
         private void LogCreatedUser(User user)
         {
-            var displayRole = _rolePermissionService.GetDisplayRole(user);
+            if (user == null)
+            {
+                return;
+            }
+
+            var createdUser = user;
+            var displayRole = _rolePermissionService.GetDisplayRole(createdUser);
             _auditService.LogAction(
-                User.Identity.Name,
+                GetAuditActorName(),
                 "USER_CREATED",
                 "UserManagement",
-                user.Id.ToString(),
+                createdUser.Id.ToString(),
                 true,
-                string.Format("Created user {0} ({1}) with role {2}", user.UserName, user.Email, displayRole)
+                string.Format("Created user {0} ({1}) with role {2}", createdUser.UserName, createdUser.Email, displayRole)
             );
         }
 

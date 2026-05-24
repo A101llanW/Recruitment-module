@@ -14,6 +14,8 @@ exclude_paths:
   - "HR.Web/Migrations/**"
   - "HR.Web/Scripts/*.sql"
   - "HR.Web/Data/DatabaseSchemaEnsure.cs"
+  # Standalone dev hash utility (not part of HR.Web assembly)
+  - "Infrastructure/Setup/**"
   # Dev/setup PowerShell — SecureString warnings are false positives for local tooling
   - "tools/**"
   - "Infrastructure/**/*.ps1"

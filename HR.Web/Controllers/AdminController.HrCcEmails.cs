@@ -13,18 +13,10 @@ namespace HR.Web.Controllers
     {
         public ActionResult HrCcEmails(int? companyId = null)
         {
-            var isSuperAdmin = _tenantService.IsActualSuperAdmin() || User.IsInRole("SuperAdmin");
+            var isSuperAdmin = IsHrCcSuperAdmin();
             var actorCompanyId = _tenantService.GetCurrentUserCompanyId();
             var targetCompanyId = isSuperAdmin ? companyId : actorCompanyId;
-
-            var vm = new HrCcEmailsPageViewModel
-            {
-                IsSuperAdmin = isSuperAdmin,
-                CompanyChoices = isSuperAdmin ? _uow.Companies.GetAll().OrderBy(c => c.Name).ToList() : null,
-                Contacts = new System.Collections.Generic.List<CompanyHrCcEmail>(),
-                NewEntry = new HrCcEmailAddViewModel(),
-                CompanyUsersForHr = new System.Collections.Generic.List<UserEmailChoiceForHrCc>()
-            };
+            var vm = BuildInitialHrCcEmailsViewModel(isSuperAdmin);
 
             if (!targetCompanyId.HasValue)
             {
@@ -38,27 +30,43 @@ namespace HR.Web.Controllers
                 return HttpNotFound();
             }
 
-            if (!isSuperAdmin && (!actorCompanyId.HasValue || actorCompanyId.Value != targetCompanyId.Value))
+            if (!CanAccessHrCcCompany(isSuperAdmin, actorCompanyId, targetCompanyId.Value))
             {
                 return new HttpStatusCodeResult(403, "Access denied.");
             }
 
-            vm.CompanyId = targetCompanyId.Value;
+            PopulateHrCcEmailsCompanyData(vm, company, targetCompanyId.Value);
+            return View(vm);
+        }
+
+        private HrCcEmailsPageViewModel BuildInitialHrCcEmailsViewModel(bool isSuperAdmin)
+        {
+            return new HrCcEmailsPageViewModel
+            {
+                IsSuperAdmin = isSuperAdmin,
+                CompanyChoices = isSuperAdmin ? _uow.Companies.GetAll().OrderBy(c => c.Name).ToList() : null,
+                Contacts = new System.Collections.Generic.List<CompanyHrCcEmail>(),
+                NewEntry = new HrCcEmailAddViewModel(),
+                CompanyUsersForHr = new System.Collections.Generic.List<UserEmailChoiceForHrCc>()
+            };
+        }
+
+        private void PopulateHrCcEmailsCompanyData(HrCcEmailsPageViewModel vm, Company company, int targetCompanyId)
+        {
+            vm.CompanyId = targetCompanyId;
             vm.CompanyName = company.Name;
             vm.Contacts = _uow.Context.CompanyHrCcEmails
-                .Where(e => e.CompanyId == targetCompanyId.Value)
+                .Where(e => e.CompanyId == targetCompanyId)
                 .OrderBy(e => e.SortOrder)
                 .ThenBy(e => e.Email)
                 .ToList();
-            vm.NewEntry = new HrCcEmailAddViewModel { CompanyId = targetCompanyId.Value };
+            vm.NewEntry = new HrCcEmailAddViewModel { CompanyId = targetCompanyId };
+
             var usedEmails = new System.Collections.Generic.HashSet<string>(
                 vm.Contacts.Where(c => c.Email != null).Select(c => c.Email.Trim()),
                 StringComparer.OrdinalIgnoreCase);
             var companyUsers = _uow.Users.GetAll()
-                .Where(u =>
-                    u.CompanyId == targetCompanyId.Value &&
-                    u.Email != null &&
-                    u.Email != string.Empty)
+                .Where(u => u.CompanyId == targetCompanyId && u.Email != null && u.Email != string.Empty)
                 .OrderBy(u => u.FirstName)
                 .ThenBy(u => u.LastName)
                 .ToList();
@@ -74,7 +82,21 @@ namespace HR.Web.Controllers
                         SanitizeChoiceText(u.LastName)).Trim()
                 })
                 .ToList();
-            return View(vm);
+        }
+
+        private bool IsHrCcSuperAdmin()
+        {
+            return _tenantService.IsActualSuperAdmin() || User.IsInRole("SuperAdmin");
+        }
+
+        private static bool CanAccessHrCcCompany(bool isSuperAdmin, int? actorCompanyId, int targetCompanyId)
+        {
+            return isSuperAdmin || (actorCompanyId.HasValue && actorCompanyId.Value == targetCompanyId);
+        }
+
+        private ActionResult RedirectToHrCcEmails(bool isSuperAdmin, int? companyId)
+        {
+            return RedirectToAction("HrCcEmails", new { companyId = isSuperAdmin ? companyId : null });
         }
 
         /// <summary>
@@ -108,76 +130,59 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult AddHrCcEmail(HrCcEmailsPageViewModel page, int? addFromUserId = null)
         {
-            var isSuperAdmin = _tenantService.IsActualSuperAdmin() || User.IsInRole("SuperAdmin");
+            var isSuperAdmin = IsHrCcSuperAdmin();
             var actorCompanyId = _tenantService.GetCurrentUserCompanyId();
             var model = page != null ? page.NewEntry : null;
             if (model == null)
             {
-                TempData["ErrorMessage"] = "Invalid form submission.";
-                return RedirectToAction("HrCcEmails", new { companyId = isSuperAdmin ? (int?)null : actorCompanyId });
+                return RedirectWithHrCcError(isSuperAdmin, actorCompanyId, null, "Invalid form submission.");
             }
 
-            var targetCompanyId = isSuperAdmin ? model.CompanyId : actorCompanyId.GetValueOrDefault();
+            return ProcessAddHrCcEmail(model, addFromUserId, isSuperAdmin, actorCompanyId);
+        }
+
+        private ActionResult ProcessAddHrCcEmail(HrCcEmailAddViewModel model, int? addFromUserId, bool isSuperAdmin, int? actorCompanyId)
+        {
+            var targetCompanyId = ResolveHrCcAddTargetCompany(isSuperAdmin, actorCompanyId, model);
             if (targetCompanyId <= 0)
             {
-                TempData["ErrorMessage"] = "Company is required.";
-                return RedirectToAction("HrCcEmails", new { companyId = isSuperAdmin ? (int?)null : actorCompanyId });
+                return RedirectWithHrCcError(isSuperAdmin, actorCompanyId, null, "Company is required.");
             }
 
-            if (!isSuperAdmin && actorCompanyId != targetCompanyId)
+            if (!CanAccessHrCcCompany(isSuperAdmin, actorCompanyId, targetCompanyId))
             {
                 return new HttpStatusCodeResult(403, "Access denied.");
             }
 
             model.CompanyId = targetCompanyId;
-
-            if (addFromUserId.HasValue && addFromUserId.Value > 0)
+            var userPopulateError = TryPopulateHrCcEmailFromUser(model, addFromUserId, targetCompanyId);
+            if (userPopulateError != null)
             {
-                var pickUser = _uow.Users.GetAll()
-                    .FirstOrDefault(u => u.Id == addFromUserId.Value && u.CompanyId == targetCompanyId);
-                if (pickUser == null || string.IsNullOrWhiteSpace(pickUser.Email))
-                {
-                    TempData["ErrorMessage"] = "The selected user was not found or has no email on file.";
-                    return RedirectToAction("HrCcEmails", new { companyId = isSuperAdmin ? (int?)targetCompanyId : null });
-                }
-
-                model.Email = pickUser.Email.Trim();
-                if (string.IsNullOrWhiteSpace(model.Label))
-                {
-                    model.Label = string.Format("{0} {1}", pickUser.FirstName ?? string.Empty, pickUser.LastName ?? string.Empty).Trim();
-                }
+                return RedirectWithHrCcError(isSuperAdmin, actorCompanyId, targetCompanyId, userPopulateError);
             }
 
-            var normalizedEmail = (model.Email ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(normalizedEmail))
+            var validationError = ValidateHrCcEmailInput(model, targetCompanyId);
+            if (validationError != null)
             {
-                TempData["ErrorMessage"] = "Enter an email address or choose a company user from the list.";
-                return RedirectToAction("HrCcEmails", new { companyId = isSuperAdmin ? (int?)targetCompanyId : null });
+                return RedirectWithHrCcError(isSuperAdmin, actorCompanyId, targetCompanyId, validationError);
             }
 
-            if (!new EmailAddressAttribute().IsValid(normalizedEmail))
-            {
-                TempData["ErrorMessage"] = "That email address is not valid.";
-                return RedirectToAction("HrCcEmails", new { companyId = isSuperAdmin ? (int?)targetCompanyId : null });
-            }
+            PersistHrCcEmailEntry(model, targetCompanyId);
+            TempData["SuccessMessage"] = "HR CC address added.";
+            return RedirectToHrCcEmails(isSuperAdmin, isSuperAdmin ? (int?)model.CompanyId : null);
+        }
 
-            if (!string.IsNullOrWhiteSpace(model.Label) && model.Label.Length > 150)
-            {
-                TempData["ErrorMessage"] = "Label must be 150 characters or fewer.";
-                return RedirectToAction("HrCcEmails", new { companyId = isSuperAdmin ? (int?)targetCompanyId : null });
-            }
+        private ActionResult RedirectWithHrCcError(bool isSuperAdmin, int? actorCompanyId, int? targetCompanyId, string message)
+        {
+            TempData["ErrorMessage"] = message;
+            var companyId = targetCompanyId ?? (isSuperAdmin ? (int?)null : actorCompanyId);
+            return RedirectToHrCcEmails(isSuperAdmin, companyId);
+        }
 
-            var duplicate = _uow.Context.CompanyHrCcEmails.Any(e =>
-                e.CompanyId == targetCompanyId &&
-                e.Email.ToLower() == normalizedEmail.ToLower());
-            if (duplicate)
-            {
-                TempData["ErrorMessage"] = "That email address is already in the list for this company.";
-                return RedirectToAction("HrCcEmails", new { companyId = isSuperAdmin ? (int?)model.CompanyId : null });
-            }
-
+        private void PersistHrCcEmailEntry(HrCcEmailAddViewModel model, int targetCompanyId)
+        {
+            var normalizedEmail = model.Email.Trim();
             var nextOrder = _uow.Context.CompanyHrCcEmails.Where(e => e.CompanyId == targetCompanyId).Select(e => (int?)e.SortOrder).Max() ?? 0;
-
             var entry = new CompanyHrCcEmail
             {
                 CompanyId = targetCompanyId,
@@ -198,9 +203,64 @@ namespace HR.Web.Controllers
                 entry.Id.ToString(),
                 true,
                 string.Format("Added HR CC email {0} for company {1}", normalizedEmail, targetCompanyId));
+        }
 
-            TempData["SuccessMessage"] = "HR CC address added.";
-            return RedirectToAction("HrCcEmails", new { companyId = isSuperAdmin ? (int?)model.CompanyId : null });
+        private static int ResolveHrCcAddTargetCompany(bool isSuperAdmin, int? actorCompanyId, HrCcEmailAddViewModel model)
+        {
+            return isSuperAdmin ? model.CompanyId : actorCompanyId.GetValueOrDefault();
+        }
+
+        private string TryPopulateHrCcEmailFromUser(HrCcEmailAddViewModel model, int? addFromUserId, int targetCompanyId)
+        {
+            if (!addFromUserId.HasValue || addFromUserId.Value <= 0)
+            {
+                return null;
+            }
+
+            var pickUser = _uow.Users.GetAll()
+                .FirstOrDefault(u => u.Id == addFromUserId.Value && u.CompanyId == targetCompanyId);
+            if (pickUser == null || string.IsNullOrWhiteSpace(pickUser.Email))
+            {
+                return "The selected user was not found or has no email on file.";
+            }
+
+            model.Email = pickUser.Email.Trim();
+            if (string.IsNullOrWhiteSpace(model.Label))
+            {
+                model.Label = string.Format("{0} {1}", pickUser.FirstName ?? string.Empty, pickUser.LastName ?? string.Empty).Trim();
+            }
+
+            return null;
+        }
+
+        private string ValidateHrCcEmailInput(HrCcEmailAddViewModel model, int targetCompanyId)
+        {
+            var normalizedEmail = (model.Email ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedEmail))
+            {
+                return "Enter an email address or choose a company user from the list.";
+            }
+
+            if (!new EmailAddressAttribute().IsValid(normalizedEmail))
+            {
+                return "That email address is not valid.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(model.Label) && model.Label.Length > 150)
+            {
+                return "Label must be 150 characters or fewer.";
+            }
+
+            var duplicate = _uow.Context.CompanyHrCcEmails.Any(e =>
+                e.CompanyId == targetCompanyId &&
+                e.Email.ToLower() == normalizedEmail.ToLower());
+            if (duplicate)
+            {
+                return "That email address is already in the list for this company.";
+            }
+
+            model.Email = normalizedEmail;
+            return null;
         }
 
         [HttpPost]
@@ -213,16 +273,10 @@ namespace HR.Web.Controllers
                 return HttpNotFound();
             }
 
-            var isSuperAdmin = _tenantService.IsActualSuperAdmin() || User.IsInRole("SuperAdmin");
-            var actorCompanyId = _tenantService.GetCurrentUserCompanyId();
-            if (!isSuperAdmin && (!actorCompanyId.HasValue || actorCompanyId.Value != entry.CompanyId))
+            var accessDenied = ValidateHrCcDeleteAccess(entry, companyId);
+            if (accessDenied != null)
             {
-                return new HttpStatusCodeResult(403, "Access denied.");
-            }
-
-            if (isSuperAdmin && companyId.HasValue && companyId.Value != entry.CompanyId)
-            {
-                return new HttpStatusCodeResult(400, "Company mismatch.");
+                return accessDenied;
             }
 
             var emailSnapshot = entry.Email;
@@ -239,7 +293,25 @@ namespace HR.Web.Controllers
                 string.Format("Removed HR CC email {0} for company {1}", emailSnapshot, companySnapshot));
 
             TempData["SuccessMessage"] = "HR CC address removed.";
-            return RedirectToAction("HrCcEmails", new { companyId = isSuperAdmin ? (int?)companySnapshot : null });
+            var isSuperAdmin = IsHrCcSuperAdmin();
+            return RedirectToHrCcEmails(isSuperAdmin, isSuperAdmin ? (int?)companySnapshot : null);
+        }
+
+        private ActionResult ValidateHrCcDeleteAccess(CompanyHrCcEmail entry, int? companyId)
+        {
+            var isSuperAdmin = IsHrCcSuperAdmin();
+            var actorCompanyId = _tenantService.GetCurrentUserCompanyId();
+            if (!CanAccessHrCcCompany(isSuperAdmin, actorCompanyId, entry.CompanyId))
+            {
+                return new HttpStatusCodeResult(403, "Access denied.");
+            }
+
+            if (isSuperAdmin && companyId.HasValue && companyId.Value != entry.CompanyId)
+            {
+                return new HttpStatusCodeResult(400, "Company mismatch.");
+            }
+
+            return null;
         }
     }
 }

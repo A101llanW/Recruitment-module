@@ -28,6 +28,11 @@ namespace HR.Web.Controllers
             _auditService = new AuditService();
         }
 
+        private string GetCompaniesActorName()
+        {
+            return User?.Identity?.Name ?? "System";
+        }
+
         /// <summary>
         /// Companies Dashboard
         /// </summary>
@@ -191,7 +196,7 @@ namespace HR.Web.Controllers
                 _uow.Complete();
 
                 _auditService.LogUpdate(
-                    User.Identity.Name,
+                    GetCompaniesActorName(),
                     "Company",
                     company.Id.ToString(),
                     oldValues,
@@ -240,7 +245,7 @@ namespace HR.Web.Controllers
                 CompanyLogoHelper.DeleteLogoFile(previousPath, Server);
 
                 _auditService.LogUpdate(
-                    User.Identity.Name,
+                    GetCompaniesActorName(),
                     "Company",
                     company.Id.ToString(),
                     new { LogoPath = previousPath },
@@ -277,7 +282,7 @@ namespace HR.Web.Controllers
             _uow.Complete();
 
             _auditService.LogUpdate(
-                User.Identity.Name,
+                GetCompaniesActorName(),
                 "Company",
                 company.Id.ToString(),
                 new { LogoPath = previousPath },
@@ -308,7 +313,7 @@ namespace HR.Web.Controllers
             var request = new ImpersonationRequest
             {
                 CompanyId = companyId,
-                RequestedBy = User.Identity.Name,
+                RequestedBy = GetCompaniesActorName(),
                 RequestedFrom = targetAdmin,
                 RequestDate = DateTime.Now,
                 Status = ImpersonationRequestStatus.Pending,
@@ -320,7 +325,7 @@ namespace HR.Web.Controllers
             _uow.Complete();
 
             _auditService.LogAction(
-                User.Identity.Name,
+                GetCompaniesActorName(),
                 "IMPERSONATION_REQUESTED",
                 "Companies",
                 companyId.ToString(),
@@ -337,7 +342,7 @@ namespace HR.Web.Controllers
         public ActionResult CancelImpersonationRequest(int requestId)
         {
             var request = _uow.ImpersonationRequests.Get(requestId);
-            if (request == null || request.RequestedBy != User.Identity.Name) return HttpNotFound();
+            if (request == null || request.RequestedBy != GetCompaniesActorName()) return HttpNotFound();
 
             if (request.Status == ImpersonationRequestStatus.Pending)
             {
@@ -347,7 +352,7 @@ namespace HR.Web.Controllers
                 _uow.Complete();
 
                 _auditService.LogAction(
-                    User.Identity.Name,
+                    GetCompaniesActorName(),
                     "IMPERSONATION_CANCELLED",
                     "Companies",
                     request.CompanyId.HasValue ? request.CompanyId.Value.ToString() : null,
@@ -375,7 +380,7 @@ namespace HR.Web.Controllers
             {
                 companyId = _tenantService.GetImpersonatedCompanyId();
                 _auditService.LogAction(
-                    User.Identity.Name,
+                    GetCompaniesActorName(),
                     "IMPERSONATION_STOP",
                     "Companies",
                     companyId.ToString(),
@@ -389,7 +394,7 @@ namespace HR.Web.Controllers
                 {
                     var relatedRequests = _uow.ImpersonationRequests.GetAll()
                         .Where(r => r.CompanyId == companyId.Value && 
-                               r.RequestedBy == User.Identity.Name && 
+                               r.RequestedBy == GetCompaniesActorName() && 
                                (r.Status == ImpersonationRequestStatus.Active || r.Status == ImpersonationRequestStatus.Approved))
                         .ToList();
                     
@@ -467,7 +472,7 @@ namespace HR.Web.Controllers
                 {
                     _uow.Complete();
                     _auditService.LogAction(
-                        User.Identity.Name,
+                        GetCompaniesActorName(),
                         "COMPANY_SLUGS_UPDATED",
                         "Company",
                         null,
@@ -536,7 +541,7 @@ namespace HR.Web.Controllers
                 _uow.Complete();
 
                 _auditService.LogAction(
-                    User.Identity.Name,
+                    GetCompaniesActorName(),
                     "COMPANY_SLUGS_GENERATED",
                     "Companies",
                     null,

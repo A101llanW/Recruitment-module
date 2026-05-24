@@ -19,6 +19,11 @@ namespace HR.Web.Controllers
         private readonly AuditService _auditService = new AuditService();
         private readonly TenantService _tenantService = new TenantService();
 
+        private string GetApplicantsActorName()
+        {
+            return User?.Identity?.Name ?? "System";
+        }
+
         public ActionResult Index()
         {
             var itemsQuery = _uow.Context.Applicants.AsQueryable();
@@ -57,8 +62,14 @@ namespace HR.Web.Controllers
 
         private ActionResult EnsureApplicantTenantAccess(Applicant applicant)
         {
+            if (applicant == null)
+            {
+                return HttpNotFound();
+            }
+
+            var scopedApplicant = applicant;
             var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && applicant.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            if (companyId.HasValue && scopedApplicant.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
@@ -86,6 +97,11 @@ namespace HR.Web.Controllers
 
         private static void LogApplicantDetailsDebug(Applicant applicant, int applicationCount)
         {
+            if (applicant == null)
+            {
+                return;
+            }
+
             System.Diagnostics.Debug.WriteLine("Found applicant: " + applicant.FullName + " (ID: " + applicant.Id + ")");
             System.Diagnostics.Debug.WriteLine("Found " + applicationCount + " applications for applicant " + applicant.Id);
         }
@@ -116,12 +132,22 @@ namespace HR.Web.Controllers
 
         private Dictionary<int, decimal> CalculateAnswerScores(Application application, IEnumerable<ApplicationAnswer> answers)
         {
+            if (application == null || answers == null)
+            {
+                return new Dictionary<int, decimal>();
+            }
+
             var candidateService = new CandidateEvaluationService();
             var positionTitle = ResolvePositionTitle(application);
             var answerScores = new Dictionary<int, decimal>();
 
             foreach (var answer in answers)
             {
+                if (answer == null)
+                {
+                    continue;
+                }
+
                 LoadAnswerQuestion(answer);
                 answerScores[answer.Id] = candidateService.EvaluateIndividualAnswer(positionTitle, answer.AnswerText);
             }
@@ -131,21 +157,29 @@ namespace HR.Web.Controllers
 
         private void LoadAnswerQuestion(ApplicationAnswer answer)
         {
-            if (answer.QuestionId > 0 && answer.Question == null)
+            if (answer == null || answer.QuestionId <= 0 || answer.Question != null)
             {
-                answer.Question = _uow.Questions.Get(answer.QuestionId);
+                return;
             }
+
+            answer.Question = _uow.Questions.Get(answer.QuestionId);
         }
 
         private string ResolvePositionTitle(Application application)
         {
-            var positionTitle = application.Position != null ? application.Position.Title : string.Empty;
-            if (!string.IsNullOrEmpty(positionTitle) || application.PositionId <= 0)
+            if (application == null)
+            {
+                return string.Empty;
+            }
+
+            var scopedApplication = application;
+            var positionTitle = scopedApplication.Position != null ? scopedApplication.Position.Title : string.Empty;
+            if (!string.IsNullOrEmpty(positionTitle) || scopedApplication.PositionId <= 0)
             {
                 return positionTitle;
             }
 
-            var position = _uow.Positions.Get(application.PositionId);
+            var position = _uow.Positions.Get(scopedApplication.PositionId);
             return position != null ? position.Title : string.Empty;
         }
 
@@ -158,39 +192,43 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult Create(Applicant model)
         {
+            if (model == null)
+            {
+                return View(new Applicant());
+            }
+
+            var applicantModel = model;
             if (!ModelState.IsValid)
             {
-                return View(model);
+                return View(applicantModel);
             }
             
             try
             {
-                // Assign company
                 var companyId = _tenantService.GetCurrentUserCompanyId();
                 if (companyId.HasValue)
                 {
-                    model.CompanyId = companyId.Value;
+                    applicantModel.CompanyId = companyId.Value;
                 }
 
-                _uow.Applicants.Add(model);
+                _uow.Applicants.Add(applicantModel);
                 _uow.Complete();
                 
-                // Log applicant creation
-                _auditService.LogCreate(User.Identity.Name, "Applicants", model.Id.ToString(), new { 
-                    FullName = model.FullName, 
-                    Email = model.Email, 
-                    Phone = model.Phone 
+                _auditService.LogCreate(GetApplicantsActorName(), "Applicants", applicantModel.Id.ToString(), new { 
+                    FullName = applicantModel.FullName, 
+                    Email = applicantModel.Email, 
+                    Phone = applicantModel.Phone 
                 });
                 
                 return RedirectToAction("Index");
             }
             catch (Exception ex)
             {
-                _auditService.LogAction(User.Identity.Name, "CREATE", "Applicants", "new", 
+                _auditService.LogAction(GetApplicantsActorName(), "CREATE", "Applicants", "new", 
                     wasSuccessful: false, errorMessage: ex.Message);
                 
                 ModelState.AddModelError("", "Error creating applicant: " + ex.Message);
-                return View(model);
+                return View(applicantModel);
             }
         }
 
@@ -226,38 +264,50 @@ namespace HR.Web.Controllers
 
         private ActionResult HandleApplicantEdit(Applicant model)
         {
+            if (model == null)
+            {
+                return RedirectToAction("Index");
+            }
+
+            var applicantModel = model;
             try
             {
-                var oldApplicant = _uow.Applicants.Get(model.Id);
-                var accessResult = EnsureApplicantModelTenantAccess(model);
+                var oldApplicant = _uow.Applicants.Get(applicantModel.Id);
+                var accessResult = EnsureApplicantModelTenantAccess(applicantModel);
                 if (accessResult != null)
                 {
                     return accessResult;
                 }
 
-                PreserveApplicantCompany(oldApplicant, model);
-                _uow.Applicants.Update(model);
+                PreserveApplicantCompany(oldApplicant, applicantModel);
+                _uow.Applicants.Update(applicantModel);
                 _uow.Complete();
 
                 var oldValues = BuildApplicantAuditValues(oldApplicant);
-                var newValues = BuildApplicantAuditValues(model);
-                _auditService.LogUpdate(User.Identity.Name, "Applicants", model.Id.ToString(), oldValues, newValues);
+                var newValues = BuildApplicantAuditValues(applicantModel);
+                _auditService.LogUpdate(GetApplicantsActorName(), "Applicants", applicantModel.Id.ToString(), oldValues, newValues);
                 return RedirectToAction("Index");
             }
             catch (Exception ex)
             {
-                _auditService.LogAction(User.Identity.Name, "UPDATE", "Applicants", model.Id.ToString(), 
+                _auditService.LogAction(GetApplicantsActorName(), "UPDATE", "Applicants", applicantModel.Id.ToString(), 
                     wasSuccessful: false, errorMessage: ex.Message);
 
                 ModelState.AddModelError("", "Error updating applicant: " + ex.Message);
-                return View(model);
+                return View(applicantModel);
             }
         }
 
         private ActionResult EnsureApplicantModelTenantAccess(Applicant model)
         {
+            if (model == null)
+            {
+                return RedirectToAction("Index");
+            }
+
+            var applicantModel = model;
             var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && model.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            if (companyId.HasValue && applicantModel.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
@@ -314,7 +364,7 @@ namespace HR.Web.Controllers
                     TempData["DeleteError"] = "Cannot delete applicant because applications still exist. Delete or reassign those applications first.";
                     
                     // Log failed deletion attempt
-                    _auditService.LogAction(User.Identity.Name, "DELETE", "Applicants", id.ToString(), 
+                    _auditService.LogAction(GetApplicantsActorName(), "DELETE", "Applicants", id.ToString(), 
                         wasSuccessful: false, errorMessage: "Applicant has existing applications");
                     
                     return RedirectToAction("Details", new { id });
@@ -344,13 +394,13 @@ namespace HR.Web.Controllers
                 _uow.Complete();
                 
                 // Log successful deletion
-                _auditService.LogDelete(User.Identity.Name, "Applicants", id.ToString(), oldValues);
+                _auditService.LogDelete(GetApplicantsActorName(), "Applicants", id.ToString(), oldValues);
                 
                 return RedirectToAction("Index");
             }
             catch (Exception ex)
             {
-                _auditService.LogAction(User.Identity.Name, "DELETE", "Applicants", id.ToString(), 
+                _auditService.LogAction(GetApplicantsActorName(), "DELETE", "Applicants", id.ToString(), 
                     wasSuccessful: false, errorMessage: ex.Message);
                 
                 TempData["DeleteError"] = "Error deleting applicant: " + ex.Message;
@@ -385,14 +435,14 @@ namespace HR.Web.Controllers
                 var fileName = System.IO.Path.GetFileName(filePath);
                 
                 // Log CV download
-                _auditService.LogAction(User.Identity.Name, "DOWNLOAD_CV", "Application", id.ToString(), 
+                _auditService.LogAction(GetApplicantsActorName(), "DOWNLOAD_CV", "Application", id.ToString(), 
                     new { FileName = fileName, ApplicationId = id });
 
                 return File(fileBytes, System.Net.Mime.MediaTypeNames.Application.Octet, fileName);
             }
             catch (Exception ex)
             {
-                _auditService.LogAction(User.Identity.Name, "DOWNLOAD_CV_ERROR", "Application", id.ToString(), 
+                _auditService.LogAction(GetApplicantsActorName(), "DOWNLOAD_CV_ERROR", "Application", id.ToString(), 
                     wasSuccessful: false, errorMessage: ex.Message);
                 
                 return new HttpStatusCodeResult(500, "Error downloading file");

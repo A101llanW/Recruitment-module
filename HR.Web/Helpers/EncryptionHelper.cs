@@ -16,7 +16,10 @@ namespace HR.Web.Helpers
 
         public static string Encrypt(string clearText)
         {
-            if (string.IsNullOrEmpty(clearText)) return clearText;
+            if (string.IsNullOrEmpty(clearText))
+            {
+                return clearText;
+            }
 
             byte[] clearBytes = Encoding.Unicode.GetBytes(clearText);
             using (Aes encryptor = Aes.Create())
@@ -39,7 +42,10 @@ namespace HR.Web.Helpers
 
         public static string Decrypt(string cipherText)
         {
-            if (string.IsNullOrEmpty(cipherText)) return cipherText;
+            if (string.IsNullOrEmpty(cipherText))
+            {
+                return cipherText;
+            }
 
             try
             {

@@ -64,7 +64,7 @@ namespace HR.Web.Controllers
             var redirectUri = BuildLinkedInImportCallbackUri(tenantToken);
             var authorizationUrl = linkedInService.BuildAuthorizationUrl(redirectUri, state);
 
-            return Redirect(authorizationUrl);
+            return Redirect(authorizationUrl.ToString());
         }
 
         [Authorize]
@@ -80,7 +80,7 @@ namespace HR.Web.Controllers
             if (!string.IsNullOrWhiteSpace(error))
             {
                 ClearLinkedInImportStateToken();
-                TempData["ErrorMessage"] = BuildLinkedInImportErrorMessage(error, error_description);
+                TempData["ErrorMessage"] = BuildLinkedInImportErrorMessage(error ?? string.Empty, error_description);
                 return RedirectToAction("ProfileDetails", new { tenant = tenantToken, positionId = positionId.Value });
             }
 
@@ -145,9 +145,9 @@ namespace HR.Web.Controllers
                 model.FullName = importedProfile.FullName;
             }
 
-            if (string.IsNullOrWhiteSpace(model.PortfolioUrl) && !string.IsNullOrWhiteSpace(importedProfile.ProfileUrl))
+            if (string.IsNullOrWhiteSpace(model.PortfolioUrl) && importedProfile.ProfileUrl != null)
             {
-                model.PortfolioUrl = importedProfile.ProfileUrl;
+                model.PortfolioUrl = importedProfile.ProfileUrl.ToString();
             }
         }
 
@@ -179,12 +179,12 @@ namespace HR.Web.Controllers
             return null;
         }
 
-        private string BuildLinkedInImportCallbackUri(string tenantToken)
+        private Uri BuildLinkedInImportCallbackUri(string tenantToken)
         {
-            var callbackPath = Url.Action("LinkedInImportCallback", "Applications", new { tenant = tenantToken });
-            var baseUrl = ExternalUrlHelper.GetBaseUrl(Request);
-            var baseUri = new Uri(EnsureTrailingSlash(baseUrl), UriKind.Absolute);
-            return new Uri(baseUri, callbackPath.TrimStart('/')).ToString();
+            var callbackPath = Url.Action("LinkedInImportCallback", "Applications", new { tenant = tenantToken }) ?? string.Empty;
+            var baseUri = ExternalUrlHelper.GetBaseUri(Request);
+            var normalizedBase = new Uri(EnsureTrailingSlash(baseUri.ToString()), UriKind.Absolute);
+            return new Uri(normalizedBase, callbackPath.TrimStart('/'));
         }
 
         private static string EnsureTrailingSlash(string value)

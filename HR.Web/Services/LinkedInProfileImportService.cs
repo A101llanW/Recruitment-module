@@ -15,9 +15,9 @@ namespace HR.Web.Services
     /// </summary>
     public class LinkedInProfileImportService
     {
-        private const string AuthorizationEndpoint = "https://www.linkedin.com/oauth/v2/authorization";
-        private const string TokenEndpoint = "https://www.linkedin.com/oauth/v2/accessToken";
-        private const string IdentityEndpoint = "https://api.linkedin.com/rest/identityMe";
+        private static readonly Uri AuthorizationEndpoint = new Uri("https://www.linkedin.com/oauth/v2/authorization");
+        private static readonly Uri TokenEndpoint = new Uri("https://www.linkedin.com/oauth/v2/accessToken");
+        private static readonly Uri IdentityEndpoint = new Uri("https://api.linkedin.com/rest/identityMe");
         private const string BasicProfileScope = "r_profile_basicinfo";
         private const string DefaultApiVersion = "202510";
 
@@ -56,16 +56,16 @@ namespace HR.Web.Services
             return "LinkedIn import is not configured for this portal yet.";
         }
 
-        public string BuildAuthorizationUrl(string redirectUri, string state)
+        public Uri BuildAuthorizationUrl(Uri redirectUri, string state)
         {
             if (!IsConfigured())
             {
                 throw new InvalidOperationException("LinkedIn import is not configured.");
             }
 
-            if (string.IsNullOrWhiteSpace(redirectUri))
+            if (redirectUri == null)
             {
-                throw new ArgumentException("A LinkedIn redirect URI is required.", "redirectUri");
+                throw new ArgumentNullException("redirectUri");
             }
 
             if (string.IsNullOrWhiteSpace(state))
@@ -73,34 +73,41 @@ namespace HR.Web.Services
                 throw new ArgumentException("A LinkedIn OAuth state value is required.", "state");
             }
 
-            return string.Format(
+            var authorizationUrl = string.Format(
                 "{0}?response_type=code&client_id={1}&redirect_uri={2}&scope={3}&state={4}",
                 AuthorizationEndpoint,
                 HttpUtility.UrlEncode(GetClientId()),
-                HttpUtility.UrlEncode(redirectUri),
+                HttpUtility.UrlEncode(redirectUri.AbsoluteUri),
                 HttpUtility.UrlEncode(BasicProfileScope),
                 HttpUtility.UrlEncode(state));
+
+            return new Uri(authorizationUrl);
         }
 
-        public LinkedInBasicProfileResult ImportProfile(string authorizationCode, string redirectUri)
+        public LinkedInBasicProfileResult ImportProfile(string authorizationCode, Uri redirectUri)
         {
             if (string.IsNullOrWhiteSpace(authorizationCode))
             {
                 throw new ArgumentException("LinkedIn did not return an authorization code.", "authorizationCode");
             }
 
+            if (redirectUri == null)
+            {
+                throw new ArgumentNullException("redirectUri");
+            }
+
             var accessToken = ExchangeCodeForAccessToken(authorizationCode, redirectUri);
             return GetBasicProfile(accessToken);
         }
 
-        private string ExchangeCodeForAccessToken(string authorizationCode, string redirectUri)
+        private string ExchangeCodeForAccessToken(string authorizationCode, Uri redirectUri)
         {
             EnsureModernTls();
 
             var payload = string.Format(
                 "grant_type=authorization_code&code={0}&redirect_uri={1}&client_id={2}&client_secret={3}",
                 HttpUtility.UrlEncode(authorizationCode),
-                HttpUtility.UrlEncode(redirectUri),
+                HttpUtility.UrlEncode(redirectUri.AbsoluteUri),
                 HttpUtility.UrlEncode(GetClientId()),
                 HttpUtility.UrlEncode(GetClientSecret()));
 
@@ -161,10 +168,10 @@ namespace HR.Web.Services
                         FirstName = ExtractLocalizedText(basicInfo != null ? basicInfo["firstName"] : null),
                         LastName = ExtractLocalizedText(basicInfo != null ? basicInfo["lastName"] : null),
                         Email = basicInfo != null ? basicInfo.Value<string>("primaryEmailAddress") : null,
-                        ProfileUrl = basicInfo != null ? basicInfo.Value<string>("profileUrl") : null,
-                        PhotoUrl = basicInfo != null
+                        ProfileUrl = TryParseOptionalUri(basicInfo != null ? basicInfo.Value<string>("profileUrl") : null),
+                        PhotoUrl = TryParseOptionalUri(basicInfo != null
                             ? (string)basicInfo.SelectToken("profilePicture.croppedImage.downloadUrl")
-                            : null
+                            : null)
                     };
 
                     result.FullName = BuildFullName(result.FirstName, result.LastName);
@@ -175,6 +182,16 @@ namespace HR.Web.Services
             {
                 throw new InvalidOperationException(BuildLinkedInErrorMessage("profile", ex), ex);
             }
+        }
+
+        private static Uri TryParseOptionalUri(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return Uri.TryCreate(value, UriKind.Absolute, out var parsedUri) ? parsedUri : null;
         }
 
         private string GetClientId()
@@ -242,9 +259,9 @@ namespace HR.Web.Services
                     return string.Format("LinkedIn {0} request failed: {1}", stage, message);
                 }
             }
-            catch
+            catch (Exception)
             {
-                // Return a safe fallback below.
+                // Return a safe fallback below when the error body is not JSON.
             }
 
             return string.Format("LinkedIn {0} request failed.", stage);
@@ -284,8 +301,8 @@ namespace HR.Web.Services
         public string LastName { get; set; }
         public string FullName { get; set; }
         public string Email { get; set; }
-        public string ProfileUrl { get; set; }
-        public string PhotoUrl { get; set; }
+        public Uri ProfileUrl { get; set; }
+        public Uri PhotoUrl { get; set; }
 
         public bool HasData
         {
@@ -293,7 +310,7 @@ namespace HR.Web.Services
             {
                 return !string.IsNullOrWhiteSpace(FullName) ||
                        !string.IsNullOrWhiteSpace(Email) ||
-                       !string.IsNullOrWhiteSpace(ProfileUrl);
+                       ProfileUrl != null;
             }
         }
     }

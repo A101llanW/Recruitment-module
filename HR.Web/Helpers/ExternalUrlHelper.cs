@@ -25,16 +25,6 @@ namespace HR.Web.Helpers
             return ResolveBaseUri(request != null ? request.Url : null);
         }
 
-        public static string GetBaseUrl(HttpRequestBase request)
-        {
-            return GetBaseUri(request).ToString().TrimEnd('/');
-        }
-
-        public static string GetBaseUrl(HttpRequest request)
-        {
-            return GetBaseUri(request).ToString().TrimEnd('/');
-        }
-
         private static Uri ResolveBaseUri(Uri requestUrl)
         {
             var configuredBaseUrl = GetConfiguredBaseUrl();

@@ -17,12 +17,6 @@ namespace HR.Web.Controllers
             public string Message { get; set; }
         }
 
-        private ActionResult HandleRegisterGet(int? companyId, bool isSuperAdmin, string returnUrl)
-        {
-            LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedReturnUri);
-            return HandleRegisterGet(companyId, isSuperAdmin, parsedReturnUri);
-        }
-
         private ActionResult HandleRegisterGet(int? companyId, bool isSuperAdmin, Uri returnUri)
         {
             ViewBag.IsSuperAdmin = isSuperAdmin;
@@ -59,7 +53,7 @@ namespace HR.Web.Controllers
                 LocalReturnUrlHelper.TryParseLocalReturnUri(TempData["ReturnUrl"].ToString(), Url, out effectiveReturnUri);
             }
 
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(effectiveReturnUri);
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(effectiveReturnUri);
 
             if (companyId.HasValue || effectiveReturnUri == null)
             {
@@ -82,12 +76,6 @@ namespace HR.Web.Controllers
             {
                 viewModel.CompanyId = position.CompanyId;
             }
-        }
-
-        private ActionResult HandleRegisterPost(RegisterViewModel model, bool isSuperAdmin, string returnUrl)
-        {
-            var resolvedReturnUri = ResolveRegisterReturnUrl(returnUrl);
-            return HandleRegisterPost(model, isSuperAdmin, resolvedReturnUri);
         }
 
         private ActionResult HandleRegisterPost(RegisterViewModel model, bool isSuperAdmin, Uri returnUri)
@@ -306,7 +294,7 @@ namespace HR.Web.Controllers
         private ActionResult ReturnRegisterView(RegisterViewModel model, bool isSuperAdmin, Uri returnUri)
         {
             model.Companies = isSuperAdmin ? GetActiveCompanies() : new List<Company>();
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(returnUri);
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
 
             if (!model.CompanyId.HasValue && returnUri != null)
             {
@@ -398,10 +386,10 @@ namespace HR.Web.Controllers
             return BuildSafeReturnRedirect(returnUri, tenantToken);
         }
 
-        private Uri ResolveRegisterReturnUrl(string returnUrl)
+        private Uri ParseRegisterReturnPath(string returnPath)
         {
-            var raw = !string.IsNullOrWhiteSpace(returnUrl)
-                ? returnUrl
+            var raw = !string.IsNullOrWhiteSpace(returnPath)
+                ? returnPath
                 : Request.Form["ReturnUrl"];
             LocalReturnUrlHelper.TryParseLocalReturnUri(raw, Url, out var parsedUri);
             return parsedUri;

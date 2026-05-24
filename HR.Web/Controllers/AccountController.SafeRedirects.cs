@@ -26,13 +26,6 @@ namespace HR.Web.Controllers
             return BuildWhitelistedRedirect(controllerSegment, actionSegment, segments.Length, resolvedTenant, returnUri.Query);
         }
 
-        private ActionResult BuildSafeReturnRedirect(string returnUrl, string tenantSlug)
-        {
-            return LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedUri)
-                ? BuildSafeReturnRedirect(parsedUri, tenantSlug)
-                : null;
-        }
-
         private static string[] SplitPathSegments(string path)
         {
             return (path ?? string.Empty).Trim('/').Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);

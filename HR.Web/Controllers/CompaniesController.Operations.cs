@@ -22,6 +22,12 @@ namespace HR.Web.Controllers
 
         private ActionResult HandleCreateCompany(CreateCompanyViewModel model)
         {
+            if (model == null)
+            {
+                ModelState.AddModelError("", "Company data is required.");
+                return View(new CreateCompanyViewModel());
+            }
+
             if (!ModelState.IsValid)
             {
                 return View(model);
@@ -62,10 +68,11 @@ namespace HR.Web.Controllers
 
         private static string BuildCreateCompanyFormKey(CreateCompanyViewModel model)
         {
+            var actorName = System.Web.HttpContext.Current?.User?.Identity?.Name ?? "System";
             return string.Format(
                 "CreateCompany_{0}_{1}",
-                System.Web.HttpContext.Current.User.Identity.Name,
-                model.Name.ToLower().Trim());
+                actorName,
+                model != null ? model.Name.ToLower().Trim() : string.Empty);
         }
 
         private static bool IsCreateCompanySubmissionLocked(string formKey)
@@ -192,7 +199,7 @@ namespace HR.Web.Controllers
             var credentials = new AdminCredentialsViewModel
             {
                 CompanyName = company.Name,
-                CompanyUrl = new Uri(string.Format("{0}/{1}", ExternalUrlHelper.GetBaseUrl(Request), company.Slug), UriKind.Absolute),
+                CompanyUrl = new Uri(ExternalUrlHelper.GetBaseUri(Request), company.Slug),
                 AdminUsername = bundle.AdminUser.UserName,
                 AdminPassword = bundle.TempPassword
             };
@@ -222,7 +229,7 @@ namespace HR.Web.Controllers
             TempData["SuccessMessage"] = string.Format(
                 "Company '{0}' created successfully! URL: <strong>{1}/{2}</strong><br/><small class='text-muted'>Status: {3}</small>",
                 company.Name,
-                ExternalUrlHelper.GetBaseUrl(Request),
+                ExternalUrlHelper.GetBaseUri(Request).ToString().TrimEnd('/'),
                 company.Slug,
                 downloadStatus);
         }
@@ -433,7 +440,8 @@ namespace HR.Web.Controllers
 
         private ActionResult ValidateElevationRequest(ImpersonationRequest request)
         {
-            if (request == null || request.RequestedBy != User.Identity.Name)
+            var actorName = User?.Identity?.Name;
+            if (request == null || string.IsNullOrEmpty(actorName) || request.RequestedBy != actorName)
             {
                 return HttpNotFound();
             }

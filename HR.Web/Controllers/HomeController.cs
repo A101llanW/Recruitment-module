@@ -137,6 +137,11 @@ namespace HR.Web.Controllers
         /// </summary>
         private User FindPrincipalUserForLegalDocuments(string identityName)
         {
+            if (string.IsNullOrWhiteSpace(identityName))
+            {
+                return null;
+            }
+
             var lowerUsername = identityName.ToLower();
             var companyId = TryReadCompanyIdFromFormsUserData();
             var dbUsers = _legalDocUow.Context.Users;

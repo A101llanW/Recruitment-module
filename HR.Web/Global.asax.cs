@@ -42,54 +42,45 @@ namespace HR.Web
             }
 
             // Purge stale security records on startup (background — non-blocking)
-            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            System.Threading.ThreadPool.QueueUserWorkItem(_ => PurgeStaleSecurityRecords());
+        }
+
+        private static void PurgeStaleSecurityRecords()
+        {
+            try
             {
-                try
+                using (var db = new HrContext())
                 {
-                    using (var db = new HrContext())
-                    {
-                        // Purge login attempts older than 30 days
-                        var cutoffLogin = DateTime.Now.AddDays(-30);
-                        var oldAttempts = db.LoginAttempts.Where(a => a.AttemptTime < cutoffLogin).ToList();
-                        db.LoginAttempts.RemoveRange(oldAttempts);
+                    var cutoffLogin = DateTime.Now.AddDays(-30);
+                    var oldAttempts = db.LoginAttempts.Where(a => a.AttemptTime < cutoffLogin).ToList();
+                    db.LoginAttempts.RemoveRange(oldAttempts);
 
-                        // Purge used or expired password reset tokens older than 7 days
-                        var cutoffReset = DateTime.Now.AddDays(-7);
-                        var oldResets = db.PasswordResets
-                            .Where(r => (r.IsUsed || r.ExpiryDate < DateTime.UtcNow) && r.CreatedDate < cutoffReset)
-                            .ToList();
-                        db.PasswordResets.RemoveRange(oldResets);
+                    var cutoffReset = DateTime.Now.AddDays(-7);
+                    var oldResets = db.PasswordResets
+                        .Where(r => (r.IsUsed || r.ExpiryDate < DateTime.UtcNow) && r.CreatedDate < cutoffReset)
+                        .ToList();
+                    db.PasswordResets.RemoveRange(oldResets);
 
-                        db.SaveChanges();
-                    }
+                    db.SaveChanges();
                 }
-                catch { /* Non-critical — purge failure is silent */ }
-            });
+            }
+            catch { /* Non-critical — purge failure is silent */ }
         }
 
         protected void Application_PostAuthenticateRequest(Object sender, EventArgs e)
         {
+            if (Request == null)
+            {
+                return;
+            }
+
             var authCookie = Request.Cookies[FormsAuthentication.FormsCookieName];
             if (authCookie == null || string.IsNullOrWhiteSpace(authCookie.Value))
             {
                 return;
             }
 
-            // Skip session validation for login/public/verification pages to prevent redirect loops with stale cookies
-            var path = Request.Path.ToLower();
-            if (path.Contains("/account/login") || 
-                path.Contains("/account/register") || 
-                path.Contains("/account/confirmlegalconsent") ||
-                path.Contains("/account/forgotpassword") ||
-                path.Contains("/account/resetpassword") ||
-                path.Contains("/account/verifymfa") ||
-                path.Contains("/account/verifyemail") ||
-                path.Contains("/account/setupmfa") ||
-                path.Contains("/home/privacy") ||
-                path.Contains("/home/terms") ||
-                path.Contains("/home/error") ||
-                path.Contains("/content/") ||
-                path.Contains("/scripts/"))
+            if (IsPublicAuthPath(Request.Path))
             {
                 return;
             }
@@ -100,65 +91,131 @@ namespace HR.Web
                 return;
             }
 
-            // UserData Structure: Role|CompanyId|AccessToken|UAHash
-            var dataParts = ticket.UserData.Split('|');
-            if (dataParts.Length < 3)
+            if (!TryParseAuthTicketData(ticket, out var role, out var companyIdStr, out var accessToken, out var storedUaHash))
             {
-                // Fallback for old tickets without tokens
                 SetupPrincipal(ticket.Name, ticket.UserData);
                 return;
             }
 
-            string role         = dataParts[0];
-            string companyIdStr = dataParts[1];
-            string accessToken  = dataParts[2];
-            string storedUaHash = dataParts.Length > 3 ? dataParts[3] : null;
+            if (!ValidateSessionAccessToken(ticket.Name, companyIdStr, accessToken))
+            {
+                InvalidateSession("session_invalid");
+                return;
+            }
 
-            // --- LAYER 1: Session Token Validation (catches admin-forced logouts & deleted accounts) ---
+            if (!ValidateUserAgentFingerprint(storedUaHash))
+            {
+                InvalidateSession("session_hijack");
+                return;
+            }
+
+            SetAuthenticatedCompanyContext(companyIdStr);
+            SetupPrincipal(ticket.Name, role);
+        }
+
+        private static bool IsPublicAuthPath(string requestPath)
+        {
+            if (string.IsNullOrEmpty(requestPath))
+            {
+                return false;
+            }
+
+            var path = requestPath.ToLower();
+            return path.Contains("/account/login") ||
+                path.Contains("/account/register") ||
+                path.Contains("/account/confirmlegalconsent") ||
+                path.Contains("/account/forgotpassword") ||
+                path.Contains("/account/resetpassword") ||
+                path.Contains("/account/verifymfa") ||
+                path.Contains("/account/verifyemail") ||
+                path.Contains("/account/setupmfa") ||
+                path.Contains("/home/privacy") ||
+                path.Contains("/home/terms") ||
+                path.Contains("/home/error") ||
+                path.Contains("/content/") ||
+                path.Contains("/scripts/");
+        }
+
+        private static bool TryParseAuthTicketData(
+            FormsAuthenticationTicket ticket,
+            out string role,
+            out string companyIdStr,
+            out string accessToken,
+            out string storedUaHash)
+        {
+            role = null;
+            companyIdStr = null;
+            accessToken = null;
+            storedUaHash = null;
+
+            if (ticket == null || string.IsNullOrEmpty(ticket.UserData))
+            {
+                return false;
+            }
+
+            var dataParts = ticket.UserData.Split('|');
+            if (dataParts.Length < 3)
+            {
+                return false;
+            }
+
+            role = dataParts[0];
+            companyIdStr = dataParts[1];
+            accessToken = dataParts[2];
+            storedUaHash = dataParts.Length > 3 ? dataParts[3] : null;
+            return true;
+        }
+
+        private bool ValidateSessionAccessToken(string userName, string companyIdStr, string accessToken)
+        {
             using (var db = new HrContext())
             {
-                // Disambiguate user using Username AND CompanyId (prevents collisions between users with same name in different companies)
                 var query = db.Users.AsQueryable();
-                
                 if (!string.IsNullOrEmpty(companyIdStr) && int.TryParse(companyIdStr, out int cid))
                 {
-                    query = query.Where(u => u.UserName == ticket.Name && u.CompanyId == cid);
+                    query = query.Where(u => u.UserName == userName && u.CompanyId == cid);
                 }
                 else
                 {
-                    query = query.Where(u => u.UserName == ticket.Name && u.CompanyId == null);
+                    query = query.Where(u => u.UserName == userName && u.CompanyId == null);
                 }
 
                 var user = query.FirstOrDefault();
-                
-                if (user == null || user.AccessToken != accessToken)
-                {
-                    InvalidateSession("session_invalid");
-                    return;
-                }
+                return user != null && user.AccessToken == accessToken;
+            }
+        }
+
+        private bool ValidateUserAgentFingerprint(string storedUaHash)
+        {
+            if (string.IsNullOrEmpty(storedUaHash) || Request == null)
+            {
+                return true;
             }
 
-            // --- LAYER 2: Browser Fingerprint Validation (catches stolen cookie replay from different browser/tool) ---
-            if (!string.IsNullOrEmpty(storedUaHash))
+            var currentUaHash = UserAgentFingerprint.Compute(Request.UserAgent);
+            return currentUaHash == storedUaHash;
+        }
+
+        private static void SetAuthenticatedCompanyContext(string companyIdStr)
+        {
+            if (HttpContext.Current == null)
             {
-                var currentUaHash = UserAgentFingerprint.Compute(Request.UserAgent);
-                if (currentUaHash != storedUaHash)
-                {
-                    InvalidateSession("session_hijack");
-                    return;
-                }
+                return;
             }
 
             if (!string.IsNullOrEmpty(companyIdStr) && int.TryParse(companyIdStr, out int authenticatedCompanyId))
             {
                 HttpContext.Current.Items["AuthenticatedCompanyId"] = authenticatedCompanyId;
             }
-
-            SetupPrincipal(ticket.Name, role);
         }
 
         private void InvalidateSession(string reason)
         {
+            if (Response == null)
+            {
+                return;
+            }
+
             FormsAuthentication.SignOut();
             var loginUrl = FormsAuthentication.LoginUrl;
             if (string.IsNullOrEmpty(loginUrl)) loginUrl = "~/Account/Login";
@@ -168,6 +225,11 @@ namespace HR.Web
 
         private void SetupPrincipal(string username, string rolesString)
         {
+            if (HttpContext.Current == null || string.IsNullOrEmpty(username))
+            {
+                return;
+            }
+
             var identity = new GenericIdentity(username, "Forms");
             var roles = string.IsNullOrWhiteSpace(rolesString)
                 ? new string[] { }

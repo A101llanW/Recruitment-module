@@ -5,6 +5,7 @@ using System.Web;
 using System.Web.Mvc;
 using System.Data.Entity;
 using HR.Web.Models;
+using HR.Web.Services;
 using HR.Web.ViewModels;
 
 namespace HR.Web.Controllers
@@ -14,6 +15,11 @@ namespace HR.Web.Controllers
         private bool IsCurrentUserAuthenticated()
         {
             return User != null && User.Identity != null && User.Identity.IsAuthenticated;
+        }
+
+        private string GetApplicationsActorName()
+        {
+            return User?.Identity?.Name ?? "System";
         }
 
         private ActionResult RedirectToApplicationRegistration()
@@ -43,9 +49,20 @@ namespace HR.Web.Controllers
 
         private void LogPositionQuestions(Position position)
         {
-            System.Diagnostics.Debug.WriteLine(string.Format("=== Position {0} Questions ===", position.Title));
-            foreach (var pq in position.PositionQuestions)
+            if (position == null)
             {
+                return;
+            }
+
+            var scopedPosition = position;
+            System.Diagnostics.Debug.WriteLine(string.Format("=== Position {0} Questions ===", scopedPosition.Title));
+            foreach (var pq in scopedPosition.PositionQuestions)
+            {
+                if (pq?.Question == null)
+                {
+                    continue;
+                }
+
                 System.Diagnostics.Debug.WriteLine(string.Format("Question: {0} (Type: {1})", pq.Question.Text, pq.Question.Type));
                 var optionCount = pq.Question.QuestionOptions != null ? pq.Question.QuestionOptions.Count() : 0;
                 System.Diagnostics.Debug.WriteLine(string.Format("Options count: {0}", optionCount));
@@ -101,6 +118,11 @@ namespace HR.Web.Controllers
 
         private ActionResult ValidatePositionTenantAccess(Position position, string accessDeniedMessage)
         {
+            if (position == null)
+            {
+                return HttpNotFound();
+            }
+
             var companyId = _tenantService.GetCurrentUserCompanyId();
             if (companyId.HasValue && position.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
             {
@@ -261,8 +283,18 @@ namespace HR.Web.Controllers
         private List<QuestionAnswerViewModel> BuildQuestionAnswers(IEnumerable<PositionQuestion> positionQuestions, FormCollection form)
         {
             var answers = new List<QuestionAnswerViewModel>();
+            if (positionQuestions == null || form == null)
+            {
+                return answers;
+            }
+
             foreach (var pq in positionQuestions)
             {
+                if (pq?.Question == null)
+                {
+                    continue;
+                }
+
                 var answer = form["question_" + pq.Question.Id];
                 answers.Add(new QuestionAnswerViewModel
                 {
@@ -687,7 +719,7 @@ namespace HR.Web.Controllers
             return null;
         }
 
-        private string ValidateCustomEmailSubject(string subject)
+        private static string ValidateCustomEmailSubject(string subject)
         {
             if (string.IsNullOrWhiteSpace(subject))
             {
@@ -849,6 +881,175 @@ namespace HR.Web.Controllers
     <div>{1}</div>
 </body>
 </html>", safeSubject, safeMessage);
+        }
+
+        private ApplicantProfileViewModel BuildApplicantProfileViewModel(Position position, Applicant applicant, ApplicantProfile profile)
+        {
+            return new ApplicantProfileViewModel
+            {
+                PositionId = position.Id,
+                PositionTitle = position.Title,
+                ApplicantId = applicant.Id,
+                IsTechnical = position.IsTechnical == true,
+                FullName = applicant.FullName,
+                Email = applicant.Email,
+                Phone = applicant.Phone,
+                Location = profile != null ? profile.Location : null,
+                TotalYearsExperience = profile != null ? profile.TotalYearsExperience : null,
+                RelevantYearsExperience = profile != null ? profile.RelevantYearsExperience : null,
+                MostRecentCompany = profile != null ? profile.MostRecentCompany : null,
+                MostRecentTitle = profile != null ? profile.MostRecentTitle : null,
+                MostRecentStartDate = profile != null ? profile.MostRecentStartDate : null,
+                MostRecentEndDate = profile != null ? profile.MostRecentEndDate : null,
+                SecondMostRecentCompany = profile != null ? profile.SecondMostRecentCompany : null,
+                SecondMostRecentTitle = profile != null ? profile.SecondMostRecentTitle : null,
+                SecondMostRecentStartDate = profile != null ? profile.SecondMostRecentStartDate : null,
+                SecondMostRecentEndDate = profile != null ? profile.SecondMostRecentEndDate : null,
+                EmploymentType = profile != null ? profile.EmploymentType : null,
+                Skills = profile != null ? profile.Skills : null,
+                Competencies = profile != null ? profile.Competencies : null,
+                EducationDegree = profile != null ? profile.EducationDegree : null,
+                EducationInstitution = profile != null ? profile.EducationInstitution : null,
+                KeyAchievement = profile != null ? profile.KeyAchievement : null,
+                Certifications = profile != null ? profile.Certifications : null,
+                PortfolioUrl = profile != null ? profile.PortfolioUrl : null,
+                WorkAuthorization = profile != null && profile.WorkAuthorization,
+                NoticePeriod = profile != null ? profile.NoticePeriod : null
+            };
+        }
+
+        private void ApplyApplicantProfileViewModel(Applicant applicant, ApplicantProfile profile, ApplicantProfileViewModel profileModel)
+        {
+            applicant.FullName = profileModel.FullName != null ? profileModel.FullName.Trim() : applicant.FullName;
+            applicant.Email = profileModel.Email != null ? profileModel.Email.Trim() : applicant.Email;
+            applicant.Phone = profileModel.Phone != null ? profileModel.Phone.Trim() : applicant.Phone;
+
+            profile.Location = profileModel.Location != null ? profileModel.Location.Trim() : null;
+            profile.TotalYearsExperience = profileModel.TotalYearsExperience;
+            profile.RelevantYearsExperience = profileModel.RelevantYearsExperience;
+            profile.MostRecentCompany = profileModel.MostRecentCompany != null ? profileModel.MostRecentCompany.Trim() : null;
+            profile.MostRecentTitle = profileModel.MostRecentTitle != null ? profileModel.MostRecentTitle.Trim() : null;
+            profile.MostRecentStartDate = profileModel.MostRecentStartDate;
+            profile.MostRecentEndDate = profileModel.MostRecentEndDate;
+            profile.SecondMostRecentCompany = profileModel.SecondMostRecentCompany != null ? profileModel.SecondMostRecentCompany.Trim() : null;
+            profile.SecondMostRecentTitle = profileModel.SecondMostRecentTitle != null ? profileModel.SecondMostRecentTitle.Trim() : null;
+            profile.SecondMostRecentStartDate = profileModel.SecondMostRecentStartDate;
+            profile.SecondMostRecentEndDate = profileModel.SecondMostRecentEndDate;
+            profile.EmploymentType = profileModel.EmploymentType != null ? profileModel.EmploymentType.Trim() : null;
+            profile.Skills = profileModel.Skills != null ? profileModel.Skills.Trim() : null;
+            profile.Competencies = profileModel.Competencies != null ? profileModel.Competencies.Trim() : null;
+            profile.EducationDegree = profileModel.EducationDegree != null ? profileModel.EducationDegree.Trim() : null;
+            profile.EducationInstitution = profileModel.EducationInstitution != null ? profileModel.EducationInstitution.Trim() : null;
+            profile.KeyAchievement = profileModel.KeyAchievement != null ? profileModel.KeyAchievement.Trim() : null;
+            profile.Certifications = profileModel.Certifications != null ? profileModel.Certifications.Trim() : null;
+            profile.PortfolioUrl = profileModel.PortfolioUrl != null ? profileModel.PortfolioUrl.Trim() : null;
+            profile.WorkAuthorization = profileModel.WorkAuthorization;
+            profile.NoticePeriod = profileModel.NoticePeriod != null ? profileModel.NoticePeriod.Trim() : null;
+            profile.UpdatedOn = DateTime.UtcNow;
+        }
+
+        private void ValidateTechnicalProfileFields(ApplicantProfileViewModel profileModel)
+        {
+            if (!profileModel.IsTechnical)
+            {
+                return;
+            }
+
+            if (!profileModel.RelevantYearsExperience.HasValue)
+            {
+                ModelState.AddModelError("RelevantYearsExperience", "Relevant years of experience is required for technical roles.");
+            }
+
+            if (string.IsNullOrWhiteSpace(profileModel.Skills))
+            {
+                ModelState.AddModelError("Skills", "Please list your core technical skills.");
+            }
+        }
+
+        private int ResolveQuestionnaireSessionStage()
+        {
+            var sessionStageObj = Session["QuestionnaireActiveStage"] as int?;
+            if (sessionStageObj.HasValue)
+            {
+                return sessionStageObj.Value;
+            }
+
+            var rawStage = Session["QuestionnaireActiveStage"] as string;
+            int parsedStage;
+            if (!string.IsNullOrEmpty(rawStage) && int.TryParse(rawStage, out parsedStage))
+            {
+                return parsedStage;
+            }
+
+            return 1;
+        }
+
+        private ActionResult SubmitInitialQuestionnaireApplication(
+            ApplicationReviewViewModel reviewModel,
+            Position position,
+            Applicant applicant,
+            FormCollection form)
+        {
+            if (HasExistingApplication(applicant.Id, reviewModel.PositionId))
+            {
+                TempData["ErrorMessage"] = "You have already applied for this position.";
+                return RedirectToAction("Index", "Positions");
+            }
+
+            var application = CreateApplicationFromQuestionnaire(reviewModel, position, applicant.Id);
+            var questionAnswers = ResolveQuestionnaireAnswers(reviewModel.PositionId, form);
+            SaveApplicationAnswers(application.Id, questionAnswers, 1);
+            application.LastCompletedQuestionnaireStage = 1;
+            application.PendingQuestionnaireStage = null;
+            _uow.Applications.Update(application);
+            _uow.Complete();
+            ScoreQuestionnaireApplication(application);
+            return null;
+        }
+
+        private ActionResult SubmitPendingQuestionnaireStage(
+            Application existingApplication,
+            ApplicationReviewViewModel reviewModel,
+            int sessionStage,
+            FormCollection form)
+        {
+            if (!existingApplication.PendingQuestionnaireStage.HasValue ||
+                existingApplication.PendingQuestionnaireStage.Value != sessionStage)
+            {
+                TempData["ErrorMessage"] = "You cannot submit the questionnaire using this link right now. If you were sent a new link by email, open that link instead.";
+                return RedirectToAction("Index", "Positions");
+            }
+
+            var questionAnswers = ResolveQuestionnaireAnswers(reviewModel.PositionId, form);
+            SaveApplicationAnswers(existingApplication.Id, questionAnswers, sessionStage);
+            if (existingApplication.Score.HasValue)
+            {
+                existingApplication.LastQuestionnaireScore = existingApplication.Score;
+            }
+
+            existingApplication.LastCompletedQuestionnaireStage = sessionStage;
+            existingApplication.PendingQuestionnaireStage = null;
+            _uow.Applications.Update(existingApplication);
+            _uow.Complete();
+            ScoreQuestionnaireApplication(existingApplication);
+            return null;
+        }
+
+        private void PopulateApplicationDetailsViewBag(User user, Application app)
+        {
+            var rolePermissionService = new RolePermissionService();
+            var canManageApps = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Applications, RoleAccessLevels.Manage);
+            var isMgmt = IsManagementUser(user);
+            var isCompanyAdminOrSuper = rolePermissionService.IsFullCompanyAdmin(user) || _tenantService.IsActualSuperAdmin();
+            var maxQ = app.Position != null ? Math.Max(1, app.Position.QuestionnaireStageCount) : 1;
+            var canInviteNext = isCompanyAdminOrSuper &&
+                maxQ > 1 &&
+                app.LastCompletedQuestionnaireStage > 0 &&
+                app.LastCompletedQuestionnaireStage < maxQ &&
+                !app.PendingQuestionnaireStage.HasValue;
+            ViewBag.CanOpenNextQuestionnaireStage = canInviteNext;
+            ViewBag.QuestionnaireStageCountForDetails = maxQ;
+            ViewBag.ShowQuestionnaireHiringPanel = isMgmt && canManageApps && maxQ > 1;
         }
     }
 }

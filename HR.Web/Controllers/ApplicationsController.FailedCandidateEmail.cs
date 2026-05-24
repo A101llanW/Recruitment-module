@@ -183,6 +183,124 @@ namespace HR.Web.Controllers
             };
         }
 
+        private sealed class FailedCandidateComposeValidationResult
+        {
+            public bool IsValid { get; set; }
+            public string ErrorMessage { get; set; }
+            public bool UseScratch { get; set; }
+            public bool UseTemplateEdit { get; set; }
+        }
+
+        private static FailedCandidateComposeValidationResult ValidateFailedCandidateComposeInput(
+            string composeMode,
+            string subject,
+            string body)
+        {
+            var useScratch = string.Equals(composeMode, "scratch", StringComparison.OrdinalIgnoreCase);
+            var useTemplateEdit = string.Equals(composeMode, "template_edit", StringComparison.OrdinalIgnoreCase);
+
+            if (useScratch)
+            {
+                var subjectValidationError = ValidateCustomEmailSubject(subject);
+                if (!string.IsNullOrWhiteSpace(subjectValidationError))
+                {
+                    return InvalidCompose(subjectValidationError, useScratch, useTemplateEdit);
+                }
+
+                var richBodyError = ValidateRichEmailBody(body, 20000);
+                if (!string.IsNullOrWhiteSpace(richBodyError))
+                {
+                    return InvalidCompose(richBodyError, useScratch, useTemplateEdit);
+                }
+            }
+            else if (useTemplateEdit)
+            {
+                var subjectValidationError = ValidateCustomEmailSubject(subject);
+                if (!string.IsNullOrWhiteSpace(subjectValidationError))
+                {
+                    return InvalidCompose(subjectValidationError, useScratch, useTemplateEdit);
+                }
+
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    return InvalidCompose("Please enter email body content before sending.", useScratch, useTemplateEdit);
+                }
+
+                if (body.Trim().Length > 20000)
+                {
+                    return InvalidCompose("Edited template body is too long. Maximum length is 20000 characters.", useScratch, useTemplateEdit);
+                }
+            }
+
+            if (!useScratch && !useTemplateEdit && !string.IsNullOrWhiteSpace(body) && body.Trim().Length > 4000)
+            {
+                return InvalidCompose("Custom template note is too long. Maximum length is 4000 characters.", useScratch, useTemplateEdit);
+            }
+
+            return new FailedCandidateComposeValidationResult
+            {
+                IsValid = true,
+                UseScratch = useScratch,
+                UseTemplateEdit = useTemplateEdit
+            };
+        }
+
+        private static FailedCandidateComposeValidationResult InvalidCompose(
+            string errorMessage,
+            bool useScratch,
+            bool useTemplateEdit)
+        {
+            return new FailedCandidateComposeValidationResult
+            {
+                IsValid = false,
+                ErrorMessage = errorMessage,
+                UseScratch = useScratch,
+                UseTemplateEdit = useTemplateEdit
+            };
+        }
+
+        private List<string> ResolveFailedCandidateCcRecipients(
+            int? companyId,
+            string recipientEmail,
+            bool includePanelistCc,
+            bool includeHrCc,
+            int[] selectedPanelistIds,
+            int[] selectedHrCcIds,
+            bool requireRecipientsWhenToggled)
+        {
+            if (!includePanelistCc && !includeHrCc)
+            {
+                return null;
+            }
+
+            if (!companyId.HasValue)
+            {
+                return null;
+            }
+
+            var ccRecipients = CandidateEmailCcHelper.BuildMergedCandidateCc(
+                _uow,
+                companyId.Value,
+                includePanelistCc,
+                selectedPanelistIds,
+                includeHrCc,
+                selectedHrCcIds,
+                recipientEmail);
+
+            if (requireRecipientsWhenToggled && (ccRecipients == null || !ccRecipients.Any()))
+            {
+                return new List<string>();
+            }
+
+            return ccRecipients;
+        }
+
+        private ActionResult RedirectWithEmailError(string message)
+        {
+            TempData["ApplicationEmailError"] = message;
+            return RedirectToAction("Index");
+        }
+
         private static string ValidateRichEmailBody(string body, int maxLen)
         {
             if (string.IsNullOrWhiteSpace(body))
@@ -278,70 +396,27 @@ namespace HR.Web.Controllers
                 return tenantValidationResult;
             }
 
-            var useScratch = string.Equals(composeMode, "scratch", StringComparison.OrdinalIgnoreCase);
-            var useTemplateEdit = string.Equals(composeMode, "template_edit", StringComparison.OrdinalIgnoreCase);
-            if (useScratch)
+            var composeValidation = ValidateFailedCandidateComposeInput(composeMode, subject, body);
+            if (!composeValidation.IsValid)
             {
-                var subjectValidationError = ValidateCustomEmailSubject(subject);
-                if (!string.IsNullOrWhiteSpace(subjectValidationError))
-                {
-                    TempData["ApplicationEmailError"] = subjectValidationError;
-                    return RedirectToAction("Index");
-                }
-
-                var richBodyError = ValidateRichEmailBody(body, 20000);
-                if (!string.IsNullOrWhiteSpace(richBodyError))
-                {
-                    TempData["ApplicationEmailError"] = richBodyError;
-                    return RedirectToAction("Index");
-                }
-            }
-            else if (useTemplateEdit)
-            {
-                var subjectValidationError = ValidateCustomEmailSubject(subject);
-                if (!string.IsNullOrWhiteSpace(subjectValidationError))
-                {
-                    TempData["ApplicationEmailError"] = subjectValidationError;
-                    return RedirectToAction("Index");
-                }
-
-                if (string.IsNullOrWhiteSpace(body))
-                {
-                    TempData["ApplicationEmailError"] = "Please enter email body content before sending.";
-                    return RedirectToAction("Index");
-                }
-
-                if (body.Trim().Length > 20000)
-                {
-                    TempData["ApplicationEmailError"] = "Edited template body is too long. Maximum length is 20000 characters.";
-                    return RedirectToAction("Index");
-                }
-            }
-
-            if (!useScratch && !useTemplateEdit && !string.IsNullOrWhiteSpace(body) && body.Trim().Length > 4000)
-            {
-                TempData["ApplicationEmailError"] = "Custom template note is too long. Maximum length is 4000 characters.";
-                return RedirectToAction("Index");
+                return RedirectWithEmailError(composeValidation.ErrorMessage);
             }
 
             var position = app.Position ?? _uow.Positions.Get(app.PositionId);
             if (position == null)
             {
-                TempData["ApplicationEmailError"] = "Position could not be found for this application.";
-                return RedirectToAction("Index");
+                return RedirectWithEmailError("Position could not be found for this application.");
             }
 
             if (!IsApplicationBelowPassMark(app, position))
             {
-                TempData["ApplicationEmailError"] = "Email can only be sent from the failed-candidates list.";
-                return RedirectToAction("Index");
+                return RedirectWithEmailError("Email can only be sent from the failed-candidates list.");
             }
 
             var recipientEmail = app.Applicant != null ? app.Applicant.Email : null;
             if (string.IsNullOrWhiteSpace(recipientEmail))
             {
-                TempData["ApplicationEmailError"] = "Candidate has no email address on file.";
-                return RedirectToAction("Index");
+                return RedirectWithEmailError("Candidate has no email address on file.");
             }
 
             var company = app.CompanyId.HasValue ? _uow.Companies.Get(app.CompanyId.Value) : null;
@@ -361,26 +436,20 @@ namespace HR.Web.Controllers
                 selectedHrCcIds);
             if (!string.IsNullOrEmpty(ccValidation))
             {
-                TempData["ApplicationEmailError"] = ccValidation;
-                return RedirectToAction("Index");
+                return RedirectWithEmailError(ccValidation);
             }
 
-            List<string> ccRecipients = null;
-            if ((includePanelistCc || includeHrCc) && app.CompanyId.HasValue)
+            var ccRecipients = ResolveFailedCandidateCcRecipients(
+                app.CompanyId,
+                recipientEmail.Trim(),
+                includePanelistCc,
+                includeHrCc,
+                selectedPanelistIds,
+                selectedHrCcIds,
+                requireRecipientsWhenToggled: true);
+            if (ccRecipients != null && !ccRecipients.Any())
             {
-                ccRecipients = CandidateEmailCcHelper.BuildMergedCandidateCc(
-                    _uow,
-                    app.CompanyId.Value,
-                    includePanelistCc,
-                    selectedPanelistIds,
-                    includeHrCc,
-                    selectedHrCcIds,
-                    recipientEmail.Trim());
-                if (ccRecipients == null || !ccRecipients.Any())
-                {
-                    TempData["ApplicationEmailError"] = "No CC recipients could be resolved. Check selected addresses.";
-                    return RedirectToAction("Index");
-                }
+                return RedirectWithEmailError("No CC recipients could be resolved. Check selected addresses.");
             }
 
             await _email.SendAsync(recipientEmail.Trim(), emailContent.Subject, emailContent.BodyHtml, ccRecipients);
@@ -468,8 +537,7 @@ namespace HR.Web.Controllers
 
             if (positionId <= 0)
             {
-                TempData["ApplicationEmailError"] = "Invalid position selected.";
-                return RedirectToAction("Index");
+                return RedirectWithEmailError("Invalid position selected.");
             }
 
             var position = _uow.Positions.Get(positionId);
@@ -484,50 +552,10 @@ namespace HR.Web.Controllers
                 return tenantValidationResult;
             }
 
-            var useScratch = string.Equals(composeMode, "scratch", StringComparison.OrdinalIgnoreCase);
-            var useTemplateEdit = string.Equals(composeMode, "template_edit", StringComparison.OrdinalIgnoreCase);
-            if (useScratch)
+            var composeValidation = ValidateFailedCandidateComposeInput(composeMode, subject, body);
+            if (!composeValidation.IsValid)
             {
-                var subjectValidationError = ValidateCustomEmailSubject(subject);
-                if (!string.IsNullOrWhiteSpace(subjectValidationError))
-                {
-                    TempData["ApplicationEmailError"] = subjectValidationError;
-                    return RedirectToAction("Index");
-                }
-
-                var richBodyError = ValidateRichEmailBody(body, 20000);
-                if (!string.IsNullOrWhiteSpace(richBodyError))
-                {
-                    TempData["ApplicationEmailError"] = richBodyError;
-                    return RedirectToAction("Index");
-                }
-            }
-            else if (useTemplateEdit)
-            {
-                var subjectValidationError = ValidateCustomEmailSubject(subject);
-                if (!string.IsNullOrWhiteSpace(subjectValidationError))
-                {
-                    TempData["ApplicationEmailError"] = subjectValidationError;
-                    return RedirectToAction("Index");
-                }
-
-                if (string.IsNullOrWhiteSpace(body))
-                {
-                    TempData["ApplicationEmailError"] = "Please enter email body content before sending.";
-                    return RedirectToAction("Index");
-                }
-
-                if (body.Trim().Length > 20000)
-                {
-                    TempData["ApplicationEmailError"] = "Edited template body is too long. Maximum length is 20000 characters.";
-                    return RedirectToAction("Index");
-                }
-            }
-
-            if (!useScratch && !useTemplateEdit && !string.IsNullOrWhiteSpace(body) && body.Trim().Length > 4000)
-            {
-                TempData["ApplicationEmailError"] = "Custom template note is too long. Maximum length is 4000 characters.";
-                return RedirectToAction("Index");
+                return RedirectWithEmailError(composeValidation.ErrorMessage);
             }
 
             var failedApplications = _uow.Applications.GetAll(a => a.Applicant)
@@ -536,8 +564,7 @@ namespace HR.Web.Controllers
 
             if (!failedApplications.Any())
             {
-                TempData["ApplicationEmailError"] = "No failed candidates found for this position.";
-                return RedirectToAction("Index");
+                return RedirectWithEmailError("No failed candidates found for this position.");
             }
 
             var recipients = failedApplications
@@ -548,8 +575,7 @@ namespace HR.Web.Controllers
 
             if (!recipients.Any())
             {
-                TempData["ApplicationEmailError"] = "No valid candidate emails found among failed candidates.";
-                return RedirectToAction("Index");
+                return RedirectWithEmailError("No valid candidate emails found among failed candidates.");
             }
 
             var company = position.CompanyId.HasValue ? _uow.Companies.Get(position.CompanyId.Value) : null;
@@ -560,8 +586,7 @@ namespace HR.Web.Controllers
                 selectedHrCcIds);
             if (!string.IsNullOrEmpty(ccValidation))
             {
-                TempData["ApplicationEmailError"] = ccValidation;
-                return RedirectToAction("Index");
+                return RedirectWithEmailError(ccValidation);
             }
 
             var emailTasks = recipients.Select(r =>
@@ -576,18 +601,14 @@ namespace HR.Web.Controllers
                     subject,
                     body);
 
-                List<string> ccRecipients = null;
-                if ((includePanelistCc || includeHrCc) && position.CompanyId.HasValue)
-                {
-                    ccRecipients = CandidateEmailCcHelper.BuildMergedCandidateCc(
-                        _uow,
-                        position.CompanyId.Value,
-                        includePanelistCc,
-                        selectedPanelistIds,
-                        includeHrCc,
-                        selectedHrCcIds,
-                        recipientEmail);
-                }
+                var ccRecipients = ResolveFailedCandidateCcRecipients(
+                    position.CompanyId,
+                    recipientEmail,
+                    includePanelistCc,
+                    includeHrCc,
+                    selectedPanelistIds,
+                    selectedHrCcIds,
+                    requireRecipientsWhenToggled: false);
 
                 return _email.SendAsync(recipientEmail, emailContent.Subject, emailContent.BodyHtml, ccRecipients);
             }).ToList();

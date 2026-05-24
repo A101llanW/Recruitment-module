@@ -9,23 +9,29 @@ namespace HR.Web.Helpers
     /// </summary>
     public static class LocalReturnUrlHelper
     {
-        public static bool TryParseLocalReturnUri(string returnUrl, UrlHelper urlHelper, out Uri parsedUri)
+        public static bool TryParseLocalReturnUri(string returnPath, System.Web.Mvc.UrlHelper urlHelper, out Uri parsedUri)
         {
             parsedUri = null;
-            if (string.IsNullOrWhiteSpace(returnUrl) || urlHelper == null || !urlHelper.IsLocalUrl(returnUrl))
+            if (string.IsNullOrWhiteSpace(returnPath) || urlHelper == null || !urlHelper.IsLocalUrl(returnPath))
             {
                 return false;
             }
 
-            if (returnUrl.StartsWith("//", StringComparison.Ordinal) || returnUrl.StartsWith(@"/\", StringComparison.Ordinal))
+            if (returnPath.StartsWith("//", StringComparison.Ordinal) || returnPath.StartsWith(@"/\", StringComparison.Ordinal))
             {
                 return false;
             }
 
-            return Uri.TryCreate("https://local.test" + returnUrl, UriKind.Absolute, out parsedUri);
+            return Uri.TryCreate("https://local.test" + returnPath, UriKind.Absolute, out parsedUri);
         }
 
-        public static string ToReturnUrlString(Uri returnUri)
+        public static bool TryParseLocalReturnUri(Uri returnUri, out Uri parsedUri)
+        {
+            parsedUri = returnUri;
+            return returnUri != null;
+        }
+
+        public static string FormatReturnPathAndQuery(Uri returnUri)
         {
             if (returnUri == null)
             {

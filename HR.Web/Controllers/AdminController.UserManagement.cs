@@ -37,6 +37,11 @@ namespace HR.Web.Controllers
 
         private ActionResult HandleUserRoleUpdate(UserRoleUpdateViewModel model)
         {
+            if (model == null)
+            {
+                return HttpNotFound();
+            }
+
             var isActualSuperAdmin = _tenantService.IsActualSuperAdmin();
             if (!ModelState.IsValid)
             {
@@ -263,7 +268,7 @@ namespace HR.Web.Controllers
                 _uow.Complete();
 
                 _auditService.LogUpdate(
-                    User.Identity.Name,
+                    GetAuditActorName(),
                     "Account",
                     user.Id.ToString(),
                     new

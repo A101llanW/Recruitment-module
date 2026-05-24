@@ -34,10 +34,16 @@ namespace HR.Web.Controllers
         public ActionResult EditQuestionnaireTemplate(
             QuestionnaireTemplateEditViewModel model,
             int[] selectedQuestions,
-            string questionWeightsPayload,
+            string questionWeightValues,
             string questionStagesPayload)
         {
-            var questionWeights = ParseTemplateQuestionWeights(questionWeightsPayload);
+            if (model == null)
+            {
+                ModelState.AddModelError(string.Empty, "Template data is required.");
+                return View(new QuestionnaireTemplateEditViewModel());
+            }
+
+            var questionWeights = ParseTemplateQuestionWeights(questionWeightValues);
             var questionStages = ParseTemplateQuestionStages(questionStagesPayload, selectedQuestions, model.StageCount);
             var assignments = BuildTemplateAssignments(selectedQuestions, questionWeights, questionStages);
 

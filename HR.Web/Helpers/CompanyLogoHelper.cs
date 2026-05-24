@@ -19,7 +19,8 @@ namespace HR.Web.Helpers
 
         public static string GetPublicUrl(string logoPath, MvcUrlHelper urlHelper)
         {
-            return NavMenuBuilder.ResolveCompanyLogoUrl(logoPath, urlHelper);
+            var logoUri = NavMenuBuilder.ResolveCompanyLogoUri(logoPath, urlHelper);
+            return logoUri != null ? logoUri.ToString() : null;
         }
 
         public static string SaveUploadedLogo(int companyId, HttpPostedFileBase file, HttpServerUtilityBase server)

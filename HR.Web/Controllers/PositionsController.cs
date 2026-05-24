@@ -18,6 +18,11 @@ namespace HR.Web.Controllers
         private readonly AuditService _auditService = new AuditService();
         private readonly TenantService _tenantService = new TenantService();
 
+        private string GetCurrentActorName()
+        {
+            return User?.Identity?.Name ?? "System";
+        }
+
         [AllowAnonymous]
         public ActionResult Index(int? companyId = null)
         {
@@ -64,7 +69,7 @@ namespace HR.Web.Controllers
             // Apply public-aware tenant filtering
             query = _tenantService.ApplyPublicTenantFilter(query);
             
-            bool isAuthenticated = User != null && User.Identity != null && User.Identity.IsAuthenticated;
+            bool isAuthenticated = User?.Identity != null && User.Identity.IsAuthenticated;
             bool isAdminUser = isAuthenticated && User.IsInRole("Admin");
             bool canManagePositions = isAdminUser &&
                 rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Positions, RoleAccessLevels.Manage);
@@ -98,7 +103,7 @@ namespace HR.Web.Controllers
             ClosePositionIfExpired(position);
             
             // Prevent non-admin users from accessing closed positions
-            if (position != null && !position.IsOpen && (User == null || !User.IsInRole("Admin")))
+            if (!position.IsOpen && (User == null || !User.IsInRole("Admin")))
             {
                 return new HttpStatusCodeResult(403, "This position is not available for application.");
             }
@@ -106,6 +111,7 @@ namespace HR.Web.Controllers
             ViewBag.CanManagePositions = Request.IsAuthenticated &&
                 new RolePermissionService().CanCurrentUserAccessModule(RoleModuleCatalog.Positions, RoleAccessLevels.Manage);
             ViewBag.IsReadOnly = Request.IsAuthenticated &&
+                User != null &&
                 User.IsInRole("Admin") &&
                 new RolePermissionService().CanCurrentUserAccessModule(RoleModuleCatalog.Positions, RoleAccessLevels.View) &&
                 !(bool)ViewBag.CanManagePositions;
@@ -146,9 +152,9 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
-        public ActionResult Create(Position model, int[] selectedQuestions, string questionWeightsPayload, string questionStagesPayload)
+        public ActionResult Create(Position model, int[] selectedQuestions, string questionWeightValues, string questionStagesPayload)
         {
-            var questionWeights = ParseQuestionWeights(questionWeightsPayload);
+            var questionWeights = ParseQuestionWeights(questionWeightValues);
             return HandleCreatePosition(model, selectedQuestions, questionWeights, questionStagesPayload);
         }
 
@@ -226,9 +232,9 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
-        public ActionResult Edit(Position model, int[] selectedQuestions, string questionWeightsPayload, string questionStagesPayload)
+        public ActionResult Edit(Position model, int[] selectedQuestions, string questionWeightValues, string questionStagesPayload)
         {
-            var questionWeights = ParseQuestionWeights(questionWeightsPayload);
+            var questionWeights = ParseQuestionWeights(questionWeightValues);
             return HandleEditPosition(model, selectedQuestions, questionWeights, questionStagesPayload);
         }
 
@@ -384,8 +390,14 @@ namespace HR.Web.Controllers
 
             foreach (var expiredPosition in expiredOpenPositions)
             {
-                expiredPosition.IsOpen = false;
-                _uow.Positions.Update(expiredPosition);
+                if (expiredPosition == null)
+                {
+                    continue;
+                }
+
+                var scopedPosition = expiredPosition;
+                scopedPosition.IsOpen = false;
+                _uow.Positions.Update(scopedPosition);
             }
 
             _uow.Complete();

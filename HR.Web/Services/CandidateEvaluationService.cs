@@ -32,29 +32,37 @@ namespace HR.Web.Services
         public CandidateScore EvaluateApplication(int applicationId, ApplicationReviewViewModel review, List<ApplicationAnswer> answers)
         {
             var score = new CandidateScore();
+            if (review == null)
+            {
+                return score;
+            }
+
+            var reviewData = review;
             var categoryScores = new Dictionary<string, decimal>();
 
             // Ensure we have a consolidated view of all text provided by the candidate
-            string allAnswersText = string.Join(" ", (answers ?? new List<ApplicationAnswer>()).Select(a => a.AnswerText));
+            string allAnswersText = string.Join(" ", (answers ?? new List<ApplicationAnswer>())
+                .Where(a => a != null)
+                .Select(a => a.AnswerText ?? string.Empty));
 
             // 1. Answer Completeness (20 points)
-            decimal completenessScore = EvaluateCompleteness(review, answers);
+            decimal completenessScore = EvaluateCompleteness(reviewData, answers);
             categoryScores["Completeness"] = completenessScore;
 
             // 2. Answer Quality & Relevance (30 points)
-            decimal qualityScore = EvaluateQuality(review, answers, review.PositionTitle);
+            decimal qualityScore = EvaluateQuality(reviewData, answers, reviewData.PositionTitle);
             categoryScores["Quality"] = qualityScore;
 
             // 3. Experience Level (25 points)
-            decimal experienceScore = EvaluateExperience(review, allAnswersText);
+            decimal experienceScore = EvaluateExperience(reviewData, allAnswersText);
             categoryScores["Experience"] = experienceScore;
 
             // 4. Motivation & Fit (15 points)
-            decimal motivationScore = EvaluateMotivation(review, allAnswersText);
+            decimal motivationScore = EvaluateMotivation(reviewData, allAnswersText);
             categoryScores["Motivation"] = motivationScore;
 
             // 5. Professionalism (10 points)
-            decimal professionalismScore = EvaluateProfessionalism(review, answers);
+            decimal professionalismScore = EvaluateProfessionalism(reviewData, answers);
             categoryScores["Professionalism"] = professionalismScore;
 
             // Calculate total score
@@ -106,59 +114,90 @@ namespace HR.Web.Services
 
         private decimal EvaluateCompleteness(ApplicationReviewViewModel review, List<ApplicationAnswer> answers)
         {
-            decimal score = 0;
+            if (review == null)
+            {
+                return 0;
+            }
+
+            var reviewData = review;
             int totalFields = 0;
             int completedFields = 0;
 
-            // Check standard fields
-            // Only count them if they are actually used in the form (we check if ANY of them are filled)
-            bool usingStandardFields = !string.IsNullOrWhiteSpace(review.WhyInterested) || 
-                                     !string.IsNullOrWhiteSpace(review.YearsInField) ||
-                                     !string.IsNullOrWhiteSpace(review.EducationLevel);
+            CountStandardProfileFields(reviewData, ref totalFields, ref completedFields);
+            CountDynamicAnswerFields(answers, ref totalFields, ref completedFields);
 
-            if (usingStandardFields)
+            if (!string.IsNullOrWhiteSpace(reviewData.ResumePath))
             {
-                totalFields += 12;
-                if (!string.IsNullOrWhiteSpace(review.WhyInterested)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.InterestLevel)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.YearsInField)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.YearsInRole)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.ExpectedSalary)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.EducationLevel)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.WorkAvailability)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.WorkMode)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.AvailabilityToStart)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.CommunicationSkills)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.ProblemSolvingSkills)) completedFields++;
-                if (!string.IsNullOrWhiteSpace(review.TeamworkSkills)) completedFields++;
+                completedFields++;
             }
 
-            // Check dynamic answers
-            if (answers != null && answers.Any())
-            {
-                totalFields += answers.Count;
-                completedFields += answers.Count(a => !string.IsNullOrWhiteSpace(a.AnswerText));
-            }
-
-            // Check resume
-            if (!string.IsNullOrWhiteSpace(review.ResumePath)) completedFields++;
             totalFields++;
 
-            if (totalFields > 0)
+            if (totalFields <= 0)
             {
-                score = (completedFields / (decimal)totalFields) * 20m;
+                return 0;
             }
 
-            return Math.Round(score, 2);
+            return Math.Round((completedFields / (decimal)totalFields) * 20m, 2);
+        }
+
+        private static void CountStandardProfileFields(ApplicationReviewViewModel review, ref int totalFields, ref int completedFields)
+        {
+            if (review == null)
+            {
+                return;
+            }
+
+            var reviewData = review;
+            var usingStandardFields = !string.IsNullOrWhiteSpace(reviewData.WhyInterested) ||
+                                      !string.IsNullOrWhiteSpace(reviewData.YearsInField) ||
+                                      !string.IsNullOrWhiteSpace(reviewData.EducationLevel);
+            if (!usingStandardFields)
+            {
+                return;
+            }
+
+            totalFields += 12;
+            if (!string.IsNullOrWhiteSpace(reviewData.WhyInterested)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.InterestLevel)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.YearsInField)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.YearsInRole)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.ExpectedSalary)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.EducationLevel)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.WorkAvailability)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.WorkMode)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.AvailabilityToStart)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.CommunicationSkills)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.ProblemSolvingSkills)) completedFields++;
+            if (!string.IsNullOrWhiteSpace(reviewData.TeamworkSkills)) completedFields++;
+        }
+
+        private static void CountDynamicAnswerFields(List<ApplicationAnswer> answers, ref int totalFields, ref int completedFields)
+        {
+            if (answers == null || !answers.Any())
+            {
+                return;
+            }
+
+            totalFields += answers.Count;
+            completedFields += answers.Count(a => a != null && !string.IsNullOrWhiteSpace(a.AnswerText));
         }
 
         private decimal EvaluateQuality(ApplicationReviewViewModel review, List<ApplicationAnswer> answers, string positionTitle)
         {
+            if (review == null)
+            {
+                return 0;
+            }
+
+            var reviewData = review;
             decimal score = 0;
-            string combinedText = string.Join(" ", (answers ?? new List<ApplicationAnswer>()).Select(a => a.AnswerText ?? ""));
+            string combinedText = string.Join(" ", (answers ?? new List<ApplicationAnswer>())
+                .Where(a => a != null)
+                .Select(a => a.AnswerText ?? string.Empty));
 
             // 1. Score based on interest reasons (if available)
-            score += ScoreInterestReasons(review);
+            score += ScoreInterestReasons(reviewData);
 
             // 2. Vocabulary Diversity & Richness (The Semantic Score)
             decimal diversityScore = CalculateVocabularyScore(combinedText);
@@ -180,12 +219,13 @@ namespace HR.Web.Services
 
         private static decimal ScoreInterestReasons(ApplicationReviewViewModel review)
         {
-            if (string.IsNullOrWhiteSpace(review.WhyInterested))
+            if (review == null || string.IsNullOrWhiteSpace(review.WhyInterested))
             {
                 return 0;
             }
 
-            var reasonCount = review.WhyInterested.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Length;
+            var reviewData = review;
+            var reasonCount = reviewData.WhyInterested.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Length;
             if (reasonCount >= 4)
             {
                 return 6;
@@ -204,13 +244,14 @@ namespace HR.Web.Services
             decimal score = 0;
             foreach (var answer in answers)
             {
-                if (string.IsNullOrWhiteSpace(answer.AnswerText))
+                if (answer == null || string.IsNullOrWhiteSpace(answer.AnswerText))
                 {
                     continue;
                 }
 
+                var answerText = answer.AnswerText;
                 int rating;
-                if (int.TryParse(answer.AnswerText, out rating))
+                if (int.TryParse(answerText, out rating))
                 {
                     score += rating / 2m;
                 }
@@ -310,135 +351,224 @@ namespace HR.Web.Services
 
         private decimal EvaluateExperience(ApplicationReviewViewModel review, string fallbackText = "")
         {
-            decimal score = 0;
-
-            // Try to get years from review or fallback text
-            string yearsInFieldStr = review.YearsInField;
-            if (string.IsNullOrWhiteSpace(yearsInFieldStr) && !string.IsNullOrWhiteSpace(fallbackText))
+            if (review == null)
             {
-                // Simple heuristic: look for "X years" in all answers
-                var match = System.Text.RegularExpressions.Regex.Match(fallbackText, @"(\d+)\+?\s*years?");
-                if (match.Success) yearsInFieldStr = match.Groups[1].Value;
+                return 0;
             }
 
-            // Years in field
-            if (!string.IsNullOrWhiteSpace(yearsInFieldStr))
-            {
-                var yearsInField = ParseYears(yearsInFieldStr);
-                if (yearsInField >= 5) score += 10;
-                else if (yearsInField >= 3) score += 7;
-                else if (yearsInField >= 1) score += 4;
-                else score += 1;
-            }
-
-            // Years in role
-            if (!string.IsNullOrWhiteSpace(review.YearsInRole))
-            {
-                var yearsInRole = ParseYears(review.YearsInRole);
-                if (yearsInRole >= 3) score += 8;
-                else if (yearsInRole >= 1) score += 5;
-                else score += 2;
-            }
-
-            // Education level
-            string eduText = (review.EducationLevel ?? "") + " " + fallbackText;
-            if (!string.IsNullOrWhiteSpace(eduText))
-            {
-                var edu = eduText.ToLower();
-                if (edu.Contains("master") || edu.Contains("phd") || edu.Contains("doctorate"))
-                    score += 7;
-                else if (edu.Contains("bachelor") || edu.Contains("degree") || edu.Contains("graduate"))
-                    score += 5;
-                else if (edu.Contains("diploma") || edu.Contains("certificate"))
-                    score += 3;
-                else if (edu.Contains("high school"))
-                    score += 1;
-            }
-
-            // Cap at 25 points
+            var reviewData = review;
+            var safeFallbackText = fallbackText ?? string.Empty;
+            var yearsInFieldStr = ResolveYearsInField(reviewData.YearsInField, safeFallbackText);
+            var score = ScoreYearsInField(yearsInFieldStr) + ScoreYearsInRole(reviewData.YearsInRole) + ScoreEducation(reviewData.EducationLevel, safeFallbackText);
             return Math.Round(Math.Min(score, 25m), 2);
+        }
+
+        private static string ResolveYearsInField(string yearsInField, string fallbackText)
+        {
+            if (!string.IsNullOrWhiteSpace(yearsInField))
+            {
+                return yearsInField;
+            }
+
+            if (string.IsNullOrWhiteSpace(fallbackText))
+            {
+                return null;
+            }
+
+            var match = System.Text.RegularExpressions.Regex.Match(fallbackText, @"(\d+)\+?\s*years?");
+            return match.Success ? match.Groups[1].Value : null;
+        }
+
+        private decimal ScoreYearsInField(string yearsInFieldStr)
+        {
+            if (string.IsNullOrWhiteSpace(yearsInFieldStr))
+            {
+                return 0;
+            }
+
+            var yearsInField = ParseYears(yearsInFieldStr);
+            if (yearsInField >= 5) return 10;
+            if (yearsInField >= 3) return 7;
+            if (yearsInField >= 1) return 4;
+            return 1;
+        }
+
+        private decimal ScoreYearsInRole(string yearsInRoleStr)
+        {
+            if (string.IsNullOrWhiteSpace(yearsInRoleStr))
+            {
+                return 0;
+            }
+
+            var yearsInRole = ParseYears(yearsInRoleStr);
+            if (yearsInRole >= 3) return 8;
+            if (yearsInRole >= 1) return 5;
+            return 2;
+        }
+
+        private static decimal ScoreEducation(string educationLevel, string fallbackText)
+        {
+            var eduText = (educationLevel ?? string.Empty) + " " + (fallbackText ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(eduText))
+            {
+                return 0;
+            }
+
+            var edu = eduText.ToLower();
+            if (edu.Contains("master") || edu.Contains("phd") || edu.Contains("doctorate"))
+            {
+                return 7;
+            }
+
+            if (edu.Contains("bachelor") || edu.Contains("degree") || edu.Contains("graduate"))
+            {
+                return 5;
+            }
+
+            if (edu.Contains("diploma") || edu.Contains("certificate"))
+            {
+                return 3;
+            }
+
+            if (edu.Contains("high school"))
+            {
+                return 1;
+            }
+
+            return 0;
         }
 
         private decimal EvaluateMotivation(ApplicationReviewViewModel review, string fallbackText = "")
         {
-            decimal score = 0;
-
-            // Interest level
-            int interestLevel;
-            if (!string.IsNullOrWhiteSpace(review.InterestLevel) && int.TryParse(review.InterestLevel, out interestLevel))
+            if (review == null)
             {
-                score += interestLevel;
-            }
-            else if (fallbackText.ToLower().Contains("passionate") || fallbackText.ToLower().Contains("excited"))
-            {
-                score += 3;
+                return 0;
             }
 
-            // Number of reasons
-            if (!string.IsNullOrWhiteSpace(review.WhyInterested))
-            {
-                var reasons = review.WhyInterested.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-                var reasonCount = reasons.Length;
-                if (reasonCount >= 4) score += 5;
-                else if (reasonCount >= 3) score += 4;
-                else if (reasonCount >= 2) score += 3;
-                else if (reasonCount >= 1) score += 2;
-            }
-
-            // Availability
-            string availability = (review.AvailabilityToStart ?? "") + " " + (review.WorkAvailability ?? "");
-            if (!string.IsNullOrWhiteSpace(availability))
-            {
-                var avail = availability.ToLower();
-                if (avail.Contains("immediate") || avail.Contains("now")) score += 4;
-                else if (avail.Contains("2 weeks")) score += 3;
-                else if (avail.Contains("month")) score += 2;
-                else score += 1;
-            }
-
-            // Cap at 15 points
+            var reviewData = review;
+            var safeFallbackText = fallbackText ?? string.Empty;
+            var score = ScoreInterestLevel(reviewData.InterestLevel, safeFallbackText) +
+                        ScoreWhyInterestedReasons(reviewData.WhyInterested) +
+                        ScoreAvailability(reviewData.AvailabilityToStart, reviewData.WorkAvailability);
             return Math.Round(Math.Min(score, 15m), 2);
+        }
+
+        private static decimal ScoreInterestLevel(string interestLevel, string fallbackText)
+        {
+            int parsedInterest;
+            if (!string.IsNullOrWhiteSpace(interestLevel) && int.TryParse(interestLevel, out parsedInterest))
+            {
+                return parsedInterest;
+            }
+
+            var lowerFallback = fallbackText != null ? fallbackText.ToLower() : string.Empty;
+            return lowerFallback.Contains("passionate") || lowerFallback.Contains("excited") ? 3 : 0;
+        }
+
+        private static decimal ScoreWhyInterestedReasons(string whyInterested)
+        {
+            if (string.IsNullOrWhiteSpace(whyInterested))
+            {
+                return 0;
+            }
+
+            var reasonCount = whyInterested.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Length;
+            if (reasonCount >= 4) return 5;
+            if (reasonCount >= 3) return 4;
+            if (reasonCount >= 2) return 3;
+            if (reasonCount >= 1) return 2;
+            return 0;
+        }
+
+        private static decimal ScoreAvailability(string availabilityToStart, string workAvailability)
+        {
+            var availability = (availabilityToStart ?? string.Empty) + " " + (workAvailability ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(availability))
+            {
+                return 0;
+            }
+
+            var avail = availability.ToLower();
+            if (avail.Contains("immediate") || avail.Contains("now")) return 4;
+            if (avail.Contains("2 weeks")) return 3;
+            if (avail.Contains("month")) return 2;
+            return 1;
         }
 
         private decimal EvaluateProfessionalism(ApplicationReviewViewModel review, List<ApplicationAnswer> answers)
         {
-            decimal score = 0;
-
-            // Resume provided
-            if (!string.IsNullOrWhiteSpace(review.ResumePath))
-                score += 5;
-
-            // Skill assessments
-            if (!string.IsNullOrWhiteSpace(review.CommunicationSkills) || 
-                !string.IsNullOrWhiteSpace(review.ProblemSolvingSkills) ||
-                !string.IsNullOrWhiteSpace(review.TeamworkSkills))
+            if (review == null)
             {
-                decimal skillSum = 0;
-                int count = 0;
-                int val;
-                if (int.TryParse(review.CommunicationSkills, out val)) { skillSum += val; count++; }
-                if (int.TryParse(review.ProblemSolvingSkills, out val)) { skillSum += val; count++; }
-                if (int.TryParse(review.TeamworkSkills, out val)) { skillSum += val; count++; }
-                
-                if (count > 0)
-                {
-                    decimal avg = skillSum / count;
-                    if (avg >= 4) score += 3;
-                    else if (avg >= 3) score += 2;
-                    else score += 1;
-                }
-            }
-            else if (answers != null && answers.Any(a => a.AnswerText != null && a.AnswerText.Length > 100))
-            {
-                // Bonus for detailed answers as a sign of professionalism
-                score += 2;
+                return 0;
             }
 
-            // Comprehensive form completion
-            if (answers != null && answers.All(a => !string.IsNullOrWhiteSpace(a.AnswerText)))
-                score += 2;
-
+            var reviewData = review;
+            var score = ScoreResumeProvided(reviewData.ResumePath) +
+                        ScoreSkillAssessments(reviewData) +
+                        ScoreDetailedAnswersBonus(reviewData, answers) +
+                        ScoreCompleteDynamicAnswers(answers);
             return Math.Round(Math.Min(score, 10m), 2);
+        }
+
+        private static decimal ScoreResumeProvided(string resumePath)
+        {
+            return string.IsNullOrWhiteSpace(resumePath) ? 0 : 5;
+        }
+
+        private static decimal ScoreSkillAssessments(ApplicationReviewViewModel review)
+        {
+            if (review == null)
+            {
+                return 0;
+            }
+
+            var reviewData = review;
+            if (string.IsNullOrWhiteSpace(reviewData.CommunicationSkills) &&
+                string.IsNullOrWhiteSpace(reviewData.ProblemSolvingSkills) &&
+                string.IsNullOrWhiteSpace(reviewData.TeamworkSkills))
+            {
+                return 0;
+            }
+
+            decimal skillSum = 0;
+            int count = 0;
+            int val;
+            if (int.TryParse(reviewData.CommunicationSkills, out val)) { skillSum += val; count++; }
+            if (int.TryParse(reviewData.ProblemSolvingSkills, out val)) { skillSum += val; count++; }
+            if (int.TryParse(reviewData.TeamworkSkills, out val)) { skillSum += val; count++; }
+
+            if (count <= 0)
+            {
+                return 0;
+            }
+
+            var avg = skillSum / count;
+            if (avg >= 4) return 3;
+            if (avg >= 3) return 2;
+            return 1;
+        }
+
+        private static decimal ScoreDetailedAnswersBonus(ApplicationReviewViewModel review, List<ApplicationAnswer> answers)
+        {
+            if (review == null)
+            {
+                return 0;
+            }
+
+            var reviewData = review;
+            if (!string.IsNullOrWhiteSpace(reviewData.CommunicationSkills) ||
+                !string.IsNullOrWhiteSpace(reviewData.ProblemSolvingSkills) ||
+                !string.IsNullOrWhiteSpace(reviewData.TeamworkSkills))
+            {
+                return 0;
+            }
+
+            return answers != null && answers.Any(a => a != null && a.AnswerText != null && a.AnswerText.Length > 100) ? 2 : 0;
+        }
+
+        private static decimal ScoreCompleteDynamicAnswers(List<ApplicationAnswer> answers)
+        {
+            return answers != null && answers.All(a => a != null && !string.IsNullOrWhiteSpace(a.AnswerText)) ? 2 : 0;
         }
 
         private int ParseYears(string input)

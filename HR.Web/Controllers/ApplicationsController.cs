@@ -68,8 +68,13 @@ namespace HR.Web.Controllers
         // Process dynamic question answers
         foreach (var pq in positionQuestions)
         {
+            if (pq?.Question == null)
+            {
+                continue;
+            }
+
             var questionFieldName = "question_" + pq.Question.Id;
-            var answer = form[questionFieldName];
+            var answer = form != null ? form[questionFieldName] : null;
             
             answers.Add(new QuestionAnswerViewModel
             {
@@ -217,18 +222,7 @@ namespace HR.Web.Controllers
             return submissionAccessResult;
         }
 
-        var sessionStageObj = Session["QuestionnaireActiveStage"] as int?;
-        if (!sessionStageObj.HasValue)
-        {
-            var rawStage = Session["QuestionnaireActiveStage"] as string;
-            int parsedStage;
-            if (!string.IsNullOrEmpty(rawStage) && int.TryParse(rawStage, out parsedStage))
-            {
-                sessionStageObj = parsedStage;
-            }
-        }
-
-        var sessionStage = sessionStageObj ?? 1;
+        var sessionStage = ResolveQuestionnaireSessionStage();
         var maxStages = Math.Max(1, position.QuestionnaireStageCount);
 
         var applicantResult = RequireApplicantForPosition(position.CompanyId, out var applicant);
@@ -258,42 +252,19 @@ namespace HR.Web.Controllers
                 return RedirectToAction("Questionnaire", new { positionId = reviewModel.PositionId });
             }
 
-            if (HasExistingApplication(applicant.Id, reviewModel.PositionId))
+            var initialSubmitResult = SubmitInitialQuestionnaireApplication(reviewModel, position, applicant, form);
+            if (initialSubmitResult != null)
             {
-                TempData["ErrorMessage"] = "You have already applied for this position.";
-                return RedirectToAction("Index", "Positions");
+                return initialSubmitResult;
             }
-
-            var application = CreateApplicationFromQuestionnaire(reviewModel, position, applicant.Id);
-            var questionAnswers = ResolveQuestionnaireAnswers(reviewModel.PositionId, form);
-            SaveApplicationAnswers(application.Id, questionAnswers, 1);
-            application.LastCompletedQuestionnaireStage = 1;
-            application.PendingQuestionnaireStage = null;
-            _uow.Applications.Update(application);
-            _uow.Complete();
-            ScoreQuestionnaireApplication(application);
         }
         else
         {
-            if (!existingApplication.PendingQuestionnaireStage.HasValue ||
-                existingApplication.PendingQuestionnaireStage.Value != sessionStage)
+            var pendingSubmitResult = SubmitPendingQuestionnaireStage(existingApplication, reviewModel, sessionStage, form);
+            if (pendingSubmitResult != null)
             {
-                TempData["ErrorMessage"] = "You cannot submit the questionnaire using this link right now. If you were sent a new link by email, open that link instead.";
-                return RedirectToAction("Index", "Positions");
+                return pendingSubmitResult;
             }
-
-            var questionAnswers = ResolveQuestionnaireAnswers(reviewModel.PositionId, form);
-            SaveApplicationAnswers(existingApplication.Id, questionAnswers, sessionStage);
-            if (existingApplication.Score.HasValue)
-            {
-                existingApplication.LastQuestionnaireScore = existingApplication.Score;
-            }
-
-            existingApplication.LastCompletedQuestionnaireStage = sessionStage;
-            existingApplication.PendingQuestionnaireStage = null;
-            _uow.Applications.Update(existingApplication);
-            _uow.Complete();
-            ScoreQuestionnaireApplication(existingApplication);
         }
 
         ClearQuestionnaireSession();
@@ -331,37 +302,7 @@ namespace HR.Web.Controllers
         }
 
         var profile = GetApplicantProfile(applicant.Id);
-        var model = new ApplicantProfileViewModel
-        {
-            PositionId = position.Id,
-            PositionTitle = position.Title,
-            ApplicantId = applicant.Id,
-            IsTechnical = position.IsTechnical == true,
-            FullName = applicant.FullName,
-            Email = applicant.Email,
-            Phone = applicant.Phone,
-            Location = profile != null ? profile.Location : null,
-            TotalYearsExperience = profile != null ? profile.TotalYearsExperience : null,
-            RelevantYearsExperience = profile != null ? profile.RelevantYearsExperience : null,
-            MostRecentCompany = profile != null ? profile.MostRecentCompany : null,
-            MostRecentTitle = profile != null ? profile.MostRecentTitle : null,
-            MostRecentStartDate = profile != null ? profile.MostRecentStartDate : null,
-            MostRecentEndDate = profile != null ? profile.MostRecentEndDate : null,
-            SecondMostRecentCompany = profile != null ? profile.SecondMostRecentCompany : null,
-            SecondMostRecentTitle = profile != null ? profile.SecondMostRecentTitle : null,
-            SecondMostRecentStartDate = profile != null ? profile.SecondMostRecentStartDate : null,
-            SecondMostRecentEndDate = profile != null ? profile.SecondMostRecentEndDate : null,
-            EmploymentType = profile != null ? profile.EmploymentType : null,
-            Skills = profile != null ? profile.Skills : null,
-            Competencies = profile != null ? profile.Competencies : null,
-            EducationDegree = profile != null ? profile.EducationDegree : null,
-            EducationInstitution = profile != null ? profile.EducationInstitution : null,
-            KeyAchievement = profile != null ? profile.KeyAchievement : null,
-            Certifications = profile != null ? profile.Certifications : null,
-            PortfolioUrl = profile != null ? profile.PortfolioUrl : null,
-            WorkAuthorization = profile != null && profile.WorkAuthorization,
-            NoticePeriod = profile != null ? profile.NoticePeriod : null
-        };
+        var model = BuildApplicantProfileViewModel(position, applicant, profile);
 
         ApplyPendingLinkedInImport(model);
         PopulateLinkedInImportViewBag();
@@ -396,30 +337,13 @@ namespace HR.Web.Controllers
         profileModel.IsTechnical = position.IsTechnical == true;
         profileModel.ApplicantId = applicant.Id;
         NormalizeSelectableProfileFields(profileModel);
-
-        if (profileModel.IsTechnical)
-        {
-            if (!profileModel.RelevantYearsExperience.HasValue)
-            {
-                ModelState.AddModelError("RelevantYearsExperience", "Relevant years of experience is required for technical roles.");
-            }
-
-            if (string.IsNullOrWhiteSpace(profileModel.Skills))
-            {
-                ModelState.AddModelError("Skills", "Please list your core technical skills.");
-            }
-        }
-        
+        ValidateTechnicalProfileFields(profileModel);
 
         if (!ModelState.IsValid)
         {
             PopulateLinkedInImportViewBag();
             return View("ProfileDetails", profileModel);
         }
-
-        applicant.FullName = profileModel.FullName != null ? profileModel.FullName.Trim() : applicant.FullName;
-        applicant.Email = profileModel.Email != null ? profileModel.Email.Trim() : applicant.Email;
-        applicant.Phone = profileModel.Phone != null ? profileModel.Phone.Trim() : applicant.Phone;
 
         var profile = GetApplicantProfile(applicant.Id);
         if (profile == null)
@@ -432,28 +356,7 @@ namespace HR.Web.Controllers
             _uow.Context.Set<ApplicantProfile>().Add(profile);
         }
 
-        profile.Location = profileModel.Location != null ? profileModel.Location.Trim() : null;
-        profile.TotalYearsExperience = profileModel.TotalYearsExperience;
-        profile.RelevantYearsExperience = profileModel.RelevantYearsExperience;
-        profile.MostRecentCompany = profileModel.MostRecentCompany != null ? profileModel.MostRecentCompany.Trim() : null;
-        profile.MostRecentTitle = profileModel.MostRecentTitle != null ? profileModel.MostRecentTitle.Trim() : null;
-        profile.MostRecentStartDate = profileModel.MostRecentStartDate;
-        profile.MostRecentEndDate = profileModel.MostRecentEndDate;
-        profile.SecondMostRecentCompany = profileModel.SecondMostRecentCompany != null ? profileModel.SecondMostRecentCompany.Trim() : null;
-        profile.SecondMostRecentTitle = profileModel.SecondMostRecentTitle != null ? profileModel.SecondMostRecentTitle.Trim() : null;
-        profile.SecondMostRecentStartDate = profileModel.SecondMostRecentStartDate;
-        profile.SecondMostRecentEndDate = profileModel.SecondMostRecentEndDate;
-        profile.EmploymentType = profileModel.EmploymentType != null ? profileModel.EmploymentType.Trim() : null;
-        profile.Skills = profileModel.Skills != null ? profileModel.Skills.Trim() : null;
-        profile.Competencies = profileModel.Competencies != null ? profileModel.Competencies.Trim() : null;
-        profile.EducationDegree = profileModel.EducationDegree != null ? profileModel.EducationDegree.Trim() : null;
-        profile.EducationInstitution = profileModel.EducationInstitution != null ? profileModel.EducationInstitution.Trim() : null;
-        profile.KeyAchievement = profileModel.KeyAchievement != null ? profileModel.KeyAchievement.Trim() : null;
-        profile.Certifications = profileModel.Certifications != null ? profileModel.Certifications.Trim() : null;
-        profile.PortfolioUrl = profileModel.PortfolioUrl != null ? profileModel.PortfolioUrl.Trim() : null;
-        profile.WorkAuthorization = profileModel.WorkAuthorization;
-        profile.NoticePeriod = profileModel.NoticePeriod != null ? profileModel.NoticePeriod.Trim() : null;
-        profile.UpdatedOn = DateTime.UtcNow;
+        ApplyApplicantProfileViewModel(applicant, profile, profileModel);
 
         _uow.Complete();
         ClearPendingLinkedInImport();
@@ -515,19 +418,7 @@ namespace HR.Web.Controllers
                 return accessCheck;
             }
 
-            var rolePermissionService = new RolePermissionService();
-            var canManageApps = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Applications, RoleAccessLevels.Manage);
-            var isMgmt = IsManagementUser(user);
-            var isCompanyAdminOrSuper = rolePermissionService.IsFullCompanyAdmin(user) || _tenantService.IsActualSuperAdmin();
-            var maxQ = app.Position != null ? Math.Max(1, app.Position.QuestionnaireStageCount) : 1;
-            var canInviteNext = isCompanyAdminOrSuper &&
-                maxQ > 1 &&
-                app.LastCompletedQuestionnaireStage > 0 &&
-                app.LastCompletedQuestionnaireStage < maxQ &&
-                !app.PendingQuestionnaireStage.HasValue;
-            ViewBag.CanOpenNextQuestionnaireStage = canInviteNext;
-            ViewBag.QuestionnaireStageCountForDetails = maxQ;
-            ViewBag.ShowQuestionnaireHiringPanel = isMgmt && canManageApps && maxQ > 1;
+            PopulateApplicationDetailsViewBag(user, app);
 
             return View(app);
         }
@@ -542,7 +433,13 @@ namespace HR.Web.Controllers
             // If the user is authenticated and not Admin/HR, attempt to preselect their Applicant record
             if (!User.IsInRole("Admin"))
             {
-                var username = User.Identity.Name;
+                if (!IsCurrentUserAuthenticated())
+                {
+                    LoadLookups();
+                    return View(new Application { Status = "Interviewing", AppliedOn = DateTime.UtcNow });
+                }
+
+                var username = GetApplicationsActorName();
                 var lowerUsername = username.ToLower();
                 var user = _uow.Users.GetAll().FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
                 if (user != null)
@@ -569,12 +466,19 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult Create(Application model, HttpPostedFileBase resume)
         {
-            if (resume != null)
+            if (model == null)
             {
-                model.ResumePath = _storage.SaveResume(resume);
+                LoadLookups();
+                return View(new Application { Status = "Interviewing", AppliedOn = DateTime.UtcNow });
             }
 
-            var ownershipError = ValidateApplicationOwnership(model);
+            var applicationModel = model;
+            if (resume != null)
+            {
+                applicationModel.ResumePath = _storage.SaveResume(resume);
+            }
+
+            var ownershipError = ValidateApplicationOwnership(applicationModel);
             if (!string.IsNullOrWhiteSpace(ownershipError))
             {
                 ModelState.AddModelError("", ownershipError);
@@ -582,22 +486,22 @@ namespace HR.Web.Controllers
 
             if (!ModelState.IsValid)
             {
-                LoadLookups(model);
-                return View(model);
+                LoadLookups(applicationModel);
+                return View(applicationModel);
             }
 
-            model.AppliedOn = DateTime.UtcNow;
+            applicationModel.AppliedOn = DateTime.UtcNow;
 
-            if (!TryAssignAndValidateApplicationCompany(model))
+            if (!TryAssignAndValidateApplicationCompany(applicationModel))
             {
                 ModelState.AddModelError("", "You cannot apply for a position in another company.");
-                LoadLookups(model);
-                return View(model);
+                LoadLookups(applicationModel);
+                return View(applicationModel);
             }
 
-            _uow.Applications.Add(model);
+            _uow.Applications.Add(applicationModel);
             _uow.Complete();
-            var applicantEmail = model != null && model.Applicant != null ? model.Applicant.Email : null;
+            var applicantEmail = applicationModel.Applicant != null ? applicationModel.Applicant.Email : null;
             _email.SendAsync(applicantEmail, "Application received", "We received your application.");
             return RedirectToAction("Index");
         }
@@ -622,27 +526,32 @@ namespace HR.Web.Controllers
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(Application model, HttpPostedFileBase resume)
         {
-            if (resume != null)
+            if (model == null)
             {
-                model.ResumePath = _storage.SaveResume(resume);
+                return RedirectToAction("Index");
             }
 
-            var accessResult = TryGetManagedApplication(model.Id, out var existingApp);
+            var applicationModel = model;
+            if (resume != null)
+            {
+                applicationModel.ResumePath = _storage.SaveResume(resume);
+            }
+
+            var accessResult = TryGetManagedApplication(applicationModel.Id, out var existingApp);
             if (accessResult != null)
             {
                 return accessResult;
             }
             
-            // Sustain CompanyId (prevent tampering)
-            model.CompanyId = existingApp.CompanyId;
+            applicationModel.CompanyId = existingApp.CompanyId;
 
             if (!ModelState.IsValid)
             {
-                LoadLookups(model);
-                return View(model);
+                LoadLookups(applicationModel);
+                return View(applicationModel);
             }
 
-            _uow.Applications.Update(model);
+            _uow.Applications.Update(applicationModel);
             _uow.Complete();
             return RedirectToAction("Index");
         }

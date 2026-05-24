@@ -79,127 +79,158 @@ namespace HR.Web.Services
             string experience = "mid", List<string> questionTypes = null, int count = 5)
         {
             if (count <= 0 || count > 25)
+            {
                 throw new ArgumentException("Number of questions must be between 1 and 25");
+            }
+
+            if (string.IsNullOrWhiteSpace(jobTitle) || string.IsNullOrWhiteSpace(jobDescription))
+            {
+                throw new ArgumentException("Job title and description are required");
+            }
 
             questionTypes = questionTypes ?? new List<string> { "Text", "Choice", "Number", "Rating" };
             var questions = new List<GeneratedQuestion>();
             var keywords = ExtractKeywords(jobDescription + " " + keyResponsibilities + " " + requiredQualifications);
-
-            // Distribute questions among requested types
             var availableTypes = questionTypes.Where(t => new[] { "Text", "Choice", "Number", "Rating" }.Contains(t)).ToList();
             var baseQuestionsPerType = Math.Max(1, count / availableTypes.Count);
             var remainingQuestions = count % availableTypes.Count;
+            var questionIndex = 0;
 
-            int questionIndex = 0;
-
-            // Generate Text questions
-            if (questionTypes.Contains("Text"))
-            {
-                var textQuestions = GenerateTextQuestions(jobTitle, keywords, experience);
-                var textCount = Math.Min(baseQuestionsPerType + (questionIndex < remainingQuestions ? 1 : 0), textQuestions.Count);
-                questions.AddRange(textQuestions.Take(textCount));
-                questionIndex++;
-            }
-
-            // Generate Choice questions
-            if (questionTypes.Contains("Choice") && questions.Count < count)
-            {
-                var choiceQuestions = GenerateChoiceQuestions(jobTitle, keywords, experience);
-                var choiceCount = Math.Min(baseQuestionsPerType + (questionIndex < remainingQuestions ? 1 : 0), choiceQuestions.Count);
-                questions.AddRange(choiceQuestions.Take(choiceCount));
-                questionIndex++;
-            }
-
-            // Generate Number questions
-            if (questionTypes.Contains("Number") && questions.Count < count)
-            {
-                var numberQuestions = GenerateNumberQuestions(experience);
-                var numberCount = Math.Min(baseQuestionsPerType + (questionIndex < remainingQuestions ? 1 : 0), numberQuestions.Count);
-                questions.AddRange(numberQuestions.Take(numberCount));
-                questionIndex++;
-            }
-
-            // Generate Rating questions
-            if (questionTypes.Contains("Rating") && questions.Count < count)
-            {
-                var ratingQuestions = GenerateRatingQuestions(experience);
-                var ratingCount = Math.Min(baseQuestionsPerType + (questionIndex < remainingQuestions ? 1 : 0), ratingQuestions.Count);
-                questions.AddRange(ratingQuestions.Take(ratingCount));
-                questionIndex++;
-            }
+            questionIndex = AppendQuestionsIfRequested(questions, questionTypes, "Text", count, baseQuestionsPerType, remainingQuestions, questionIndex,
+                () => GenerateTextQuestions(jobTitle, keywords, experience));
+            questionIndex = AppendQuestionsIfRequested(questions, questionTypes, "Choice", count, baseQuestionsPerType, remainingQuestions, questionIndex,
+                () => GenerateChoiceQuestions(jobTitle, keywords, experience));
+            questionIndex = AppendQuestionsIfRequested(questions, questionTypes, "Number", count, baseQuestionsPerType, remainingQuestions, questionIndex,
+                () => GenerateNumberQuestions(experience));
+            AppendQuestionsIfRequested(questions, questionTypes, "Rating", count, baseQuestionsPerType, remainingQuestions, questionIndex,
+                () => GenerateRatingQuestions(experience));
 
             return questions.Take(count).ToList();
+        }
+
+        private static int AppendQuestionsIfRequested(
+            List<GeneratedQuestion> questions,
+            List<string> questionTypes,
+            string type,
+            int count,
+            int baseQuestionsPerType,
+            int remainingQuestions,
+            int questionIndex,
+            Func<List<GeneratedQuestion>> generator)
+        {
+            if (!questionTypes.Contains(type) || questions.Count >= count)
+            {
+                return questionIndex;
+            }
+
+            var typeQuestions = generator();
+            var typeCount = Math.Min(baseQuestionsPerType + (questionIndex < remainingQuestions ? 1 : 0), typeQuestions.Count);
+            questions.AddRange(typeQuestions.Take(typeCount));
+            return questionIndex + 1;
         }
 
         public ValidationResult ValidateQuestion(string question, string questionType = "Text")
         {
             var result = new ValidationResult { IsValid = true };
-            var lowerQuestion = question.ToLower();
-
-            // Check for biased terms
-            foreach (var term in _biasedTerms)
+            if (string.IsNullOrWhiteSpace(question))
             {
-                if (lowerQuestion.Contains(term))
-                {
-                    result.BiasedTerms.Add(term);
-                    result.Warnings.Add(string.Format("Potentially biased term detected: '{0}'", term));
-                }
+                result.IsValid = false;
+                result.Warnings.Add("Question text is required");
+                return result;
             }
 
-            // Check for red flags
-            var redFlags = new List<string>
+            var questionText = question;
+            var lowerQuestion = questionText.ToLower();
+
+            DetectBiasedTerms(lowerQuestion, result);
+            DetectRedFlagTerms(lowerQuestion, result);
+            CheckQuestionLength(question, result);
+            CheckDoubleNegatives(lowerQuestion, result);
+            ApplyValidationSuggestions(result);
+
+            result.IsValid = !result.BiasedTerms.Any() && result.Warnings.Count <= 2;
+            return result;
+        }
+
+        private void DetectBiasedTerms(string lowerQuestion, ValidationResult result)
+        {
+            foreach (var term in _biasedTerms.Where(lowerQuestion.Contains))
+            {
+                result.BiasedTerms.Add(term);
+                result.Warnings.Add(string.Format("Potentially biased term detected: '{0}'", term));
+            }
+        }
+
+        private static void DetectRedFlagTerms(string lowerQuestion, ValidationResult result)
+        {
+            var redFlags = new[]
             {
                 "personal life", "home life", "family responsibilities",
                 "physical requirements", "medical condition", "arrest record"
             };
 
-            foreach (var flag in redFlags)
+            foreach (var flag in redFlags.Where(lowerQuestion.Contains))
             {
-                if (lowerQuestion.Contains(flag))
-                {
-                    result.Warnings.Add(string.Format("Potentially inappropriate content: '{0}'", flag));
-                }
+                result.Warnings.Add(string.Format("Potentially inappropriate content: '{0}'", flag));
+            }
+        }
+
+        private static void CheckQuestionLength(string question, ValidationResult result)
+        {
+            if (string.IsNullOrEmpty(question))
+            {
+                return;
             }
 
-            // Check question clarity
-            if (question.Length < 10)
+            var questionText = question;
+            if (questionText.Length < 10)
             {
                 result.Warnings.Add("Question seems too short and may lack clarity");
             }
 
-            if (question.Length > 500)
+            if (questionText.Length > 500)
             {
                 result.Warnings.Add("Question is very long and may confuse candidates");
             }
+        }
 
-            // Check for double negatives
-            if (lowerQuestion.Contains("not") && lowerQuestion.Count(c => c == ' ') > 10)
+        private static void CheckDoubleNegatives(string lowerQuestion, ValidationResult result)
+        {
+            if (!lowerQuestion.Contains("not") || lowerQuestion.Count(c => c == ' ') <= 10)
             {
-                var notCount = Regex.Matches(lowerQuestion, @"\bnot\b").Count;
-                if (notCount > 1)
-                {
-                    result.Warnings.Add("Question contains multiple negatives which may be confusing");
-                }
+                return;
             }
 
-            // Generate suggestions
-            if (result.BiasedTerms.Any() || result.Warnings.Any())
+            var notCount = Regex.Matches(lowerQuestion, @"\bnot\b").Count;
+            if (notCount > 1)
             {
-                result.Suggestions.Add("Focus on skills and qualifications relevant to the job");
-                result.Suggestions.Add("Use inclusive language that doesn't discriminate");
-                result.Suggestions.Add("Ensure the question directly relates to job performance");
+                result.Warnings.Add("Question contains multiple negatives which may be confusing");
+            }
+        }
+
+        private static void ApplyValidationSuggestions(ValidationResult result)
+        {
+            if (!result.BiasedTerms.Any() && !result.Warnings.Any())
+            {
+                return;
             }
 
-            result.IsValid = !result.BiasedTerms.Any() && result.Warnings.Count <= 2;
-
-            return result;
+            result.Suggestions.Add("Focus on skills and qualifications relevant to the job");
+            result.Suggestions.Add("Use inclusive language that doesn't discriminate");
+            result.Suggestions.Add("Ensure the question directly relates to job performance");
         }
 
         public List<QuestionOption> SuggestPoints(string question, List<string> options, string difficulty = "intermediate")
         {
             var questionOptions = new List<QuestionOption>();
+            if (options == null || options.Count == 0)
+            {
+                return questionOptions;
+            }
+
+            var normalizedDifficulty = string.IsNullOrWhiteSpace(difficulty) ? "intermediate" : difficulty;
             int basePoints;
-            switch (difficulty.ToLower())
+            switch (normalizedDifficulty.ToLower())
             {
                 case "easy": basePoints = 2; break;
                 case "intermediate": basePoints = 3; break;
@@ -222,6 +253,11 @@ namespace HR.Web.Services
 
         public QuestionTemplate GetTemplate(string templateType)
         {
+            if (string.IsNullOrWhiteSpace(templateType))
+            {
+                throw new ArgumentException("Template type is required");
+            }
+
             switch (templateType.ToLower())
             {
                 case "senior-developer": return GetSeniorDeveloperTemplate();
@@ -235,7 +271,8 @@ namespace HR.Web.Services
         private Dictionary<string, List<string>> ExtractKeywords(string text)
         {
             var keywords = new Dictionary<string, List<string>>();
-            var words = Regex.Split(text.ToLower(), @"\W+")
+            var sourceText = text ?? string.Empty;
+            var words = Regex.Split(sourceText.ToLower(), @"\W+")
                 .Where(w => w.Length > 2)
                 .ToList();
 
@@ -389,17 +426,21 @@ namespace HR.Web.Services
 
         private decimal CalculatePointsForOption(string option, int index, int totalCount, int basePoints)
         {
-            // Distribute points based on position and quality indicators
+            if (string.IsNullOrEmpty(option) || totalCount <= 0)
+            {
+                return 0m;
+            }
+
+            var optionText = option;
             var multiplier = 1.0m;
             
-            // Positive indicators
             var positiveWords = new[] { "excellent", "expert", "advanced", "lead", "senior", "proactive", "innovative" };
-            if (positiveWords.Any(word => option.ToLower().Contains(word)))
+            var lowerOption = optionText.ToLower();
+            if (positiveWords.Any(word => lowerOption.Contains(word)))
                 multiplier += 0.5m;
 
-            // Negative indicators
             var negativeWords = new[] { "no", "none", "never", "avoid", "basic", "beginner" };
-            if (negativeWords.Any(word => option.ToLower().Contains(word)))
+            if (negativeWords.Any(word => lowerOption.Contains(word)))
                 multiplier -= 0.3m;
 
             // Scale based on position (better options get more points)

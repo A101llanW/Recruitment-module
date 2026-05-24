@@ -12,6 +12,9 @@ namespace HR.Web.Services
         private readonly UnitOfWork _uow;
         private readonly TenantService _tenantService;
 
+        private delegate string PdfReportGenerator(string generatedBy);
+        private delegate void CsvReportGenerator(string filePath);
+
         public ReportService()
         {
             _uow = new UnitOfWork();
@@ -20,77 +23,23 @@ namespace HR.Web.Services
 
         public string GenerateReportByType(string reportType, string generatedBy, string format = "csv")
         {
-            string filePath = "";
-            string html = "";
-            var fileName = string.Format("{0}_{1:yyyyMMdd_HHmmss}.{2}", reportType, DateTime.Now, format.ToLower());
-            filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Reports", fileName);
-            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-
-            switch (reportType.ToLower())
+            if (string.IsNullOrWhiteSpace(reportType))
             {
-                case "candidate":
-                    if (format.ToLower() == "pdf") html = GenerateCandidatePDF(generatedBy);
-                    else 
-                    {
-                        var q = _uow.Applicants.GetAll().AsQueryable();
-                        q = _tenantService.ApplyTenantFilter(q);
-                        GenerateCandidateCSV(q.ToList(), filePath);
-                    }
-                    break;
-                case "application":
-                    if (format.ToLower() == "pdf") html = GenerateApplicationPDF(generatedBy);
-                    else 
-                    {
-                        var q = _uow.Applications.GetAll(a => a.Applicant, a => a.Position).AsQueryable();
-                        q = _tenantService.ApplyTenantFilter(q);
-                        GenerateApplicationCSV(q.ToList(), filePath);
-                    }
-                    break;
-                case "interview":
-                    if (format.ToLower() == "pdf") html = GenerateInterviewPDF(generatedBy);
-                    else 
-                    {
-                        var q = _uow.Interviews.GetAll(
-                            i => i.Application,
-                            i => i.Application.Applicant,
-                            i => i.Application.Position,
-                            i => i.Interviewer).AsQueryable();
-                        q = _tenantService.ApplyTenantFilter(q);
-                        GenerateInterviewCSV(q.ToList(), filePath);
-                    }
-                    break;
-                case "department":
-                    if (format.ToLower() == "pdf") html = GenerateDepartmentPDF(generatedBy);
-                    else 
-                    {
-                        var q = _uow.Departments.GetAll(d => d.Positions).AsQueryable();
-                        q = _tenantService.ApplyTenantFilter(q);
-                        GenerateDepartmentCSV(q.ToList(), filePath);
-                    }
-                    break;
-                case "position":
-                    if (format.ToLower() == "pdf") html = GeneratePositionPDF(generatedBy);
-                    else 
-                    {
-                        var q = _uow.Positions.GetAll(p => p.Department, p => p.Applications).AsQueryable();
-                        q = _tenantService.ApplyTenantFilter(q);
-                        GeneratePositionCSV(q.ToList(), filePath);
-                    }
-                    break;
-                case "security":
-                    if (format.ToLower() == "pdf") html = GenerateSecurityPDF(generatedBy);
-                    else 
-                    {
-                        var q = _uow.AuditLogs.GetAll().AsQueryable();
-                        q = _tenantService.ApplyTenantFilter(q);
-                        GenerateSecurityCSV(q.ToList(), filePath);
-                    }
-                    break;
-                default:
-                    throw new ArgumentException("Unsupported report type: " + reportType);
+                throw new ArgumentException("Report type is required");
             }
 
-            if (format.ToLower() == "pdf" && !string.IsNullOrEmpty(html))
+            var normalizedType = reportType.ToLower();
+            var normalizedFormat = (format ?? "csv").ToLower();
+            var filePath = BuildReportFilePath(normalizedType, normalizedFormat);
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+
+            string html;
+            if (!TryGenerateReport(normalizedType, normalizedFormat, generatedBy, filePath, out html))
+            {
+                throw new ArgumentException("Unsupported report type: " + reportType);
+            }
+
+            if (normalizedFormat == "pdf" && !string.IsNullOrEmpty(html))
             {
                 File.WriteAllText(filePath, html);
             }
@@ -98,8 +47,109 @@ namespace HR.Web.Services
             return filePath;
         }
 
+        private static string BuildReportFilePath(string reportType, string format)
+        {
+            var fileName = string.Format("{0}_{1:yyyyMMdd_HHmmss}.{2}", reportType, DateTime.Now, format);
+            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Reports", fileName);
+        }
+
+        private bool TryGenerateReport(string reportType, string format, string generatedBy, string filePath, out string html)
+        {
+            html = null;
+            switch (reportType)
+            {
+                case "candidate":
+                    return GenerateTypedReport(format, generatedBy, filePath, GenerateCandidatePDF, GenerateCandidateCsvToFile, out html);
+                case "application":
+                    return GenerateTypedReport(format, generatedBy, filePath, GenerateApplicationPDF, GenerateApplicationCsvToFile, out html);
+                case "interview":
+                    return GenerateTypedReport(format, generatedBy, filePath, GenerateInterviewPDF, GenerateInterviewCsvToFile, out html);
+                case "department":
+                    return GenerateTypedReport(format, generatedBy, filePath, GenerateDepartmentPDF, GenerateDepartmentCsvToFile, out html);
+                case "position":
+                    return GenerateTypedReport(format, generatedBy, filePath, GeneratePositionPDF, GeneratePositionCsvToFile, out html);
+                case "security":
+                    return GenerateTypedReport(format, generatedBy, filePath, GenerateSecurityPDF, GenerateSecurityCsvToFile, out html);
+                default:
+                    return false;
+            }
+        }
+
+        private static bool GenerateTypedReport(
+            string format,
+            string generatedBy,
+            string filePath,
+            PdfReportGenerator pdfGenerator,
+            CsvReportGenerator csvGenerator,
+            out string html)
+        {
+            if (pdfGenerator == null || csvGenerator == null)
+            {
+                html = null;
+                return false;
+            }
+
+            if (format == "pdf")
+            {
+                html = pdfGenerator(generatedBy);
+                return true;
+            }
+
+            html = null;
+            csvGenerator(filePath);
+            return true;
+        }
+
+        private void GenerateCandidateCsvToFile(string filePath)
+        {
+            var query = _tenantService.ApplyTenantFilter(_uow.Applicants.GetAll().AsQueryable());
+            GenerateCandidateCSV(query.ToList(), filePath);
+        }
+
+        private void GenerateApplicationCsvToFile(string filePath)
+        {
+            var query = _tenantService.ApplyTenantFilter(
+                _uow.Applications.GetAll(a => a.Applicant, a => a.Position).AsQueryable());
+            GenerateApplicationCSV(query.ToList(), filePath);
+        }
+
+        private void GenerateInterviewCsvToFile(string filePath)
+        {
+            var query = _tenantService.ApplyTenantFilter(
+                _uow.Interviews.GetAll(
+                    i => i.Application,
+                    i => i.Application.Applicant,
+                    i => i.Application.Position,
+                    i => i.Interviewer).AsQueryable());
+            GenerateInterviewCSV(query.ToList(), filePath);
+        }
+
+        private void GenerateDepartmentCsvToFile(string filePath)
+        {
+            var query = _tenantService.ApplyTenantFilter(_uow.Departments.GetAll(d => d.Positions).AsQueryable());
+            GenerateDepartmentCSV(query.ToList(), filePath);
+        }
+
+        private void GeneratePositionCsvToFile(string filePath)
+        {
+            var query = _tenantService.ApplyTenantFilter(
+                _uow.Positions.GetAll(p => p.Department, p => p.Applications).AsQueryable());
+            GeneratePositionCSV(query.ToList(), filePath);
+        }
+
+        private void GenerateSecurityCsvToFile(string filePath)
+        {
+            var query = _tenantService.ApplyTenantFilter(_uow.AuditLogs.GetAll().AsQueryable());
+            GenerateSecurityCSV(query.ToList(), filePath);
+        }
+
         public string PreviewReportByType(string reportType, string generatedBy)
         {
+            if (string.IsNullOrWhiteSpace(reportType))
+            {
+                return "<h3>Report type not supported for preview</h3>";
+            }
+
             switch (reportType.ToLower())
             {
                 case "candidate": return GenerateCandidatePDF(generatedBy);
@@ -112,10 +162,7 @@ namespace HR.Web.Services
             }
         }
 
-        private string GetReportStyles(string themeColor = "#3498db", string secondaryColor = "#2980b9")
-        {
-            var sb = new System.Text.StringBuilder();
-            sb.Append(@"
+        private static readonly string ReportStylesTemplate = @"
         @page {
             margin: 1.5cm;
             size: A4;
@@ -138,17 +185,13 @@ namespace HR.Web.Services
             padding: 0;
             background: #fff;
             box-shadow: 0 5px 15px rgba(0,0,0,0.03);
-            border-top: 5px solid ");
-            sb.Append(themeColor);
-            sb.Append(@";
+            border-top: 5px solid {0};
             display: block;
             width: 100%;
         }
         .report-header-box {
             text-align: center;
-            background: ");
-            sb.Append(themeColor);
-            sb.Append(@";
+            background: {0};
             color: white;
             padding: 30px 20px;
             margin-bottom: 20px;
@@ -172,9 +215,7 @@ namespace HR.Web.Services
             border-radius: 10px;
             margin: 0 40px 20px 40px;
             width: calc(100% - 80px);
-            border-left: 5px solid ");
-            sb.Append(themeColor);
-            sb.Append(@";
+            border-left: 5px solid {0};
         }
         .meta-item {
             display: table-cell;
@@ -191,7 +232,7 @@ namespace HR.Web.Services
             font-size: 14px;
             color: #2c3e50;
             font-weight: 600;
-            white-space: nowrap; /* Prevent html2canvas wrapping issue where time overlaps date */
+            white-space: nowrap;
             display: inline-block;
         }
         .report-table { 
@@ -203,9 +244,7 @@ namespace HR.Web.Services
             display: table-header-group;
         }
         .report-table th { 
-            background-color: ");
-            sb.Append(themeColor);
-            sb.Append(@";
+            background-color: {0};
             color: white;
             padding: 15px;
             text-align: left;
@@ -219,7 +258,7 @@ namespace HR.Web.Services
             font-size: 13px;
         }
         .report-table td.date-cell {
-            white-space: nowrap; /* Fix html2canvas line-height bug for datetimes */
+            white-space: nowrap;
         }
         .report-table tr {
             page-break-inside: avoid;
@@ -273,9 +312,7 @@ namespace HR.Web.Services
         .stat-value {
             font-size: 24px;
             font-weight: 700;
-            color: ");
-            sb.Append(themeColor);
-            sb.Append(@";
+            color: {0};
             display: block;
         }
         .stat-label {
@@ -284,8 +321,11 @@ namespace HR.Web.Services
             text-transform: uppercase;
             font-weight: bold;
         }
-");
-            return sb.ToString();
+";
+
+        private static string GetReportStyles(string themeColor = "#3498db", string secondaryColor = "#2980b9")
+        {
+            return string.Format(ReportStylesTemplate, themeColor);
         }
 
         private string GetReportHeader(string title, string subtitle, string themeColor = "#3498db", string secondaryColor = "#2980b9")
@@ -322,12 +362,7 @@ namespace HR.Web.Services
 
         private string GetPageFooter()
         {
-            return string.Format(@"
-        <div class='report-footer'>
-            <p><strong>{1}</strong></p>
-            <p>This is a system-generated confidential document.</p>
-            <p>&copy; {0} {2}. All rights reserved.</p>
-        </div>", DateTime.Now.Year, HR.Web.Helpers.AppConfig.ProductName, HR.Web.Helpers.AppConfig.PublisherName);
+            return GetPageFooterStatic();
         }
 
         private string GetReportFooter()
@@ -409,7 +444,9 @@ namespace HR.Web.Services
                 writer.WriteLine("ID,Applicant,Position,Status,AppliedDate,Score");
                 foreach (var app in applications)
                 {
-                    writer.WriteLine(string.Format("{0},{1},{2},{3},{4:yyyy-MM-dd},{5}", app.Id, app.Applicant.FullName, app.Position.Title, app.Status, app.AppliedOn, app.Score));
+                    var applicantName = app.Applicant != null ? app.Applicant.FullName : "Unknown";
+                    var positionTitle = app.Position != null ? app.Position.Title : "Unknown";
+                    writer.WriteLine(string.Format("{0},{1},{2},{3},{4:yyyy-MM-dd},{5}", app.Id, applicantName, positionTitle, app.Status, app.AppliedOn, app.Score));
                 }
             }
         }
@@ -459,19 +496,7 @@ namespace HR.Web.Services
 
             foreach (var a in applications)
             {
-                var badge = "badge-warning";
-                if (a.Status == "Approved") badge = "badge-success";
-                else if (a.Status == "Rejected") badge = "badge-danger";
-
-                html += string.Format(@"
-                <tr>
-                    <td><strong>#{0}</strong></td>
-                    <td>{1}</td>
-                    <td>{2}</td>
-                    <td><span class='status-badge {3}'>{4}</span></td>
-                    <td class='date-cell'>{5:yyyy-MM-dd}</td>
-                    <td>{6}</td>
-                </tr>", a.Id, (a.Applicant != null ? a.Applicant.FullName : "N/A"), (a.Position != null ? a.Position.Title : "N/A"), badge, a.Status, a.AppliedOn, a.Score);
+                html += FormatApplicationTableRow(a);
             }
 
             html += "</tbody></table>" + GetPageFooter() + "</div></div>" + GetReportFooter();
@@ -507,7 +532,15 @@ namespace HR.Web.Services
                         <p>Scheduled candidate assessments and feedback</p>
                     </div>";
             html += GetReportMeta(generatedBy, "RPT-INT-" + DateTime.Now.ToString("yyyyMMdd"));
-            html += string.Format(@"
+            html += BuildInterviewStatsHtml(interviews);
+            html += BuildInterviewTableHtml(interviews);
+            html += GetReportFooter();
+            return html;
+        }
+
+        private static string BuildInterviewStatsHtml(List<Interview> interviews)
+        {
+            return string.Format(@"
                 <div class='stats-grid'>
                     <div class='stat-card-cell'>
                         <span class='stat-value' style='color:#9b59b6'>{0}</span>
@@ -518,8 +551,12 @@ namespace HR.Web.Services
                         <span class='stat-label'>Upcoming</span>
                     </div>
                 </div>", interviews.Count, interviews.Count(i => i.ScheduledAt > DateTime.Now));
+        }
 
-            html += @"<div style='padding: 0 40px 40px 40px;'>
+        private static string BuildInterviewTableHtml(List<Interview> interviews)
+        {
+            var rows = string.Concat(interviews.Select(FormatInterviewTableRow));
+            return @"<div style='padding: 0 40px 40px 40px;'>
                         <table class='report-table'>
                             <thead>
                                 <tr style='background-color:#9b59b6'>
@@ -530,22 +567,29 @@ namespace HR.Web.Services
                                     <th>Notes</th>
                                 </tr>
                             </thead>
-                            <tbody>";
+                            <tbody>" + rows + "</tbody></table>" + GetPageFooterStatic() + "</div></div>";
+        }
 
-            foreach (var i in interviews)
-            {
-                html += string.Format(@"
+        private static string FormatInterviewTableRow(Interview interview)
+        {
+            return string.Format(@"
                 <tr>
                     <td><strong>#{0}</strong></td>
                     <td>#{1}</td>
                     <td class='date-cell'>{2:yyyy-MM-dd HH:mm}</td>
                     <td>{3}</td>
                     <td>{4}</td>
-                </tr>", i.Id, i.ApplicationId, i.ScheduledAt, i.Mode, i.Notes);
-            }
+                </tr>", interview.Id, interview.ApplicationId, interview.ScheduledAt, interview.Mode, interview.Notes);
+        }
 
-            html += "</tbody></table>" + GetPageFooter() + "</div></div>" + GetReportFooter();
-            return html;
+        private static string GetPageFooterStatic()
+        {
+            return string.Format(@"
+        <div class='report-footer'>
+            <p><strong>{1}</strong></p>
+            <p>This is a system-generated confidential document.</p>
+            <p>&copy; {0} {2}. All rights reserved.</p>
+        </div>", DateTime.Now.Year, HR.Web.Helpers.AppConfig.ProductName, HR.Web.Helpers.AppConfig.PublisherName);
         }
 
         private void GenerateDepartmentCSV(List<Department> departments, string filePath)
@@ -710,6 +754,42 @@ namespace HR.Web.Services
 
             html += "</tbody></table>" + GetPageFooter() + "</div></div>" + GetReportFooter();
             return html;
+        }
+
+        private static string FormatApplicationTableRow(Application application)
+        {
+            var badge = GetApplicationStatusBadgeClass(application.Status);
+            return string.Format(@"
+                <tr>
+                    <td><strong>#{0}</strong></td>
+                    <td>{1}</td>
+                    <td>{2}</td>
+                    <td><span class='status-badge {3}'>{4}</span></td>
+                    <td class='date-cell'>{5:yyyy-MM-dd}</td>
+                    <td>{6}</td>
+                </tr>",
+                application.Id,
+                application.Applicant != null ? application.Applicant.FullName : "N/A",
+                application.Position != null ? application.Position.Title : "N/A",
+                badge,
+                application.Status,
+                application.AppliedOn,
+                application.Score);
+        }
+
+        private static string GetApplicationStatusBadgeClass(string status)
+        {
+            if (status == "Approved")
+            {
+                return "badge-success";
+            }
+
+            if (status == "Rejected")
+            {
+                return "badge-danger";
+            }
+
+            return "badge-warning";
         }
 
         public List<Report> GetActiveReports()

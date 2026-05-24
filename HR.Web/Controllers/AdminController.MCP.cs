@@ -14,7 +14,7 @@ namespace HR.Web.Controllers
     /// <summary>
     /// Dynamic Question Generation Controller - Replaces MCP server
     /// </summary>
-    public partial class AdminController : Controller
+    public partial class AdminController
     {
         private readonly DynamicQuestionService _questionService = new DynamicQuestionService();
 

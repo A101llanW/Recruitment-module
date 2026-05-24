@@ -26,35 +26,63 @@ namespace HR.Web.Services
         /// </summary>
         public int? GetCurrentUserCompanyId()
         {
-            if (HttpContext.Current == null) return null;
-
-            // 1. If impersonating, return the impersonated company ID
-            if (IsImpersonating())
+            if (HttpContext.Current == null)
             {
-                var session = HttpContext.Current.Session;
-                return session != null ? (int?)session["ImpersonatedCompanyId"] : null;
+                return null;
             }
 
-            // 2. If authenticated, use the CompanyId we stored in Global.asax (from auth ticket)
-            if (HttpContext.Current.User != null && HttpContext.Current.User.Identity.IsAuthenticated)
+            int? impersonatedCompanyId;
+            if (TryGetImpersonatedCompanyId(out impersonatedCompanyId))
             {
-                if (HttpContext.Current.Items.Contains("AuthenticatedCompanyId"))
-                {
-                    return (int?)HttpContext.Current.Items["AuthenticatedCompanyId"];
-                }
-                
-                // If it's not in Items yet (e.g. during the auth process itself), 
-                // we might need to look it up, but only as a fallback.
-                // However, for SuperAdmins, null is the correct return value.
+                return impersonatedCompanyId;
             }
 
-            // 3. Fallback to URL-based context
-            if (HttpContext.Current.Items.Contains("TenantContext"))
+            int? authenticatedCompanyId;
+            if (TryGetAuthenticatedUserCompanyId(out authenticatedCompanyId))
             {
-                return (int?)HttpContext.Current.Items["TenantContext"];
+                return authenticatedCompanyId;
             }
 
-            return null;
+            int? tenantContextId;
+            return TryGetContextItemInt("TenantContext", out tenantContextId) ? tenantContextId : null;
+        }
+
+        private bool TryGetImpersonatedCompanyId(out int? companyId)
+        {
+            companyId = null;
+            if (!IsImpersonating())
+            {
+                return false;
+            }
+
+            var session = HttpContext.Current.Session;
+            companyId = session != null ? (int?)session["ImpersonatedCompanyId"] : null;
+            return true;
+        }
+
+        private static bool TryGetAuthenticatedUserCompanyId(out int? companyId)
+        {
+            companyId = null;
+            if (HttpContext.Current == null ||
+                HttpContext.Current.User == null ||
+                !HttpContext.Current.User.Identity.IsAuthenticated)
+            {
+                return false;
+            }
+
+            return TryGetContextItemInt("AuthenticatedCompanyId", out companyId);
+        }
+
+        private static bool TryGetContextItemInt(string key, out int? value)
+        {
+            value = null;
+            if (HttpContext.Current == null || !HttpContext.Current.Items.Contains(key))
+            {
+                return false;
+            }
+
+            value = (int?)HttpContext.Current.Items[key];
+            return true;
         }
 
         /// <summary>
@@ -75,16 +103,18 @@ namespace HR.Web.Services
         public bool IsActualSuperAdmin()
         {
             if (HttpContext.Current == null || HttpContext.Current.User == null || !HttpContext.Current.User.Identity.IsAuthenticated)
+            {
                 return false;
+            }
 
-            // Use the role check directly against the principal
             if (HttpContext.Current.User.IsInRole("SuperAdmin"))
+            {
                 return true;
+            }
 
-            // Special case: "Admin" role with no CompanyId is also a SuperAdmin
-            // Check context items directly to avoid recursion with GetCurrentUserCompanyId()
-            bool hasCompany = HttpContext.Current.Items.Contains("AuthenticatedCompanyId") && HttpContext.Current.Items["AuthenticatedCompanyId"] != null;
-            
+            bool hasCompany = HttpContext.Current.Items.Contains("AuthenticatedCompanyId") &&
+                              HttpContext.Current.Items["AuthenticatedCompanyId"] != null;
+
             return !hasCompany && HttpContext.Current.User.IsInRole("Admin");
         }
 
@@ -99,12 +129,25 @@ namespace HR.Web.Services
             }
 
             if (HttpContext.Current == null || HttpContext.Current.User == null || !HttpContext.Current.User.Identity.IsAuthenticated)
+            {
                 return null;
+            }
 
-            if (HttpContext.Current.User.IsInRole("SuperAdmin")) return "SuperAdmin";
-            if (HttpContext.Current.User.IsInRole("Admin")) return "Admin";
-            if (HttpContext.Current.User.IsInRole("Client")) return "Client";
-            
+            if (HttpContext.Current.User.IsInRole("SuperAdmin"))
+            {
+                return "SuperAdmin";
+            }
+
+            if (HttpContext.Current.User.IsInRole("Admin"))
+            {
+                return "Admin";
+            }
+
+            if (HttpContext.Current.User.IsInRole("Client"))
+            {
+                return "Client";
+            }
+
             return "Client";
         }
 
@@ -126,11 +169,20 @@ namespace HR.Web.Services
         public IQueryable<T> ApplyTenantFilter<T>(IQueryable<T> query) where T : class, ITenantEntity
         {
             if (IsSuperAdmin())
-                return query; // SuperAdmin sees all
+            {
+                return query;
+            }
 
             var companyId = GetCurrentUserCompanyId();
+            return FilterByCompanyId(query, companyId);
+        }
+
+        private static IQueryable<T> FilterByCompanyId<T>(IQueryable<T> query, int? companyId) where T : class, ITenantEntity
+        {
             if (!companyId.HasValue)
-                return query.Where(e => false); // No company = no data
+            {
+                return query.Where(e => false);
+            }
 
             return query.Where(e => e.CompanyId == companyId.Value);
         }
@@ -144,42 +196,39 @@ namespace HR.Web.Services
         public IQueryable<T> ApplyPublicTenantFilter<T>(IQueryable<T> query) where T : class, ITenantEntity
         {
             if (IsSuperAdmin())
+            {
                 return query;
+            }
 
             if (HttpContext.Current == null || HttpContext.Current.User == null || !HttpContext.Current.User.Identity.IsAuthenticated)
             {
-                // Anonymous access - use URL-based tenant context
-                if (HttpContext.Current != null && HttpContext.Current.Items.Contains("TenantContext"))
-                {
-                    var tenantId = (int?)HttpContext.Current.Items["TenantContext"];
-                    if (tenantId.HasValue)
-                    {
-                        return query.Where(e => e.CompanyId == tenantId.Value);
-                    }
-                }
-                // Anonymous access with no tenant context - show only from active companies
-                return query.Where(e => e.Company != null && e.Company.IsActive);
+                return ApplyAnonymousPublicTenantFilter(query);
             }
 
-            // For authenticated users, prioritize their actual company over URL context
             var companyId = GetCurrentUserCompanyId();
             if (companyId.HasValue)
             {
-                // Authenticated user belongs to a specific company
-                return query.Where(e => e.CompanyId == companyId.Value);
+                return FilterByCompanyId(query, companyId);
             }
 
-            // Fallback to URL-based tenant context only if user has no company
-            if (HttpContext.Current != null && HttpContext.Current.Items.Contains("TenantContext"))
+            int? tenantContextId;
+            if (TryGetContextItemInt("TenantContext", out tenantContextId))
             {
-                var tenantId = (int?)HttpContext.Current.Items["TenantContext"];
-                if (tenantId.HasValue)
-                {
-                    return query.Where(e => e.CompanyId == tenantId.Value);
-                }
+                return FilterByCompanyId(query, tenantContextId);
             }
 
-            return query.Where(e => false); // No company = no data
+            return query.Where(e => false);
+        }
+
+        private static IQueryable<T> ApplyAnonymousPublicTenantFilter<T>(IQueryable<T> query) where T : class, ITenantEntity
+        {
+            int? tenantId;
+            if (TryGetContextItemInt("TenantContext", out tenantId))
+            {
+                return FilterByCompanyId(query, tenantId);
+            }
+
+            return query.Where(e => e.Company != null && e.Company.IsActive);
         }
 
         /// <summary>
@@ -189,13 +238,19 @@ namespace HR.Web.Services
         {
             var company = _uow.Companies.Get(companyId);
             if (company == null)
-                return true; // Missing != Expired
-            
+            {
+                return true;
+            }
+
             if (!company.IsActive)
+            {
                 return false;
+            }
 
             if (company.LicenseExpiryDate.HasValue && company.LicenseExpiryDate.Value < DateTime.Now)
+            {
                 return false;
+            }
 
             return true;
         }
@@ -207,7 +262,9 @@ namespace HR.Web.Services
         {
             var companyId = GetCurrentUserCompanyId();
             if (!companyId.HasValue)
-                return IsSuperAdmin(); // SuperAdmin always active
+            {
+                return IsSuperAdmin();
+            }
 
             return IsCompanyLicenseActive(companyId.Value);
         }
@@ -218,7 +275,9 @@ namespace HR.Web.Services
         public Company GetCompany(int id)
         {
             if (!IsSuperAdmin())
+            {
                 throw new UnauthorizedAccessException("Only SuperAdmin can access company details.");
+            }
 
             return _uow.Companies.Get(id);
         }
@@ -229,7 +288,9 @@ namespace HR.Web.Services
         public IQueryable<Company> GetAllCompanies()
         {
             if (!IsSuperAdmin())
+            {
                 throw new UnauthorizedAccessException("Only SuperAdmin can list companies.");
+            }
 
             return _uow.Context.Companies.AsQueryable();
         }
@@ -240,18 +301,21 @@ namespace HR.Web.Services
         public Company CreateCompany(string name, DateTime? licenseExpiry, string customSlug = null)
         {
             if (!IsSuperAdmin())
-                throw new UnauthorizedAccessException("Only SuperAdmin can create companies.");
-
-            // Auto-generate slug from company name if not provided
-            string slug = customSlug;
-            if (string.IsNullOrWhiteSpace(slug))
             {
-                slug = GenerateSlugFromName(name);
+                throw new UnauthorizedAccessException("Only SuperAdmin can create companies.");
             }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new ArgumentException("Company name is required.");
+            }
+
+            var companyName = name;
+            string slug = string.IsNullOrWhiteSpace(customSlug) ? GenerateSlugFromName(companyName) : customSlug;
 
             var company = new Company
             {
-                Name = name,
+                Name = companyName,
                 Slug = slug,
                 AccessToken = Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper(), // Secure URL token
                 IsActive = true,
@@ -273,18 +337,23 @@ namespace HR.Web.Services
         /// </summary>
         private void CreateCompanyAdmin(Company company)
         {
-            // Generate default admin credentials
-            string adminUsername = GenerateAdminUsername(company.Name);
+            if (company == null)
+            {
+                return;
+            }
+
+            var scopedCompany = company;
+            string adminUsername = GenerateAdminUsername(scopedCompany.Name);
             string defaultPassword = GenerateDefaultPassword();
 
             var adminUser = new User
             {
                 UserName = adminUsername,
                 FirstName = "Admin",
-                LastName = company.Name.Length > 100 ? company.Name.Substring(0, 100) : company.Name,
+                LastName = scopedCompany.Name.Length > 100 ? scopedCompany.Name.Substring(0, 100) : scopedCompany.Name,
                 Email = string.Format("PENDING_{0}@hrsystem.local", Guid.NewGuid().ToString("N").Substring(0, 8)), // Setup required on first login
                 Role = "Admin",
-                CompanyId = company.Id,
+                CompanyId = scopedCompany.Id,
                 PasswordHash = PasswordHelper.HashPassword(defaultPassword),
                 RequirePasswordChange = false
             };
@@ -298,36 +367,50 @@ namespace HR.Web.Services
         /// </summary>
         private string GenerateAdminUsername(string companyName)
         {
-            var baseName = companyName.ToLower()
-                .Replace(" ", "")
-                .Replace("&", "and")
-                .Replace(".", "")
-                .Replace(",", "")
-                .Replace("!", "")
-                .Replace("?", "")
-                .Replace("'", "")
-                .Replace("\"", "")
-                .Replace("/", "")
-                .Replace("\\", "")
-                .Replace("(", "")
-                .Replace(")", "")
-                .Replace("[", "")
-                .Replace("]", "")
-                .Replace("{", "")
-                .Replace("}", "")
-                .Replace("|", "");
+            var baseName = SanitizeCompanyNameForUsername(companyName ?? "company");
 
-            // Limit to reasonable length and add admin suffix
             if (baseName.Length > 15)
+            {
                 baseName = baseName.Substring(0, 15);
+            }
 
-            string username = baseName + "admin";
-            
-            // Ensure username is unique
+            return EnsureUniqueUsername(baseName + "admin");
+        }
+
+        private static string SanitizeCompanyNameForUsername(string companyName)
+        {
+            if (string.IsNullOrWhiteSpace(companyName))
+            {
+                return "company";
+            }
+
+            return companyName.ToLower()
+                .Replace(" ", string.Empty)
+                .Replace("&", "and")
+                .Replace(".", string.Empty)
+                .Replace(",", string.Empty)
+                .Replace("!", string.Empty)
+                .Replace("?", string.Empty)
+                .Replace("'", string.Empty)
+                .Replace("\"", string.Empty)
+                .Replace("/", string.Empty)
+                .Replace("\\", string.Empty)
+                .Replace("(", string.Empty)
+                .Replace(")", string.Empty)
+                .Replace("[", string.Empty)
+                .Replace("]", string.Empty)
+                .Replace("{", string.Empty)
+                .Replace("}", string.Empty)
+                .Replace("|", string.Empty);
+        }
+
+        private string EnsureUniqueUsername(string baseUsername)
+        {
+            string username = baseUsername;
             int counter = 1;
             while (_uow.Users.GetAll().Any(u => u.UserName.Equals(username, StringComparison.OrdinalIgnoreCase)))
             {
-                username = baseName + "admin" + counter;
+                username = baseUsername + counter;
                 counter++;
             }
 
@@ -348,34 +431,47 @@ namespace HR.Web.Services
         private string GenerateSlugFromName(string name)
         {
             if (string.IsNullOrWhiteSpace(name))
+            {
                 return "company-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            }
 
-            // Generate access token style slug (e.g., A0809273)
+            var slug = GenerateRandomAccessTokenSlug();
+            return EnsureUniqueSlug(slug);
+        }
+
+        private static string GenerateRandomAccessTokenSlug()
+        {
             var bytes = new byte[9];
             using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
             {
                 rng.GetBytes(bytes);
             }
 
-            string letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-            string numbers = "0123456789";
-            
-            string slug = letters[bytes[0] % letters.Length].ToString();
+            const string letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            const string numbers = "0123456789";
+
+            var slug = letters[bytes[0] % letters.Length].ToString();
             for (int i = 1; i < 9; i++)
             {
                 slug += numbers[bytes[i] % numbers.Length].ToString();
             }
 
-            // Ensure slug is unique
+            return slug;
+        }
+
+        private string EnsureUniqueSlug(string slug)
+        {
             var originalSlug = slug;
             int counter = 1;
             while (_uow.Companies.GetAll().Any(c => c.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase)))
             {
                 slug = originalSlug + "-" + counter;
                 counter++;
-                
+
                 if (slug.Length > 50)
+                {
                     slug = originalSlug.Substring(0, Math.Max(0, 50 - (counter.ToString().Length + 1))) + "-" + counter;
+                }
             }
 
             return slug;
@@ -387,17 +483,25 @@ namespace HR.Web.Services
         public void UpdateCompanyLicense(int companyId, DateTime? newExpiryDate, bool? isActive)
         {
             if (!IsSuperAdmin())
+            {
                 throw new UnauthorizedAccessException("Only SuperAdmin can update licenses.");
+            }
 
             var company = _uow.Companies.Get(companyId);
             if (company == null)
+            {
                 throw new ArgumentException("Company not found.");
+            }
 
             if (newExpiryDate.HasValue)
+            {
                 company.LicenseExpiryDate = newExpiryDate.Value;
+            }
 
             if (isActive.HasValue)
+            {
                 company.IsActive = isActive.Value;
+            }
 
             _uow.Companies.Update(company);
             _uow.Complete();

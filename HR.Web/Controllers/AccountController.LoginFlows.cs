@@ -41,17 +41,17 @@ namespace HR.Web.Controllers
             public string TenantSlug { get; set; }
         }
 
-        private ActionResult HandleLoginPost(string username, string password, string captcha, string role, string returnUrl)
+        private ActionResult HandleLoginPost(string username, string password, string captcha, string role, string returnPath)
         {
             _ = role;
             username = username ?? string.Empty;
             password = password ?? string.Empty;
             captcha = captcha ?? string.Empty;
-            returnUrl = returnUrl ?? string.Empty;
+            returnPath = returnPath ?? string.Empty;
 
             try
             {
-                var request = BuildLoginRequest(username, password, captcha, returnUrl);
+                var request = BuildLoginRequest(username, password, captcha, returnPath);
                 var targetCompanyId = ResolveTargetCompanyId(request.UrlTenantToken);
 
                 var captchaFailure = ValidateSubmittedCaptcha(request);
@@ -102,10 +102,10 @@ namespace HR.Web.Controllers
             }
         }
 
-        private LoginRequestModel BuildLoginRequest(string username, string password, string captcha, string returnUrl)
+        private LoginRequestModel BuildLoginRequest(string username, string password, string captcha, string returnPath)
         {
             var urlTenantToken = RouteData.Values["tenant"] as string;
-            LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedReturnUrl);
+            LocalReturnUrlHelper.TryParseLocalReturnUri(returnPath, Url, out var parsedReturnUrl);
 
             return new LoginRequestModel
             {
@@ -165,35 +165,36 @@ namespace HR.Web.Controllers
             Session.Remove("CaptchaId");
         }
 
-        private ActionResult BuildCaptchaFailureResult(string message, Uri returnUrl)
+        private ActionResult BuildCaptchaFailureResult(string message, Uri returnUri)
         {
             ModelState.AddModelError("", message);
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(returnUrl);
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
             ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(RouteData.Values["tenant"] as string);
             return View();
         }
 
-        private ActionResult BuildCaptchaFailureResult(string message, string returnUrl)
-        {
-            LocalReturnUrlHelper.TryParseLocalReturnUri(returnUrl, Url, out var parsedReturnUrl);
-            return BuildCaptchaFailureResult(message, parsedReturnUrl);
-        }
-
         private ActionResult ValidateLoginInputs(LoginRequestModel request, int? targetCompanyId)
         {
-            if (string.IsNullOrWhiteSpace(request.Username))
+            if (request == null)
             {
-                return BuildMissingCredentialResult("Username is required.", request, targetCompanyId, "Username required");
+                ModelState.AddModelError("", "Invalid login request.");
+                return View();
             }
 
-            if (string.IsNullOrWhiteSpace(request.Password))
+            var loginRequest = request;
+            if (string.IsNullOrWhiteSpace(loginRequest.Username))
             {
-                return BuildMissingCredentialResult("Password is required.", request, targetCompanyId, "Password required");
+                return BuildMissingCredentialResult("Username is required.", loginRequest, targetCompanyId, "Username required");
             }
 
-            request.Username = request.Username.Trim();
-            request.LowerUsername = request.Username.ToLower();
-            request.IsEmailLogin = request.Username.Contains("@");
+            if (string.IsNullOrWhiteSpace(loginRequest.Password))
+            {
+                return BuildMissingCredentialResult("Password is required.", loginRequest, targetCompanyId, "Password required");
+            }
+
+            loginRequest.Username = loginRequest.Username.Trim();
+            loginRequest.LowerUsername = loginRequest.Username.ToLower();
+            loginRequest.IsEmailLogin = loginRequest.Username.Contains("@");
             return null;
         }
 
@@ -202,7 +203,7 @@ namespace HR.Web.Controllers
             ModelState.AddModelError("", message);
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, failureReason);
             AuditSvc.LogLogin(request.Username, false, failureReason);
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(request.ReturnUrl);
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
             ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
             return View();
         }
@@ -234,15 +235,26 @@ namespace HR.Web.Controllers
 
         private LoginCandidateModel DiscoverLoginCandidates(LoginRequestModel request, int? targetCompanyId)
         {
+            if (request == null)
+            {
+                return new LoginCandidateModel
+                {
+                    Candidates = new List<User>(),
+                    PrimaryUser = null,
+                    EffectiveCompanyId = targetCompanyId
+                };
+            }
+
+            var loginRequest = request;
             var discoveryQuery = _uow.Context.Users.Include(u => u.Company).AsQueryable();
             if (targetCompanyId.HasValue)
             {
                 discoveryQuery = discoveryQuery.Where(u => u.CompanyId == targetCompanyId.Value);
             }
 
-            var candidates = request.IsEmailLogin
-                ? discoveryQuery.Where(u => u.Email != null && u.Email.ToLower() == request.LowerUsername).ToList()
-                : discoveryQuery.Where(u => u.UserName != null && u.UserName.ToLower() == request.LowerUsername).ToList();
+            var candidates = loginRequest.IsEmailLogin
+                ? discoveryQuery.Where(u => u.Email != null && u.Email.ToLower() == loginRequest.LowerUsername).ToList()
+                : discoveryQuery.Where(u => u.UserName != null && u.UserName.ToLower() == loginRequest.LowerUsername).ToList();
 
             return new LoginCandidateModel
             {
@@ -287,7 +299,7 @@ namespace HR.Web.Controllers
             {
                 ViewBag.MultiCandidates = candidates;
                 ModelState.AddModelError("", "We found multiple accounts for this email. Please select the correct portal below.");
-                ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(request.ReturnUrl);
+                ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
                 ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
                 return View();
             }
@@ -319,12 +331,13 @@ namespace HR.Web.Controllers
 
         private ActionResult ValidateCompanyPortalAccessForLogin(User user)
         {
-            if (!user.CompanyId.HasValue)
+            if (user == null || !user.CompanyId.HasValue)
             {
                 return null;
             }
 
-            var company = _uow.Companies.Get(user.CompanyId.Value);
+            var companyId = user.CompanyId.Value;
+            var company = _uow.Companies.Get(companyId);
             if (company == null)
             {
                 ModelState.AddModelError("", "Your company record could not be found. Contact support.");
@@ -351,7 +364,7 @@ namespace HR.Web.Controllers
         private ActionResult BuildIdentifierNotFoundFailure(LoginRequestModel request, int? targetCompanyId)
         {
             ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.UrlTenantToken);
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(request.ReturnUrl);
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
 
             if (targetCompanyId.HasValue)
             {
@@ -460,7 +473,7 @@ namespace HR.Web.Controllers
                 StorePendingLegalLogin(request, user);
                 PopulateLegalConsentModalViewBag(request, user);
                 ConfigureLoginPortalViewBag(request);
-                ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(request.ReturnUrl);
+                ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
                 return View("Login");
             }
 
@@ -509,7 +522,7 @@ namespace HR.Web.Controllers
 
             if (request.ReturnUrl != null)
             {
-                Session[LegalConsentSession.PendingReturnUrlSession] = LocalReturnUrlHelper.ToReturnUrlString(request.ReturnUrl);
+                Session[LegalConsentSession.PendingReturnUrlSession] = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
             }
             else
             {
@@ -588,7 +601,7 @@ namespace HR.Web.Controllers
             {
                 ModelState.AddModelError("", "Please accept the Terms & Conditions and Privacy Policy to continue.");
                 PopulateLegalConsentModalViewBag(resumeRequest, user);
-                ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(resumeRequest.ReturnUrl);
+                ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(resumeRequest.ReturnUrl);
                 return View("Login");
             }
 
@@ -619,12 +632,13 @@ namespace HR.Web.Controllers
 
         private string ResolveActiveTenantSlug(User user, bool isSuperAdmin)
         {
-            if (isSuperAdmin || !user.CompanyId.HasValue)
+            if (user == null || isSuperAdmin || !user.CompanyId.HasValue)
             {
                 return null;
             }
 
-            var company = _uow.Companies.Get(user.CompanyId.Value);
+            var companyId = user.CompanyId.Value;
+            var company = _uow.Companies.Get(companyId);
             return company != null && company.IsActive ? company.Slug : null;
         }
 

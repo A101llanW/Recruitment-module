@@ -10,6 +10,11 @@ namespace HR.Web.Controllers
 {
     public partial class PositionsController
     {
+        private string GetCurrentActorName()
+        {
+            return User?.Identity?.Name ?? "System";
+        }
+
         private ActionResult HandleCreatePosition(Position model, int[] selectedQuestions, IDictionary<int, decimal> questionWeights, string questionStagesPayload)
         {
             if (_tenantService.IsSuperAdmin())
@@ -17,42 +22,49 @@ namespace HR.Web.Controllers
                 return RedirectToAction("Index");
             }
 
-            PreparePositionModelForSave(model);
-            if (model.QuestionnaireStageCount < 1)
+            if (model == null)
             {
-                model.QuestionnaireStageCount = 1;
+                ModelState.AddModelError("", "Invalid position data.");
+                return View("Create", new Position());
             }
 
-            if (model.QuestionnaireStageCount > 10)
+            var positionModel = model;
+            PreparePositionModelForSave(positionModel);
+            if (positionModel.QuestionnaireStageCount < 1)
             {
-                model.QuestionnaireStageCount = 10;
+                positionModel.QuestionnaireStageCount = 1;
             }
 
-            var stagesDict = ParseQuestionStages(questionStagesPayload, selectedQuestions, model.QuestionnaireStageCount);
-            var stageConfigError = ValidateQuestionnaireStageConfiguration(model.QuestionnaireStageCount, selectedQuestions, stagesDict);
+            if (positionModel.QuestionnaireStageCount > 10)
+            {
+                positionModel.QuestionnaireStageCount = 10;
+            }
+
+            var stagesDict = ParseQuestionStages(questionStagesPayload, selectedQuestions, positionModel.QuestionnaireStageCount);
+            var stageConfigError = ValidateQuestionnaireStageConfiguration(positionModel.QuestionnaireStageCount, selectedQuestions, stagesDict);
             if (!string.IsNullOrEmpty(stageConfigError))
             {
                 ModelState.AddModelError("", stageConfigError);
             }
 
-            LogPositionFormState("Create", model);
+            LogPositionFormState("Create", positionModel);
 
             if (!ModelState.IsValid)
             {
-                return ReturnCreateValidationFailure(model, selectedQuestions, questionWeights, stagesDict);
+                return ReturnCreateValidationFailure(positionModel, selectedQuestions, questionWeights, stagesDict);
             }
 
-            model.PostedOn = DateTime.UtcNow;
-            EnsurePositionCurrency(model);
-            ApplyExpiryStatus(model);
+            positionModel.PostedOn = DateTime.UtcNow;
+            EnsurePositionCurrency(positionModel);
+            ApplyExpiryStatus(positionModel);
 
-            var saveResult = TrySaveNewPosition(model, selectedQuestions, questionWeights, stagesDict);
+            var saveResult = TrySaveNewPosition(positionModel, selectedQuestions, questionWeights, stagesDict);
             if (saveResult != null)
             {
                 return saveResult;
             }
 
-            LinkSelectedQuestionsToPosition(model.Id, selectedQuestions, questionWeights, stagesDict);
+            LinkSelectedQuestionsToPosition(positionModel.Id, selectedQuestions, questionWeights, stagesDict);
             TempData["Message"] = "Position created successfully.";
             Debug.WriteLine("[PositionsController.Create][POST] Redirecting to Index.");
             return RedirectToAction("Index");
@@ -60,50 +72,69 @@ namespace HR.Web.Controllers
 
         private void PreparePositionModelForSave(Position model)
         {
-            NormalizeOptionalSalaryFields(model);
-            AssignPositionCompany(model);
-            ValidatePositionDepartment(model);
-            ValidatePositionType(model);
-        }
-
-        private void NormalizeOptionalSalaryFields(Position model)
-        {
-            if (Request?.Form == null)
+            if (model == null)
             {
                 return;
             }
 
+            var positionModel = model;
+            NormalizeOptionalSalaryFields(positionModel);
+            AssignPositionCompany(positionModel);
+            ValidatePositionDepartment(positionModel);
+            ValidatePositionType(positionModel);
+        }
+
+        private void NormalizeOptionalSalaryFields(Position model)
+        {
+            if (model == null || Request?.Form == null)
+            {
+                return;
+            }
+
+            var positionModel = model;
             var minRaw = Request.Form["SalaryMin"];
             var maxRaw = Request.Form["SalaryMax"];
 
             if (string.IsNullOrWhiteSpace(minRaw))
             {
-                model.SalaryMin = null;
+                positionModel.SalaryMin = null;
                 ClearModelStateErrors("SalaryMin");
             }
 
             if (string.IsNullOrWhiteSpace(maxRaw))
             {
-                model.SalaryMax = null;
+                positionModel.SalaryMax = null;
                 ClearModelStateErrors("SalaryMax");
             }
         }
 
         private void AssignPositionCompany(Position model)
         {
+            if (model == null)
+            {
+                return;
+            }
+
+            var positionModel = model;
             var companyId = _tenantService.GetCurrentUserCompanyId();
             if (!companyId.HasValue)
             {
                 return;
             }
 
-            model.CompanyId = companyId.Value;
+            positionModel.CompanyId = companyId.Value;
             ClearModelStateErrors("CompanyId");
         }
 
         private void ValidatePositionDepartment(Position model)
         {
-            if (model.DepartmentId <= 0)
+            if (model == null)
+            {
+                return;
+            }
+
+            var positionModel = model;
+            if (positionModel.DepartmentId <= 0)
             {
                 ModelState.AddModelError("DepartmentId", "Please select a department.");
                 return;
@@ -114,7 +145,13 @@ namespace HR.Web.Controllers
 
         private void ValidatePositionType(Position model)
         {
-            if (!model.IsTechnical.HasValue)
+            if (model == null)
+            {
+                return;
+            }
+
+            var positionModel = model;
+            if (!positionModel.IsTechnical.HasValue)
             {
                 ModelState.AddModelError("IsTechnical", "Please specify whether this role is technical or non-technical.");
                 return;
@@ -125,9 +162,15 @@ namespace HR.Web.Controllers
 
         private void ClearModelStateErrors(string key)
         {
-            if (ModelState.ContainsKey(key))
+            if (!ModelState.ContainsKey(key))
             {
-                ModelState[key].Errors.Clear();
+                return;
+            }
+
+            var entry = ModelState[key];
+            if (entry != null)
+            {
+                entry.Errors.Clear();
             }
         }
 
@@ -153,17 +196,28 @@ namespace HR.Web.Controllers
 
         private ActionResult ReturnCreateValidationFailure(Position model, int[] selectedQuestions, IDictionary<int, decimal> questionWeights, IDictionary<int, int> questionStages = null)
         {
+            if (model == null)
+            {
+                return View("Create", new Position());
+            }
+
+            var positionModel = model;
             LogModelStateErrors("Create");
             var selectedIds = selectedQuestions != null ? selectedQuestions.ToList() : new List<int>();
-            LoadPositionFormLookups(model.DepartmentId, selectedIds, questionWeights, questionStages);
+            LoadPositionFormLookups(positionModel.DepartmentId, selectedIds, questionWeights, questionStages);
             Debug.WriteLine("[PositionsController.Create][POST] Returning view due to invalid ModelState.");
-            return View("Create", model);
+            return View("Create", positionModel);
         }
 
         private void LogModelStateErrors(string actionName)
         {
             foreach (var kvp in ModelState)
             {
+                if (kvp.Value == null)
+                {
+                    continue;
+                }
+
                 foreach (var err in kvp.Value.Errors)
                 {
                     Debug.WriteLine(
@@ -198,46 +252,60 @@ namespace HR.Web.Controllers
 
         private ActionResult TrySaveNewPosition(Position model, int[] selectedQuestions, IDictionary<int, decimal> questionWeights, IDictionary<int, int> questionStages)
         {
+            if (model == null)
+            {
+                ModelState.AddModelError("", "Invalid position data.");
+                return View("Create", new Position());
+            }
+
+            var positionModel = model;
             try
             {
                 Debug.WriteLine("[PositionsController.Create][POST] Adding position to UoW and saving...");
-                _uow.Positions.Add(model);
+                _uow.Positions.Add(positionModel);
                 _uow.Complete();
-                Debug.WriteLine("[PositionsController.Create][POST] Save succeeded. New Id=" + model.Id);
+                Debug.WriteLine("[PositionsController.Create][POST] Save succeeded. New Id=" + positionModel.Id);
 
                 _auditService.LogCreate(
-                    User.Identity.Name,
+                    GetCurrentActorName(),
                     "Positions",
-                    model.Id.ToString(),
+                    positionModel.Id.ToString(),
                     new
                     {
-                        Title = model.Title,
-                        Description = model.Description,
-                        Responsibilities = model.Responsibilities,
-                        Qualifications = model.Qualifications,
-                        DepartmentId = model.DepartmentId,
-                        Location = model.Location,
-                        PassMark = model.PassMark,
-                        IsOpen = model.IsOpen,
-                        PostedOn = model.PostedOn,
-                        ExpiryDate = model.ExpiryDate
+                        Title = positionModel.Title,
+                        Description = positionModel.Description,
+                        Responsibilities = positionModel.Responsibilities,
+                        Qualifications = positionModel.Qualifications,
+                        DepartmentId = positionModel.DepartmentId,
+                        Location = positionModel.Location,
+                        PassMark = positionModel.PassMark,
+                        IsOpen = positionModel.IsOpen,
+                        PostedOn = positionModel.PostedOn,
+                        ExpiryDate = positionModel.ExpiryDate
                     });
 
                 return null;
             }
             catch (Exception ex)
             {
-                return ReturnCreateSaveFailure(model, selectedQuestions, questionWeights, questionStages, ex);
+                return ReturnCreateSaveFailure(positionModel, selectedQuestions, questionWeights, questionStages, ex);
             }
         }
 
         private ActionResult ReturnCreateSaveFailure(Position model, int[] selectedQuestions, IDictionary<int, decimal> questionWeights, IDictionary<int, int> questionStages, Exception ex)
         {
+            if (model == null)
+            {
+                ModelState.AddModelError("", "Unable to save position.");
+                return View("Create", new Position());
+            }
+
+            var positionModel = model;
             Debug.WriteLine("[PositionsController.Create][POST] Exception during save: " + ex);
             var message = ex.GetBaseException() != null ? ex.GetBaseException().Message : ex.Message;
 
             _auditService.LogAction(
-                User.Identity.Name,
+                GetCurrentActorName(),
                 "CREATE",
                 "Positions",
                 "new",
@@ -246,9 +314,9 @@ namespace HR.Web.Controllers
 
             ModelState.AddModelError("", "Unable to save position: " + message);
             var selectedIds = selectedQuestions != null ? selectedQuestions.ToList() : new List<int>();
-            LoadPositionFormLookups(model.DepartmentId, selectedIds, questionWeights, questionStages);
+            LoadPositionFormLookups(positionModel.DepartmentId, selectedIds, questionWeights, questionStages);
             Debug.WriteLine("[PositionsController.Create][POST] Returning view due to exception.");
-            return View("Create", model);
+            return View("Create", positionModel);
         }
 
         private void LinkSelectedQuestionsToPosition(int positionId, int[] selectedQuestions, IDictionary<int, decimal> questionWeights, IDictionary<int, int> questionStages)
@@ -289,7 +357,7 @@ namespace HR.Web.Controllers
             _uow.Complete();
             Debug.WriteLine("[PositionsController.Create][POST] Linked " + selectedQuestionIds.Count + " questions.");
             _auditService.LogAction(
-                User.Identity.Name,
+                GetCurrentActorName(),
                 "LINK_QUESTIONS",
                 "Positions",
                 positionId.ToString(),
@@ -298,34 +366,40 @@ namespace HR.Web.Controllers
 
         private ActionResult HandleEditPosition(Position model, int[] selectedQuestions, IDictionary<int, decimal> questionWeights, string questionStagesPayload)
         {
-            PreparePositionModelForSave(model);
-            if (model.QuestionnaireStageCount < 1)
+            if (model == null)
             {
-                model.QuestionnaireStageCount = 1;
+                return HttpNotFound();
             }
 
-            if (model.QuestionnaireStageCount > 10)
+            var positionModel = model;
+            PreparePositionModelForSave(positionModel);
+            if (positionModel.QuestionnaireStageCount < 1)
             {
-                model.QuestionnaireStageCount = 10;
+                positionModel.QuestionnaireStageCount = 1;
             }
 
-            var stagesDict = ParseQuestionStages(questionStagesPayload, selectedQuestions, model.QuestionnaireStageCount);
-            var stageConfigError = ValidateQuestionnaireStageConfiguration(model.QuestionnaireStageCount, selectedQuestions, stagesDict);
+            if (positionModel.QuestionnaireStageCount > 10)
+            {
+                positionModel.QuestionnaireStageCount = 10;
+            }
+
+            var stagesDict = ParseQuestionStages(questionStagesPayload, selectedQuestions, positionModel.QuestionnaireStageCount);
+            var stageConfigError = ValidateQuestionnaireStageConfiguration(positionModel.QuestionnaireStageCount, selectedQuestions, stagesDict);
             if (!string.IsNullOrEmpty(stageConfigError))
             {
                 ModelState.AddModelError("", stageConfigError);
             }
 
-            LogPositionFormState("Edit", model);
+            LogPositionFormState("Edit", positionModel);
 
             if (!ModelState.IsValid)
             {
-                return ReturnEditValidationFailure(model, selectedQuestions, questionWeights, stagesDict);
+                return ReturnEditValidationFailure(positionModel, selectedQuestions, questionWeights, stagesDict);
             }
 
             try
             {
-                var existingPosition = _uow.Positions.Get(model.Id);
+                var existingPosition = _uow.Positions.Get(positionModel.Id);
                 if (existingPosition == null)
                 {
                     return HttpNotFound();
@@ -337,30 +411,42 @@ namespace HR.Web.Controllers
                     return tenantResult;
                 }
 
-                ApplyPositionUpdates(existingPosition, model);
-                PersistPositionUpdates(existingPosition, model.Id);
-                SyncPositionQuestions(model.Id, selectedQuestions, questionWeights, stagesDict);
+                ApplyPositionUpdates(existingPosition, positionModel);
+                PersistPositionUpdates(existingPosition, positionModel.Id);
+                SyncPositionQuestions(positionModel.Id, selectedQuestions, questionWeights, stagesDict);
                 return RedirectToAction("Index");
             }
             catch (Exception ex)
             {
-                return ReturnEditSaveFailure(model, selectedQuestions, questionWeights, stagesDict, ex);
+                return ReturnEditSaveFailure(positionModel, selectedQuestions, questionWeights, stagesDict, ex);
             }
         }
 
         private ActionResult ReturnEditValidationFailure(Position model, int[] selectedQuestions, IDictionary<int, decimal> questionWeights, IDictionary<int, int> questionStages = null)
         {
+            if (model == null)
+            {
+                return View("Edit", new Position());
+            }
+
+            var positionModel = model;
             LogModelStateErrors("Edit");
             var selectedIds = selectedQuestions != null ? selectedQuestions.ToList() : new List<int>();
-            LoadPositionFormLookups(model.DepartmentId, selectedIds, questionWeights, questionStages);
+            LoadPositionFormLookups(positionModel.DepartmentId, selectedIds, questionWeights, questionStages);
             Debug.WriteLine("[PositionsController.Edit][POST] Returning view due to invalid ModelState.");
-            return View("Edit", model);
+            return View("Edit", positionModel);
         }
 
         private ActionResult EnsurePositionTenantAccess(Position position)
         {
+            if (position == null)
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            var scopedPosition = position;
             var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && position.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            if (companyId.HasValue && scopedPosition.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
@@ -370,20 +456,26 @@ namespace HR.Web.Controllers
 
         private void ApplyPositionUpdates(Position existingPosition, Position model)
         {
-            existingPosition.Title = model.Title;
-            existingPosition.Description = model.Description;
-            existingPosition.Responsibilities = model.Responsibilities;
-            existingPosition.Qualifications = model.Qualifications;
-            existingPosition.IsTechnical = model.IsTechnical;
-            existingPosition.SalaryMin = model.SalaryMin;
-            existingPosition.SalaryMax = model.SalaryMax;
-            existingPosition.DepartmentId = model.DepartmentId;
-            existingPosition.IsOpen = model.IsOpen;
-            existingPosition.ExpiryDate = model.ExpiryDate;
-            existingPosition.PassMark = model.PassMark;
-            existingPosition.QuestionnaireStageCount = model.QuestionnaireStageCount;
-            existingPosition.Currency = !string.IsNullOrEmpty(model.Currency)
-                ? model.Currency
+            if (existingPosition == null || model == null)
+            {
+                return;
+            }
+
+            var sourceModel = model;
+            existingPosition.Title = sourceModel.Title;
+            existingPosition.Description = sourceModel.Description;
+            existingPosition.Responsibilities = sourceModel.Responsibilities;
+            existingPosition.Qualifications = sourceModel.Qualifications;
+            existingPosition.IsTechnical = sourceModel.IsTechnical;
+            existingPosition.SalaryMin = sourceModel.SalaryMin;
+            existingPosition.SalaryMax = sourceModel.SalaryMax;
+            existingPosition.DepartmentId = sourceModel.DepartmentId;
+            existingPosition.IsOpen = sourceModel.IsOpen;
+            existingPosition.ExpiryDate = sourceModel.ExpiryDate;
+            existingPosition.PassMark = sourceModel.PassMark;
+            existingPosition.QuestionnaireStageCount = sourceModel.QuestionnaireStageCount;
+            existingPosition.Currency = !string.IsNullOrEmpty(sourceModel.Currency)
+                ? sourceModel.Currency
                 : string.IsNullOrEmpty(existingPosition.Currency) ? "KES" : existingPosition.Currency;
             ApplyExpiryStatus(existingPosition);
         }
@@ -519,14 +611,21 @@ namespace HR.Web.Controllers
 
         private ActionResult ReturnEditSaveFailure(Position model, int[] selectedQuestions, IDictionary<int, decimal> questionWeights, IDictionary<int, int> questionStages, Exception ex)
         {
+            if (model == null)
+            {
+                ModelState.AddModelError("", "Unable to save position.");
+                return View("Edit", new Position());
+            }
+
+            var positionModel = model;
             Debug.WriteLine("[PositionsController.Edit][POST] Exception during save: " + ex);
             var msg = ex.GetBaseException() != null ? ex.GetBaseException().Message : ex.Message;
             ModelState.AddModelError("", "Unable to save position: " + msg);
 
             var selectedIds = selectedQuestions != null ? selectedQuestions.ToList() : new List<int>();
-            LoadPositionFormLookups(model.DepartmentId, selectedIds, questionWeights, questionStages);
+            LoadPositionFormLookups(positionModel.DepartmentId, selectedIds, questionWeights, questionStages);
             Debug.WriteLine("[PositionsController.Edit][POST] Returning view due to exception.");
-            return View("Edit", model);
+            return View("Edit", positionModel);
         }
 
         private ActionResult HandleDeletePosition(int id)
@@ -615,7 +714,7 @@ namespace HR.Web.Controllers
         private void LogPositionDeletionSuccess(int positionId, string positionTitle, int applicationCount)
         {
             _auditService.LogAction(
-                User.Identity.Name,
+                GetCurrentActorName(),
                 "DELETE_POSITION",
                 "Position",
                 positionId.ToString(),
@@ -625,7 +724,7 @@ namespace HR.Web.Controllers
         private void LogPositionDeletionError(int positionId, Exception ex)
         {
             _auditService.LogAction(
-                User.Identity.Name,
+                GetCurrentActorName(),
                 "DELETE_POSITION_ERROR",
                 "Position",
                 positionId.ToString(),

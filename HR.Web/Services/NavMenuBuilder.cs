@@ -12,7 +12,7 @@ namespace HR.Web.Services
     public sealed class NavMenuItemModel
     {
         public string Label { get; set; }
-        public string Url { get; set; }
+        public Uri Url { get; set; }
         public string IconClass { get; set; }
         public bool IsActive { get; set; }
     }
@@ -28,10 +28,10 @@ namespace HR.Web.Services
 
     public sealed class NavBrandModel
     {
-        public string Url { get; set; }
+        public Uri Url { get; set; }
         public string Title { get; set; }
         public string Subtitle { get; set; }
-        public string LogoUrl { get; set; }
+        public Uri LogoUrl { get; set; }
         public bool IsTenantBranded { get; set; }
     }
 
@@ -54,14 +54,14 @@ namespace HR.Web.Services
         public bool UseGroupedMenus { get; set; }
         public bool ShowImpersonationChip { get; set; }
         public string ImpersonatedCompanyName { get; set; }
-        public string StopImpersonatingUrl { get; set; }
+        public Uri StopImpersonatingUrl { get; set; }
         public string TenantToken { get; set; }
         public bool IsAuthenticated { get; set; }
-        public string LoginUrl { get; set; }
-        public string RegisterUrl { get; set; }
-        public string ProfileUrl { get; set; }
-        public string ChangePasswordUrl { get; set; }
-        public string LogoutUrl { get; set; }
+        public Uri LoginUrl { get; set; }
+        public Uri RegisterUrl { get; set; }
+        public Uri ProfileUrl { get; set; }
+        public Uri ChangePasswordUrl { get; set; }
+        public Uri LogoutUrl { get; set; }
     }
 
     public class NavMenuBuilder
@@ -89,11 +89,13 @@ namespace HR.Web.Services
         {
             var url = new MvcUrlHelper(requestContext);
             var user = httpContext?.User;
-            bool isAuthenticated = user != null && user.Identity != null && user.Identity.IsAuthenticated;
+            var session = httpContext?.Session;
+            var identity = user?.Identity;
+            bool isAuthenticated = identity != null && identity.IsAuthenticated;
             bool isSuperAdminUser = isAuthenticated && user.IsInRole("SuperAdmin");
             bool isAdminUser = isAuthenticated && user.IsInRole("Admin");
             bool isClientUser = isAuthenticated && !isSuperAdminUser && !isAdminUser;
-            bool isImpersonating = httpContext?.Session != null && httpContext.Session["ImpersonatedCompanyId"] != null;
+            bool isImpersonating = session != null && session["ImpersonatedCompanyId"] != null;
 
             bool canViewPositions = _rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Positions, RoleAccessLevels.View);
             bool canViewApplications = _rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Applications, RoleAccessLevels.View);
@@ -112,16 +114,16 @@ namespace HR.Web.Services
                 IsAuthenticated = isAuthenticated,
                 Brand = BuildBrand(url, tenantContext, tenantToken, isAuthenticated, isSuperAdminUser, isAdminUser, isImpersonating),
                 UserIdentity = BuildUserIdentity(user, isAuthenticated, isSuperAdminUser, isAdminUser, isClientUser),
-                LoginUrl = url.Action("Login", "Account", new { tenant = tenantToken }),
-                RegisterUrl = url.Action("Register", "Account", new { tenant = tenantToken }),
-                ProfileUrl = url.Action("Profile", "Account", new { tenant = tenantToken }),
-                ChangePasswordUrl = url.Action("ChangePassword", "Account", new { tenant = tenantToken }),
-                LogoutUrl = url.Action("Logout", "Account", new { tenant = tenantToken }),
+                LoginUrl = ParseRelativePath(url.Action("Login", "Account", new { tenant = tenantToken })),
+                RegisterUrl = ParseRelativePath(url.Action("Register", "Account", new { tenant = tenantToken })),
+                ProfileUrl = ParseRelativePath(url.Action("Profile", "Account", new { tenant = tenantToken })),
+                ChangePasswordUrl = ParseRelativePath(url.Action("ChangePassword", "Account", new { tenant = tenantToken })),
+                LogoutUrl = ParseRelativePath(url.Action("Logout", "Account", new { tenant = tenantToken })),
                 ShowImpersonationChip = isImpersonating,
                 ImpersonatedCompanyName = isImpersonating
-                    ? (httpContext.Session["ImpersonatedCompanyName"] as string ?? tenantContext?.Name ?? "Tenant")
+                    ? (session["ImpersonatedCompanyName"] as string ?? tenantContext?.Name ?? "Tenant")
                     : null,
-                StopImpersonatingUrl = url.Action("StopImpersonating", "Companies"),
+                StopImpersonatingUrl = ParseRelativePath(url.Action("StopImpersonating", "Companies")),
                 UseGroupedMenus = isAuthenticated && !isClientUser,
                 Groups = new List<NavMenuGroupModel>()
             };
@@ -176,32 +178,32 @@ namespace HR.Web.Services
             bool isAdminUser,
             bool isImpersonating)
         {
-            string brandUrl = url.Action("Index", "Positions", new { tenant = tenantToken });
+            string brandUrlPath = url.Action("Index", "Positions", new { tenant = tenantToken });
             if (isAuthenticated)
             {
                 if (isImpersonating)
                 {
-                    brandUrl = url.Action("Index", "Dashboard", new { tenant = tenantToken });
+                    brandUrlPath = url.Action("Index", "Dashboard", new { tenant = tenantToken });
                 }
                 else if (isSuperAdminUser)
                 {
-                    brandUrl = url.Action("Index", "Companies", new { tenant = tenantToken });
+                    brandUrlPath = url.Action("Index", "Companies", new { tenant = tenantToken });
                 }
                 else if (isAdminUser)
                 {
-                    brandUrl = url.Action("Index", "Dashboard", new { tenant = tenantToken });
+                    brandUrlPath = url.Action("Index", "Dashboard", new { tenant = tenantToken });
                 }
             }
 
             if (tenantContext != null)
             {
-                var logoUrl = ResolveCompanyLogoUrl(tenantContext.LogoPath, url);
+                var logoUrl = ResolveCompanyLogoUri(tenantContext.LogoPath, url);
                 var hasName = !string.IsNullOrWhiteSpace(tenantContext.Name);
-                var hasLogo = !string.IsNullOrEmpty(logoUrl);
+                var hasLogo = logoUrl != null;
 
                 return new NavBrandModel
                 {
-                    Url = brandUrl,
+                    Url = ParseRelativePath(brandUrlPath),
                     Title = hasName ? tenantContext.Name.Trim() : HR.Web.Helpers.AppConfig.ProductName,
                     Subtitle = hasLogo && hasName ? null : HR.Web.Helpers.AppConfig.ProductName,
                     LogoUrl = logoUrl,
@@ -211,15 +213,15 @@ namespace HR.Web.Services
 
             return new NavBrandModel
             {
-                Url = brandUrl,
+                Url = ParseRelativePath(brandUrlPath),
                 Title = HR.Web.Helpers.AppConfig.ProductName,
                 Subtitle = HR.Web.Helpers.AppConfig.PublisherName,
-                LogoUrl = url.Content("~/Content/images/nanosoft-logo-transparent.png"),
+                LogoUrl = ParseRelativePath(url.Content("~/Content/images/nanosoft-logo-transparent.png")),
                 IsTenantBranded = false
             };
         }
 
-        public static string ResolveCompanyLogoUrl(string logoPath, MvcUrlHelper url)
+        public static Uri ResolveCompanyLogoUri(string logoPath, MvcUrlHelper url)
         {
             if (string.IsNullOrWhiteSpace(logoPath) || url == null)
             {
@@ -229,15 +231,25 @@ namespace HR.Web.Services
             var path = logoPath.Trim().Replace('\\', '/');
             if (path.StartsWith("~/", StringComparison.Ordinal))
             {
-                return url.Content(path);
+                return ParseRelativePath(url.Content(path));
             }
 
             if (path.StartsWith("/", StringComparison.Ordinal))
             {
-                return url.Content("~" + path);
+                return ParseRelativePath(url.Content("~" + path));
             }
 
-            return url.Content("~/" + path.TrimStart('/'));
+            return ParseRelativePath(url.Content("~/" + path.TrimStart('/')));
+        }
+
+        private static Uri ParseRelativePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return null;
+            }
+
+            return Uri.TryCreate(path, UriKind.Relative, out var parsedUri) ? parsedUri : null;
         }
 
         private static NavUserIdentityModel BuildUserIdentity(
@@ -247,12 +259,13 @@ namespace HR.Web.Services
             bool isAdminUser,
             bool isClientUser)
         {
-            if (!isAuthenticated)
+            if (!isAuthenticated || user?.Identity == null)
             {
                 return new NavUserIdentityModel { ShowAccountMenu = false };
             }
 
-            var displayName = FormatDisplayName(user.Identity.Name);
+            var identityName = user.Identity.Name;
+            var displayName = FormatDisplayName(identityName);
             return new NavUserIdentityModel
             {
                 DisplayName = displayName,
@@ -294,7 +307,7 @@ namespace HR.Web.Services
             return new NavMenuItemModel
             {
                 Label = label,
-                Url = url.Action(homeAction, homeController, new { tenant = tenantToken }),
+                Url = ParseRelativePath(url.Action(homeAction, homeController, new { tenant = tenantToken })),
                 IconClass = "fas fa-home",
                 IsActive = string.Equals(currentController, homeController, StringComparison.OrdinalIgnoreCase)
             };
@@ -314,7 +327,7 @@ namespace HR.Web.Services
                 flat.Add(new NavMenuItemModel
                 {
                     Label = "Positions",
-                    Url = url.Action("Index", "Positions", new { tenant = tenantToken }),
+                    Url = ParseRelativePath(url.Action("Index", "Positions", new { tenant = tenantToken })),
                     IconClass = "fas fa-sitemap",
                     IsActive = string.Equals(currentController, "Positions", StringComparison.OrdinalIgnoreCase)
                 });
@@ -325,7 +338,7 @@ namespace HR.Web.Services
                 flat.Add(new NavMenuItemModel
                 {
                     Label = "Applications",
-                    Url = url.Action("Index", "Applications", new { tenant = tenantToken }),
+                    Url = ParseRelativePath(url.Action("Index", "Applications", new { tenant = tenantToken })),
                     IconClass = "fas fa-file-alt",
                     IsActive = string.Equals(currentController, "Applications", StringComparison.OrdinalIgnoreCase)
                 });
@@ -363,103 +376,171 @@ namespace HR.Web.Services
             bool canViewDepartments,
             bool canManageRoleTemplates)
         {
+            var context = new NavMenuBuildContext
+            {
+                Model = model,
+                Url = url,
+                TenantToken = tenantToken,
+                CurrentController = currentController,
+                CurrentAction = currentAction,
+                CurrentModuleKey = currentModuleKey,
+                IsSuperAdminUser = isSuperAdminUser,
+                IsAdminUser = isAdminUser,
+                IsImpersonating = isImpersonating,
+                CanViewPositions = canViewPositions,
+                CanViewApplications = canViewApplications,
+                CanViewInterviews = canViewInterviews,
+                CanViewQuestions = canViewQuestions,
+                CanViewApplicants = canViewApplicants,
+                CanViewUsers = canViewUsers,
+                CanViewSecurityLogs = canViewSecurityLogs,
+                CanViewReports = canViewReports,
+                CanViewDepartments = canViewDepartments,
+                CanManageRoleTemplates = canManageRoleTemplates
+            };
+
+            AddGroup(model, "hire", "Hire", "navHireMenu", BuildHireMenuItems(context));
+            AddGroup(model, "assess", "Assess", "navAssessMenu", BuildAssessMenuItems(context));
+            AddGroup(model, "admin", "Admin", "navAdminMenu", BuildAdminMenuItems(context));
+            AddGroup(model, "insights", "Insights", "navInsightsMenu", BuildInsightsMenuItems(context));
+        }
+
+        private sealed class NavMenuBuildContext
+        {
+            public NavMenuModel Model { get; set; }
+            public MvcUrlHelper Url { get; set; }
+            public string TenantToken { get; set; }
+            public string CurrentController { get; set; }
+            public string CurrentAction { get; set; }
+            public string CurrentModuleKey { get; set; }
+            public bool IsSuperAdminUser { get; set; }
+            public bool IsAdminUser { get; set; }
+            public bool IsImpersonating { get; set; }
+            public bool CanViewPositions { get; set; }
+            public bool CanViewApplications { get; set; }
+            public bool CanViewInterviews { get; set; }
+            public bool CanViewQuestions { get; set; }
+            public bool CanViewApplicants { get; set; }
+            public bool CanViewUsers { get; set; }
+            public bool CanViewSecurityLogs { get; set; }
+            public bool CanViewReports { get; set; }
+            public bool CanViewDepartments { get; set; }
+            public bool CanManageRoleTemplates { get; set; }
+        }
+
+        private static List<NavMenuItemModel> BuildHireMenuItems(NavMenuBuildContext context)
+        {
             var hireItems = new List<NavMenuItemModel>();
-            if (!(isSuperAdminUser && !isImpersonating) && (!isAdminUser || canViewPositions || isImpersonating))
+            if (!(context.IsSuperAdminUser && !context.IsImpersonating) &&
+                (!context.IsAdminUser || context.CanViewPositions || context.IsImpersonating))
             {
-                hireItems.Add(CreateItem(url, tenantToken, "Positions", "Positions", "Index", "fas fa-sitemap",
-                    IsControllerActive(currentController, "Positions")));
+                hireItems.Add(CreateItem(context.Url, context.TenantToken, "Positions", "Positions", "Index", "fas fa-sitemap",
+                    IsControllerActive(context.CurrentController, "Positions")));
             }
 
-            if (!isSuperAdminUser || isImpersonating)
+            if (!context.IsSuperAdminUser || context.IsImpersonating)
             {
-                if (!isAdminUser || canViewApplications || isImpersonating)
+                if (!context.IsAdminUser || context.CanViewApplications || context.IsImpersonating)
                 {
-                    hireItems.Add(CreateItem(url, tenantToken, "Applications", "Applications", "Index", "fas fa-file-alt",
-                        IsControllerActive(currentController, "Applications")));
+                    hireItems.Add(CreateItem(context.Url, context.TenantToken, "Applications", "Applications", "Index", "fas fa-file-alt",
+                        IsControllerActive(context.CurrentController, "Applications")));
                 }
 
-                if (!isAdminUser || canViewInterviews || isImpersonating)
+                if (!context.IsAdminUser || context.CanViewInterviews || context.IsImpersonating)
                 {
-                    hireItems.Add(CreateItem(url, tenantToken, "Interviews", "Interviews", "Index", "fas fa-comments",
-                        IsControllerActive(currentController, "Interviews")));
-                }
-            }
-
-            if (isAdminUser || isImpersonating)
-            {
-                if (canViewApplicants || isImpersonating)
-                {
-                    hireItems.Add(CreateItem(url, tenantToken, "Applicants", "Applicants", "Index", "fas fa-users",
-                        IsControllerActive(currentController, "Applicants")));
+                    hireItems.Add(CreateItem(context.Url, context.TenantToken, "Interviews", "Interviews", "Index", "fas fa-comments",
+                        IsControllerActive(context.CurrentController, "Interviews")));
                 }
             }
 
-            AddGroup(model, "hire", "Hire", "navHireMenu", hireItems);
+            if (context.IsAdminUser || context.IsImpersonating)
+            {
+                if (context.CanViewApplicants || context.IsImpersonating)
+                {
+                    hireItems.Add(CreateItem(context.Url, context.TenantToken, "Applicants", "Applicants", "Index", "fas fa-users",
+                        IsControllerActive(context.CurrentController, "Applicants")));
+                }
+            }
 
+            return hireItems;
+        }
+
+        private static List<NavMenuItemModel> BuildAssessMenuItems(NavMenuBuildContext context)
+        {
             var assessItems = new List<NavMenuItemModel>();
-            if (isAdminUser || isImpersonating)
+            if (context.IsAdminUser || context.IsImpersonating)
             {
-                if (canViewQuestions || isImpersonating)
+                if (context.CanViewQuestions || context.IsImpersonating)
                 {
-                    assessItems.Add(CreateItem(url, tenantToken, "Questions", "Admin", "Questions", "fas fa-question-circle",
-                        IsQuestionsModuleActive(currentController, currentAction, currentModuleKey)));
+                    assessItems.Add(CreateItem(context.Url, context.TenantToken, "Questions", "Admin", "Questions", "fas fa-question-circle",
+                        IsQuestionsModuleActive(context.CurrentController, context.CurrentAction, context.CurrentModuleKey)));
                 }
             }
 
-            AddGroup(model, "assess", "Assess", "navAssessMenu", assessItems);
+            return assessItems;
+        }
 
+        private static List<NavMenuItemModel> BuildAdminMenuItems(NavMenuBuildContext context)
+        {
             var adminItems = new List<NavMenuItemModel>();
-            if (isAdminUser || isImpersonating)
+            if (!(context.IsAdminUser || context.IsImpersonating))
             {
-                if (canViewUsers || isImpersonating)
-                {
-                    adminItems.Add(CreateItem(url, tenantToken, "User Management", "Admin", "UserManagement", "fas fa-user-shield",
-                        IsAdminUserManagementActive(currentController, currentAction)));
-                }
+                return adminItems;
+            }
 
-                if (canManageRoleTemplates)
-                {
-                    adminItems.Add(CreateItem(url, tenantToken, "Role Templates", "Admin", "RoleManagement", "fas fa-user-tag",
-                        IsAdminActionActive(currentController, currentAction, "RoleManagement")));
-                    adminItems.Add(CreateItem(url, tenantToken, "Email Templates", "Admin", "EmailTemplates", "fas fa-envelope-open-text",
-                        IsAdminActionActive(currentController, currentAction, "EmailTemplates")));
-                }
+            if (context.CanViewUsers || context.IsImpersonating)
+            {
+                adminItems.Add(CreateItem(context.Url, context.TenantToken, "User Management", "Admin", "UserManagement", "fas fa-user-shield",
+                    IsAdminUserManagementActive(context.CurrentController, context.CurrentAction)));
+            }
 
-                if (!isSuperAdminUser || isImpersonating)
-                {
-                    if (!isAdminUser || canViewDepartments || isImpersonating)
-                    {
-                        adminItems.Add(CreateItem(url, tenantToken, "Departments", "Departments", "Index", "fas fa-building",
-                            IsControllerActive(currentController, "Departments")));
-                    }
-                }
+            if (context.CanManageRoleTemplates)
+            {
+                adminItems.Add(CreateItem(context.Url, context.TenantToken, "Role Templates", "Admin", "RoleManagement", "fas fa-user-tag",
+                    IsAdminActionActive(context.CurrentController, context.CurrentAction, "RoleManagement")));
+                adminItems.Add(CreateItem(context.Url, context.TenantToken, "Email Templates", "Admin", "EmailTemplates", "fas fa-envelope-open-text",
+                    IsAdminActionActive(context.CurrentController, context.CurrentAction, "EmailTemplates")));
+            }
 
-                if (isAdminUser || isImpersonating || isSuperAdminUser)
+            if (!context.IsSuperAdminUser || context.IsImpersonating)
+            {
+                if (!context.IsAdminUser || context.CanViewDepartments || context.IsImpersonating)
                 {
-                    adminItems.Add(CreateItem(url, tenantToken, "HR CC Emails", "Admin", "HrCcEmails", "fas fa-at",
-                        IsAdminActionActive(currentController, currentAction, "HrCcEmails")));
+                    adminItems.Add(CreateItem(context.Url, context.TenantToken, "Departments", "Departments", "Index", "fas fa-building",
+                        IsControllerActive(context.CurrentController, "Departments")));
                 }
             }
 
-            AddGroup(model, "admin", "Admin", "navAdminMenu", adminItems);
+            if (context.IsAdminUser || context.IsImpersonating || context.IsSuperAdminUser)
+            {
+                adminItems.Add(CreateItem(context.Url, context.TenantToken, "HR CC Emails", "Admin", "HrCcEmails", "fas fa-at",
+                    IsAdminActionActive(context.CurrentController, context.CurrentAction, "HrCcEmails")));
+            }
 
+            return adminItems;
+        }
+
+        private static List<NavMenuItemModel> BuildInsightsMenuItems(NavMenuBuildContext context)
+        {
             var insightsItems = new List<NavMenuItemModel>();
-            if (isAdminUser || isImpersonating)
+            if (!(context.IsAdminUser || context.IsImpersonating))
             {
-                if (canViewReports || isImpersonating)
-                {
-                    insightsItems.Add(CreateItem(url, tenantToken, "Reports", "ReportGenerator", "Index", "fas fa-chart-bar",
-                        IsReportsActive(currentController, currentAction, currentModuleKey)));
-                }
-
-                if (canViewSecurityLogs || isImpersonating)
-                {
-                    insightsItems.Add(CreateItem(url, tenantToken, "Security Logs", "Admin", "SecurityLogs", "fas fa-shield-alt",
-                        IsAdminActionActive(currentController, currentAction, "SecurityLogs")));
-                }
+                return insightsItems;
             }
 
-            AddGroup(model, "insights", "Insights", "navInsightsMenu", insightsItems);
+            if (context.CanViewReports || context.IsImpersonating)
+            {
+                insightsItems.Add(CreateItem(context.Url, context.TenantToken, "Reports", "ReportGenerator", "Index", "fas fa-chart-bar",
+                    IsReportsActive(context.CurrentController, context.CurrentAction, context.CurrentModuleKey)));
+            }
+
+            if (context.CanViewSecurityLogs || context.IsImpersonating)
+            {
+                insightsItems.Add(CreateItem(context.Url, context.TenantToken, "Security Logs", "Admin", "SecurityLogs", "fas fa-shield-alt",
+                    IsAdminActionActive(context.CurrentController, context.CurrentAction, "SecurityLogs")));
+            }
+
+            return insightsItems;
         }
 
         private static NavMenuGroupModel BuildSystemGroup(
@@ -499,7 +580,7 @@ namespace HR.Web.Services
 
         private static void AddGroup(NavMenuModel model, string key, string label, string dropdownId, IList<NavMenuItemModel> items)
         {
-            if (items == null || items.Count == 0)
+            if (model == null || items == null || items.Count == 0)
             {
                 return;
             }
@@ -526,7 +607,7 @@ namespace HR.Web.Services
             return new NavMenuItemModel
             {
                 Label = label,
-                Url = url.Action(action, controller, new { tenant = tenantToken }),
+                Url = ParseRelativePath(url.Action(action, controller, new { tenant = tenantToken })),
                 IconClass = iconClass,
                 IsActive = isActive
             };

@@ -81,7 +81,7 @@ namespace HR.Web.Controllers
             }
 
             _auditService.LogAction(
-                User.Identity.Name,
+                GetAuditActorName(),
                 "EMAIL_TEMPLATES_UPDATED",
                 "EmailTemplates",
                 "global",
@@ -135,7 +135,7 @@ namespace HR.Web.Controllers
             }
 
             _auditService.LogAction(
-                User.Identity.Name,
+                GetAuditActorName(),
                 "EMAIL_TEMPLATES_RESET_DEFAULTS",
                 "EmailTemplates",
                 "global",

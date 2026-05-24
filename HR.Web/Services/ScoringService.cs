@@ -41,7 +41,10 @@ namespace HR.Web.Services
         public decimal CalculateApplicationScore(int applicationId)
         {
             var application = _uow.Applications.Get(applicationId);
-            if (application == null) return 0;
+            if (application == null)
+            {
+                return 0;
+            }
 
             return CalculateApplicationScore(application);
         }
@@ -56,81 +59,90 @@ namespace HR.Web.Services
                 return 0;
             }
 
-            var scoredApplication = application;
-            var weightedScore = 0m;
-
-            var position = _uow.Positions.Get(scoredApplication.PositionId);
-            var maxQuestionnaireStages = position != null ? Math.Max(1, position.QuestionnaireStageCount) : 1;
-
-            var positionQuestionsQuery = _uow.Context.Set<PositionQuestion>()
-                .Where(pq => pq.PositionId == scoredApplication.PositionId)
-                .Include(pq => pq.Question);
-
-            List<PositionQuestion> positionQuestions;
-            if (maxQuestionnaireStages > 1)
-            {
-                var completedCap = scoredApplication.LastCompletedQuestionnaireStage;
-                if (completedCap <= 0)
-                {
-                    positionQuestions = new List<PositionQuestion>();
-                }
-                else
-                {
-                    positionQuestions = positionQuestionsQuery
-                        .Where(pq => Math.Max(1, pq.StageNumber) <= completedCap)
-                        .OrderBy(pq => pq.Order)
-                        .ToList();
-                }
-            }
-            else
-            {
-                positionQuestions = positionQuestionsQuery
-                    .OrderBy(pq => pq.Order)
-                    .ToList();
-            }
-
+            var positionQuestions = LoadScoredPositionQuestions(application);
             if (!positionQuestions.Any())
             {
                 return 0;
             }
 
             var effectiveWeights = GetEffectiveQuestionWeights(positionQuestions);
-
-            // Get application answers
             var answers = _uow.Context.Set<ApplicationAnswer>()
-                .Where(aa => aa.ApplicationId == scoredApplication.Id)
+                .Where(aa => aa.ApplicationId == application.Id)
                 .ToList();
 
+            var weightedScore = AccumulateWeightedScore(application, positionQuestions, effectiveWeights, answers);
+            var maxPossibleScore = GetMaxPossibleScoreForPosition(positionQuestions);
+            var percentage = maxPossibleScore > 0 ? (weightedScore / maxPossibleScore) * 100 : 0;
+
+            return Math.Max(0, Math.Min(100, percentage));
+        }
+
+        private List<PositionQuestion> LoadScoredPositionQuestions(Application application)
+        {
+            var position = _uow.Positions.Get(application.PositionId);
+            var maxQuestionnaireStages = position != null ? Math.Max(1, position.QuestionnaireStageCount) : 1;
+
+            var positionQuestionsQuery = _uow.Context.Set<PositionQuestion>()
+                .Where(pq => pq.PositionId == application.PositionId)
+                .Include(pq => pq.Question);
+
+            if (maxQuestionnaireStages > 1)
+            {
+                var completedCap = application.LastCompletedQuestionnaireStage;
+                if (completedCap <= 0)
+                {
+                    return new List<PositionQuestion>();
+                }
+
+                return positionQuestionsQuery
+                    .Where(pq => Math.Max(1, pq.StageNumber) <= completedCap)
+                    .OrderBy(pq => pq.Order)
+                    .ToList();
+            }
+
+            return positionQuestionsQuery
+                .OrderBy(pq => pq.Order)
+                .ToList();
+        }
+
+        private decimal AccumulateWeightedScore(
+            Application application,
+            List<PositionQuestion> positionQuestions,
+            Dictionary<int, decimal> effectiveWeights,
+            List<ApplicationAnswer> answers)
+        {
+            var weightedScore = 0m;
             foreach (var positionQuestion in positionQuestions)
             {
+                if (positionQuestion?.Question == null)
+                {
+                    continue;
+                }
+
                 decimal questionWeight;
                 if (!effectiveWeights.TryGetValue(positionQuestion.Id, out questionWeight))
                 {
                     continue;
                 }
 
-                var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, scoredApplication.PositionId);
+                var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId);
                 if (rawMaxScore <= 0)
                 {
                     continue;
                 }
 
                 var answer = answers.FirstOrDefault(a => a.QuestionId == positionQuestion.QuestionId);
-                if (answer != null)
+                if (answer == null)
                 {
-                    var rawQuestionScore = CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, scoredApplication.PositionId);
-                    var normalizedScore = Clamp01(rawQuestionScore / rawMaxScore);
-                    weightedScore += normalizedScore * questionWeight;
+                    continue;
                 }
+
+                var rawQuestionScore = CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, application.PositionId);
+                var normalizedScore = Clamp01(rawQuestionScore / rawMaxScore);
+                weightedScore += normalizedScore * questionWeight;
             }
 
-            // Calculate maximum possible score for this position
-            var maxPossibleScore = GetMaxPossibleScoreForPosition(positionQuestions);
-            
-            // Convert to percentage out of 100
-            var percentage = maxPossibleScore > 0 ? (weightedScore / maxPossibleScore) * 100 : 0;
-            
-            return Math.Max(0, Math.Min(100, percentage)); // Cap at 100%
+            return weightedScore;
         }
 
         /// <summary>
@@ -162,61 +174,98 @@ namespace HR.Web.Services
             }
 
             var rawWeights = positionQuestions
-                .Select(pq => new
+                .Select(pq => new WeightedQuestionEntry
                 {
-                    pq.Id,
+                    Id = pq.Id,
                     RawWeight = pq.Weight,
                     PositiveWeight = Math.Max(0m, pq.Weight ?? 0m)
                 })
                 .ToList();
 
+            ApplyDistributedWeights(weights, rawWeights);
+            return weights;
+        }
+
+        private static void ApplyDistributedWeights(Dictionary<int, decimal> weights, List<WeightedQuestionEntry> rawWeights)
+        {
             var configured = rawWeights.Where(w => w.RawWeight.HasValue && w.RawWeight.Value > 0m).ToList();
             var configuredTotal = configured.Sum(w => w.PositiveWeight);
 
             if (configuredTotal <= 0m)
             {
-                var equalWeight = Math.Round(100m / rawWeights.Count, 2, MidpointRounding.AwayFromZero);
-                foreach (var rawWeight in rawWeights)
-                {
-                    weights[rawWeight.Id] = equalWeight;
-                }
+                ApplyEqualWeights(weights, rawWeights);
             }
             else if (configuredTotal < 100m && configured.Count < rawWeights.Count)
             {
-                foreach (var configuredWeight in configured)
-                {
-                    weights[configuredWeight.Id] = Math.Round(configuredWeight.PositiveWeight, 2, MidpointRounding.AwayFromZero);
-                }
-
-                var unconfiguredCount = rawWeights.Count - configured.Count;
-                var remainder = 100m - configuredTotal;
-                var unconfiguredWeight = Math.Round(remainder / unconfiguredCount, 2, MidpointRounding.AwayFromZero);
-                foreach (var rawWeight in rawWeights.Where(w => !configured.Any(c => c.Id == w.Id)))
-                {
-                    weights[rawWeight.Id] = unconfiguredWeight;
-                }
+                ApplyConfiguredWithRemainder(weights, rawWeights, configured, configuredTotal);
             }
             else
             {
-                var totalRawWeight = rawWeights.Sum(w => w.PositiveWeight);
-                foreach (var rawWeight in rawWeights)
-                {
-                    var scaledWeight = totalRawWeight > 0m ? (rawWeight.PositiveWeight / totalRawWeight) * 100m : 0m;
-                    weights[rawWeight.Id] = Math.Round(scaledWeight, 2, MidpointRounding.AwayFromZero);
-                }
+                ApplyProportionalWeights(weights, rawWeights);
             }
 
             var diff = 100m - weights.Values.Sum();
-            var lastId = rawWeights.Last().Id;
-            weights[lastId] += diff;
+            weights[rawWeights.Last().Id] += diff;
+        }
 
-            return weights;
+        private static void ApplyEqualWeights(Dictionary<int, decimal> weights, List<WeightedQuestionEntry> rawWeights)
+        {
+            var equalWeight = Math.Round(100m / rawWeights.Count, 2, MidpointRounding.AwayFromZero);
+            foreach (var rawWeight in rawWeights)
+            {
+                weights[rawWeight.Id] = equalWeight;
+            }
+        }
+
+        private static void ApplyConfiguredWithRemainder(
+            Dictionary<int, decimal> weights,
+            List<WeightedQuestionEntry> rawWeights,
+            List<WeightedQuestionEntry> configured,
+            decimal configuredTotal)
+        {
+            foreach (var configuredWeight in configured)
+            {
+                weights[configuredWeight.Id] = Math.Round(configuredWeight.PositiveWeight, 2, MidpointRounding.AwayFromZero);
+            }
+
+            var unconfiguredCount = rawWeights.Count - configured.Count;
+            var remainder = 100m - configuredTotal;
+            var unconfiguredWeight = Math.Round(remainder / unconfiguredCount, 2, MidpointRounding.AwayFromZero);
+            foreach (var rawWeight in rawWeights.Where(w => !configured.Any(c => c.Id == w.Id)))
+            {
+                weights[rawWeight.Id] = unconfiguredWeight;
+            }
+        }
+
+        private static void ApplyProportionalWeights(Dictionary<int, decimal> weights, List<WeightedQuestionEntry> rawWeights)
+        {
+            var totalRawWeight = rawWeights.Sum(w => w.PositiveWeight);
+            foreach (var rawWeight in rawWeights)
+            {
+                var scaledWeight = totalRawWeight > 0m ? (rawWeight.PositiveWeight / totalRawWeight) * 100m : 0m;
+                weights[rawWeight.Id] = Math.Round(scaledWeight, 2, MidpointRounding.AwayFromZero);
+            }
+        }
+
+        private sealed class WeightedQuestionEntry
+        {
+            public int Id { get; set; }
+            public decimal? RawWeight { get; set; }
+            public decimal PositiveWeight { get; set; }
         }
 
         private static decimal Clamp01(decimal value)
         {
-            if (value < 0m) return 0m;
-            if (value > 1m) return 1m;
+            if (value < 0m)
+            {
+                return 0m;
+            }
+
+            if (value > 1m)
+            {
+                return 1m;
+            }
+
             return value;
         }
 
@@ -225,8 +274,11 @@ namespace HR.Web.Services
         /// </summary>
         public decimal CalculateQuestionScore(Question question, string answerText, int positionId)
         {
-            if (string.IsNullOrEmpty(answerText)) return 0;
-            // Use deterministic scoring to avoid async deadlocks during submission.
+            if (string.IsNullOrEmpty(answerText))
+            {
+                return 0;
+            }
+
             return CalculateQuestionScoreFallback(question, answerText, positionId);
         }
 
@@ -315,16 +367,22 @@ namespace HR.Web.Services
         /// </summary>
         private decimal CalculateNumberScore(Question question, string answerText)
         {
-            decimal number;
-            if (decimal.TryParse(answerText, out number))
+            if (question == null || string.IsNullOrEmpty(answerText))
             {
-                // For years of experience: 0-10 points based on experience level
-                if (question.Text.ToLower().Contains("year") && question.Text.ToLower().Contains("experience"))
+                return 0;
+            }
+
+            var scoredQuestion = question;
+            var text = answerText;
+            decimal number;
+            if (decimal.TryParse(text, out number))
+            {
+                var questionText = scoredQuestion.Text ?? string.Empty;
+                if (questionText.ToLower().Contains("year") && questionText.ToLower().Contains("experience"))
                 {
                     return Math.Min(10, Math.Max(0, number * 2));
                 }
 
-                // For other numeric questions, use a simple scaling
                 return Math.Min(10, Math.Max(0, number));
             }
 
@@ -336,16 +394,32 @@ namespace HR.Web.Services
         /// </summary>
         private string ExtractQuestionContext(string questionText)
         {
+            if (string.IsNullOrEmpty(questionText))
+            {
+                return "general numeric response";
+            }
+
             var lowerText = questionText.ToLower();
             
             if (lowerText.Contains("year") && lowerText.Contains("experience"))
+            {
                 return "years of experience";
+            }
+
             if (lowerText.Contains("salary") || lowerText.Contains("compensation"))
+            {
                 return "salary expectation";
+            }
+
             if (lowerText.Contains("team") || lowerText.Contains("manage"))
+            {
                 return "team size";
+            }
+
             if (lowerText.Contains("hour") || lowerText.Contains("week"))
+            {
                 return "time availability";
+            }
             
             return "general numeric response";
         }
@@ -426,15 +500,42 @@ namespace HR.Web.Services
             var score = 0m;
             
             // More nuanced length scoring
-            if (text.Length < 10) score += 0.3m; // Very short - minimal credit
-            else if (text.Length < 25) score += 0.8m;
-            else if (text.Length < 50) score += 1.8m;
-            else if (text.Length < 100) score += 3.2m;
-            else if (text.Length < 200) score += 4.8m;
-            else if (text.Length < 300) score += 6.2m;
-            else if (text.Length < 500) score += 7.5m;
-            else if (text.Length < 800) score += 8.5m;
-            else score += 9m; // Diminishing returns for very long answers
+            if (text.Length < 10)
+            {
+                score += 0.3m; // Very short - minimal credit
+            }
+            else if (text.Length < 25)
+            {
+                score += 0.8m;
+            }
+            else if (text.Length < 50)
+            {
+                score += 1.8m;
+            }
+            else if (text.Length < 100)
+            {
+                score += 3.2m;
+            }
+            else if (text.Length < 200)
+            {
+                score += 4.8m;
+            }
+            else if (text.Length < 300)
+            {
+                score += 6.2m;
+            }
+            else if (text.Length < 500)
+            {
+                score += 7.5m;
+            }
+            else if (text.Length < 800)
+            {
+                score += 8.5m;
+            }
+            else
+            {
+                score += 9m; // Diminishing returns for very long answers
+            }
 
             System.Diagnostics.Debug.WriteLine(string.Format("Enhanced length score: {0}", score));
             return score;
@@ -486,6 +587,11 @@ namespace HR.Web.Services
         /// </summary>
         private decimal AnalyzeAnswerStrength(string answerText, string lowerText)
         {
+            if (string.IsNullOrEmpty(answerText) || string.IsNullOrEmpty(lowerText))
+            {
+                return 0m;
+            }
+
             var score = 0m;
 
             // Experience Intensity: Look for years of experience and management scale
@@ -542,6 +648,11 @@ namespace HR.Web.Services
         /// </summary>
         private decimal AnalyzeProfessionalCommunication(string lowerText)
         {
+            if (string.IsNullOrEmpty(lowerText))
+            {
+                return 0m;
+            }
+
             var score = 0m;
 
             // Professional language patterns
@@ -1133,10 +1244,16 @@ namespace HR.Web.Services
         /// </summary>
         public decimal GetMaxScoreForQuestion(Question question, int positionId)
         {
-            switch (question.Type.ToLower())
+            if (question == null || string.IsNullOrEmpty(question.Type))
+            {
+                return 0;
+            }
+
+            var scoredQuestion = question;
+            switch (scoredQuestion.Type.ToLower())
             {
                 case "choice":
-                    return GetMaxChoiceScore(question, positionId);
+                    return GetMaxChoiceScore(scoredQuestion, positionId);
                 case "rating":
                     return 10; // 1-5 rating scale -> max 10 points
                 case "number":
@@ -1251,8 +1368,8 @@ namespace HR.Web.Services
                 rankings.Add(new CandidateRanking
                 {
                     ApplicationId = application.Id,
-                    CandidateName = application.Applicant != null ? application.Applicant.FullName : null ?? "Unknown",
-                    CandidateEmail = application.Applicant != null ? application.Applicant.Email : null ?? "",
+                    CandidateName = application.Applicant != null ? application.Applicant.FullName ?? "Unknown" : "Unknown",
+                    CandidateEmail = application.Applicant != null ? application.Applicant.Email ?? string.Empty : string.Empty,
                     TotalScore = percentage, // This is now percentage out of 100
                     MaxScore = 100, // Always 100 for percentage system
                     Percentage = percentage, // Same as TotalScore now
@@ -1345,10 +1462,26 @@ namespace HR.Web.Services
 
         private string GetScoreRange(decimal score)
         {
-            if (score <= 2) return "0-2";
-            if (score <= 4) return "3-4";
-            if (score <= 6) return "5-6";
-            if (score <= 8) return "7-8";
+            if (score <= 2)
+            {
+                return "0-2";
+            }
+
+            if (score <= 4)
+            {
+                return "3-4";
+            }
+
+            if (score <= 6)
+            {
+                return "5-6";
+            }
+
+            if (score <= 8)
+            {
+                return "7-8";
+            }
+
             return "9-10";
         }
     }

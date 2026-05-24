@@ -6,9 +6,9 @@ namespace HR.Web.Services
 {
     public static class RoleAccessLevels
     {
-        public const string None = "None";
-        public const string View = "View";
-        public const string Manage = "Manage";
+        public static readonly string None = "None";
+        public static readonly string View = "View";
+        public static readonly string Manage = "Manage";
 
         public static readonly string[] OrderedValues = { None, View, Manage };
     }

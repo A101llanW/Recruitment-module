@@ -23,18 +23,20 @@ namespace HR.Web.Controllers
 
             if (positionId.HasValue)
             {
-                var position = positions.FirstOrDefault(p => p.Id == positionId.Value);
+                var position = positions.FirstOrDefault(p => p != null && p.Id == positionId.Value);
                 if (position != null)
                 {
-                    rankings[position] = _scoringService.RankCandidatesForPosition(positionId.Value);
+                    rankings[position] = _scoringService.RankCandidatesForPosition(positionId.Value)
+                        ?? new List<CandidateRanking>();
                 }
             }
             else
             {
                 // Get rankings for all positions
-                foreach (var position in positions.Where(p => p.IsOpen))
+                foreach (var position in positions.Where(p => p != null && p.IsOpen))
                 {
-                    rankings[position] = _scoringService.RankCandidatesForPosition(position.Id);
+                    rankings[position] = _scoringService.RankCandidatesForPosition(position.Id)
+                        ?? new List<CandidateRanking>();
                 }
             }
 
@@ -57,14 +59,18 @@ namespace HR.Web.Controllers
                 applicationId,
                 a => a.Applicant,
                 a => a.Position);
-            if (application == null) return HttpNotFound();
+            if (application == null || application.Position == null)
+            {
+                return HttpNotFound();
+            }
 
-            var breakdown = _scoringService.GetScoreBreakdown(applicationId);
-            var maxScore = _scoringService.GetMaxScoreForPosition(application.PositionId);
+            var scopedApplication = application;
+            var breakdown = _scoringService.GetScoreBreakdown(applicationId) ?? new List<QuestionScoreBreakdown>();
+            var maxScore = _scoringService.GetMaxScoreForPosition(scopedApplication.PositionId);
 
             var viewModel = new ApplicationScoreDetailsViewModel
             {
-                Application = application,
+                Application = scopedApplication,
                 ScoreBreakdown = breakdown,
                 TotalScore = breakdown.Sum(b => b.Score),
                 MaxScore = maxScore,
@@ -104,16 +110,22 @@ namespace HR.Web.Controllers
 
             foreach (var position in positions)
             {
-                var rankings = _scoringService.RankCandidatesForPosition(position.Id);
-                var applications = rankings.Count;
+                if (position == null)
+                {
+                    continue;
+                }
+
+                var scopedPosition = position;
+                var rankings = _scoringService.RankCandidatesForPosition(scopedPosition.Id);
+                var applications = rankings != null ? rankings.Count : 0;
                 var averageScore = applications > 0 ? rankings.Average(r => r.Percentage) : 0;
-                var maxScore = _scoringService.GetMaxScoreForPosition(position.Id);
+                var maxScore = _scoringService.GetMaxScoreForPosition(scopedPosition.Id);
 
                 statistics.Add(new PositionScoringStatistics
                 {
-                    PositionId = position.Id,
-                    PositionTitle = position.Title,
-                    DepartmentName = position.Department != null ? position.Department.Name : "Unknown",
+                    PositionId = scopedPosition.Id,
+                    PositionTitle = scopedPosition.Title,
+                    DepartmentName = scopedPosition.Department != null ? scopedPosition.Department.Name : "Unknown",
                     ApplicationCount = applications,
                     AverageScore = averageScore,
                     MaxScore = maxScore,
@@ -169,14 +181,27 @@ namespace HR.Web.Controllers
             var position = _uow.Positions.Get(positionId);
             if (position == null) return HttpNotFound();
 
-            var rankings = _scoringService.RankCandidatesForPosition(positionId);
+            var rankings = _scoringService.RankCandidatesForPosition(positionId) ?? new List<CandidateRanking>();
 
             var csv = "Rank,Candidate Name,Email,Score,Max Score,Percentage,Applied Date,Status\n";
             
             for (int i = 0; i < rankings.Count; i++)
             {
                 var rank = rankings[i];
-                csv += string.Format("{0},{1},{2},{3},{4},{5:F1}%,{6:yyyy-MM-dd},{7}\n", i + 1, rank.CandidateName, rank.CandidateEmail, rank.TotalScore, rank.MaxScore, rank.Percentage, rank.AppliedDate, rank.Status);
+                if (rank == null)
+                {
+                    continue;
+                }
+
+                csv += string.Format("{0},{1},{2},{3},{4},{5:F1}%,{6:yyyy-MM-dd},{7}\n",
+                    i + 1,
+                    rank.CandidateName ?? string.Empty,
+                    rank.CandidateEmail ?? string.Empty,
+                    rank.TotalScore,
+                    rank.MaxScore,
+                    rank.Percentage,
+                    rank.AppliedDate,
+                    rank.Status ?? string.Empty);
             }
 
             var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
@@ -193,15 +218,19 @@ namespace HR.Web.Controllers
             try
             {
                 var application = _uow.Applications.Get(applicationId);
-                if (application == null) return HttpNotFound();
+                if (application == null)
+                {
+                    return HttpNotFound();
+                }
 
-                var newScore = _scoringService.CalculateApplicationScore(application);
-                application.Score = newScore;
-                _uow.Applications.Update(application);
+                var scopedApplication = application;
+                var newScore = _scoringService.CalculateApplicationScore(scopedApplication);
+                scopedApplication.Score = newScore;
+                _uow.Applications.Update(scopedApplication);
                 _uow.Complete();
 
-                var breakdown = _scoringService.GetScoreBreakdown(applicationId);
-                var maxScore = _scoringService.GetMaxScoreForPosition(application.PositionId);
+                var breakdown = _scoringService.GetScoreBreakdown(applicationId) ?? new List<QuestionScoreBreakdown>();
+                var maxScore = _scoringService.GetMaxScoreForPosition(scopedApplication.PositionId);
 
                 return Json(new
                 {
@@ -276,6 +305,7 @@ namespace HR.Web.Controllers
         public decimal TotalScore { get; set; }
         public decimal MaxScore { get; set; }
         public decimal Percentage { get; set; }
+        public int Rank { get; set; }
     }
 
     public class QuestionAnalysisViewModel

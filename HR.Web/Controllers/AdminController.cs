@@ -27,6 +27,11 @@ namespace HR.Web.Controllers
         private readonly TenantService _tenantService = new TenantService();
         private readonly RolePermissionService _rolePermissionService = new RolePermissionService();
 
+        private string GetAuditActorName()
+        {
+            return User?.Identity?.Name ?? "System";
+        }
+
         // GET: Admin/Index - Default admin dashboard
         public ActionResult Index()
         {
@@ -86,7 +91,7 @@ namespace HR.Web.Controllers
                 applicationId,
                 a => a.Applicant,
                 a => a.Position);
-            if (application == null)
+            if (application == null || application.Position == null)
             {
                 return HttpNotFound();
             }
@@ -99,7 +104,7 @@ namespace HR.Web.Controllers
             }
             
             // Get score breakdown and related data
-            var breakdown = _scoringService.GetScoreBreakdown(applicationId);
+            var breakdown = _scoringService.GetScoreBreakdown(applicationId) ?? new List<QuestionScoreBreakdown>();
             var maxScore = _scoringService.GetMaxScoreForPosition(application.PositionId);
             
             // Get all applications for ranking calculation
@@ -621,14 +626,5 @@ namespace HR.Web.Controllers
         }
 
         #endregion
-    public class ApplicationScoreDetailsViewModel
-    {
-        public Application Application { get; set; }
-        public List<QuestionScoreBreakdown> ScoreBreakdown { get; set; }
-        public decimal TotalScore { get; set; }
-        public decimal MaxScore { get; set; }
-        public decimal Percentage { get; set; }
-        public int Rank { get; set; }
     }
-}
 }

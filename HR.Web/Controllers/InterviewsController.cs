@@ -20,6 +20,11 @@ namespace HR.Web.Controllers
         private readonly AuditService _auditService = new AuditService();
         private readonly TenantService _tenantService = new TenantService();
 
+        private string GetInterviewActorName()
+        {
+            return User?.Identity?.Name ?? "System";
+        }
+
         public ActionResult Index()
         {
             var rolePermissionService = new RolePermissionService();
@@ -60,6 +65,11 @@ namespace HR.Web.Controllers
 
         private User GetCurrentInterviewUser()
         {
+            if (User?.Identity == null || string.IsNullOrEmpty(User.Identity.Name))
+            {
+                return null;
+            }
+
             var username = User.Identity.Name;
             var lowerUsername = username.ToLower();
             return _uow.Context.Users.FirstOrDefault(u => u.UserName.ToLower() == lowerUsername);
@@ -67,6 +77,11 @@ namespace HR.Web.Controllers
 
         private bool IsManagementUser(User user)
         {
+            if (user == null)
+            {
+                return User != null && (User.IsInRole("Admin") || User.IsInRole("SuperAdmin"));
+            }
+
             return User.IsInRole("Admin") ||
                 User.IsInRole("SuperAdmin") ||
                 user.Role == "Admin" ||
@@ -110,70 +125,106 @@ namespace HR.Web.Controllers
         {
             try
             {
-                // Verify application belongs to tenant
                 var application = _uow.Applications.Get(applicationId);
                 if (application == null) return HttpNotFound();
-                
-                var companyId = _tenantService.GetCurrentUserCompanyId();
-                if (companyId.HasValue && application.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+
+                var accessDenied = ValidateInterviewApplicationAccess(application);
+                if (accessDenied != null)
                 {
-                   return new HttpStatusCodeResult(403, "Access Denied");
+                    return accessDenied;
                 }
 
-                var interview = new Interview
-                {
-                    ApplicationId = applicationId,
-                    InterviewerId = interviewerId,
-                    ScheduledAt = scheduledAt,
-                    Mode = mode,
-                    CompanyId = companyId // Inherit company from context
-                };
-                _uow.Interviews.Add(interview);
-                _uow.Complete();
-                
-                // Log interview booking
-                var newValues = new { 
-                    ApplicationId = applicationId,
-                    InterviewerId = interviewerId,
-                    ScheduledAt = scheduledAt,
-                    Mode = mode
-                };
-                _auditService.LogCreate(User.Identity.Name, "Interviews", interview.Id.ToString(), newValues);
-                
-                var interviewer = _uow.Users.Get(interviewerId);
-                if (interviewer != null)
-                {
-                    _email.SendAsync(interviewer.Email, "Interview scheduled", "You have a new interview scheduled.");
-                }
-
-                if (string.Equals(returnTo, "interviews", StringComparison.OrdinalIgnoreCase))
-                {
-                    var applicationToResume = resumeEmailApplicationId.HasValue && resumeEmailApplicationId.Value > 0
-                        ? resumeEmailApplicationId.Value
-                        : applicationId;
-                    TempData["InterviewEmailInfo"] = "Interview booked. You can now proceed with candidate email.";
-                    return RedirectToAction("Index", new { resumeEmailApplicationId = applicationToResume });
-                }
-
-                return RedirectToAction("Index");
+                var interview = CreateScheduledInterview(applicationId, interviewerId, scheduledAt, mode);
+                NotifyInterviewerOfBooking(interviewerId, interview.Id, applicationId, scheduledAt, mode);
+                return GetBookInterviewSuccessRedirect(returnTo, resumeEmailApplicationId, applicationId);
             }
             catch (Exception ex)
             {
-                _auditService.LogAction(User.Identity.Name, "CREATE", "Interviews", "new", 
+                _auditService.LogAction(GetInterviewActorName(), "CREATE", "Interviews", "new", 
                     wasSuccessful: false, errorMessage: ex.Message);
-                
+
                 TempData["Error"] = "Error booking interview: " + ex.Message;
-                if (string.Equals(returnTo, "interviews", StringComparison.OrdinalIgnoreCase))
-                {
-                    return RedirectToAction("Index", new
-                    {
-                        resumeEmailApplicationId = resumeEmailApplicationId.HasValue && resumeEmailApplicationId.Value > 0
-                            ? resumeEmailApplicationId.Value
-                            : applicationId
-                    });
-                }
+                return GetBookInterviewErrorRedirect(returnTo, resumeEmailApplicationId, applicationId);
+            }
+        }
+
+        private Interview CreateScheduledInterview(int applicationId, int interviewerId, DateTime scheduledAt, string mode)
+        {
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            var interview = new Interview
+            {
+                ApplicationId = applicationId,
+                InterviewerId = interviewerId,
+                ScheduledAt = scheduledAt,
+                Mode = mode,
+                CompanyId = companyId
+            };
+            _uow.Interviews.Add(interview);
+            _uow.Complete();
+
+            _auditService.LogCreate(GetInterviewActorName(), "Interviews", interview.Id.ToString(), new
+            {
+                ApplicationId = applicationId,
+                InterviewerId = interviewerId,
+                ScheduledAt = scheduledAt,
+                Mode = mode
+            });
+
+            return interview;
+        }
+
+        private void NotifyInterviewerOfBooking(int interviewerId, int interviewId, int applicationId, DateTime scheduledAt, string mode)
+        {
+            var interviewer = _uow.Users.Get(interviewerId);
+            if (interviewer != null)
+            {
+                _email.SendAsync(interviewer.Email, "Interview scheduled", "You have a new interview scheduled.");
+            }
+        }
+
+        private ActionResult GetBookInterviewSuccessRedirect(string returnTo, int? resumeEmailApplicationId, int applicationId)
+        {
+            if (!string.Equals(returnTo, "interviews", StringComparison.OrdinalIgnoreCase))
+            {
                 return RedirectToAction("Index");
             }
+
+            var applicationToResume = resumeEmailApplicationId.HasValue && resumeEmailApplicationId.Value > 0
+                ? resumeEmailApplicationId.Value
+                : applicationId;
+            TempData["InterviewEmailInfo"] = "Interview booked. You can now proceed with candidate email.";
+            return RedirectToAction("Index", new { resumeEmailApplicationId = applicationToResume });
+        }
+
+        private ActionResult GetBookInterviewErrorRedirect(string returnTo, int? resumeEmailApplicationId, int applicationId)
+        {
+            if (!string.Equals(returnTo, "interviews", StringComparison.OrdinalIgnoreCase))
+            {
+                return RedirectToAction("Index");
+            }
+
+            return RedirectToAction("Index", new
+            {
+                resumeEmailApplicationId = resumeEmailApplicationId.HasValue && resumeEmailApplicationId.Value > 0
+                    ? resumeEmailApplicationId.Value
+                    : applicationId
+            });
+        }
+
+        private ActionResult ValidateInterviewApplicationAccess(Application application)
+        {
+            return ValidateInterviewTenantAccess(application.CompanyId);
+        }
+
+        private ActionResult ValidateInterviewTenantAccess(int? interviewCompanyId)
+        {
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            if (companyId.HasValue && interviewCompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            return null;
         }
 
         [HttpPost]
@@ -182,19 +233,16 @@ namespace HR.Web.Controllers
         [RoleBasedAuthorization("Admin")]
         public async Task<ActionResult> SendInterviewCandidateEmail(int applicationId, string message)
         {
-            var application = _uow.Context.Applications
-                .Include("Applicant")
-                .Include("Position")
-                .FirstOrDefault(a => a.Id == applicationId);
+            var application = LoadInterviewApplication(applicationId);
             if (application == null)
             {
                 return HttpNotFound();
             }
 
-            var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && application.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            var accessDenied = ValidateInterviewApplicationAccess(application);
+            if (accessDenied != null)
             {
-                return new HttpStatusCodeResult(403, "Access Denied");
+                return accessDenied;
             }
 
             var trimmedMessage = ValidateInterviewEmailMessage(message);
@@ -204,20 +252,10 @@ namespace HR.Web.Controllers
                 return RedirectToAction("Index");
             }
 
-            var interview = _uow.Context.Interviews
-                .Where(i => i.ApplicationId == applicationId)
-                .OrderByDescending(i => i.ScheduledAt)
-                .FirstOrDefault();
-
+            var interview = GetLatestInterviewForApplication(applicationId);
             if (interview == null)
             {
-                Session[GetPendingInterviewEmailSessionKey(applicationId)] = trimmedMessage;
-                TempData["InterviewEmailError"] = "This candidate has no interview scheduled yet.";
-                TempData["InterviewEmailSchedulePromptApplicationId"] = applicationId;
-                TempData["InterviewEmailSchedulePromptCandidateName"] = application.Applicant != null
-                    ? application.Applicant.FullName
-                    : "Candidate";
-                return RedirectToAction("Index");
+                return RedirectForMissingInterview(application, applicationId, trimmedMessage);
             }
 
             var recipientEmail = application.Applicant != null ? application.Applicant.Email : null;
@@ -227,6 +265,46 @@ namespace HR.Web.Controllers
                 return RedirectToAction("Index");
             }
 
+            await SendInterviewUpdateEmail(application, interview, recipientEmail, trimmedMessage);
+            Session.Remove(GetPendingInterviewEmailSessionKey(applicationId));
+            TempData["InterviewEmailSuccess"] = string.Format(
+                "Email sent to {0}.",
+                application.Applicant != null && !string.IsNullOrWhiteSpace(application.Applicant.FullName)
+                    ? application.Applicant.FullName
+                    : recipientEmail.Trim());
+
+            return RedirectToAction("Index");
+        }
+
+        private Application LoadInterviewApplication(int applicationId)
+        {
+            return _uow.Context.Applications
+                .Include("Applicant")
+                .Include("Position")
+                .FirstOrDefault(a => a.Id == applicationId);
+        }
+
+        private Interview GetLatestInterviewForApplication(int applicationId)
+        {
+            return _uow.Context.Interviews
+                .Where(i => i.ApplicationId == applicationId)
+                .OrderByDescending(i => i.ScheduledAt)
+                .FirstOrDefault();
+        }
+
+        private ActionResult RedirectForMissingInterview(Application application, int applicationId, string trimmedMessage)
+        {
+            Session[GetPendingInterviewEmailSessionKey(applicationId)] = trimmedMessage;
+            TempData["InterviewEmailError"] = "This candidate has no interview scheduled yet.";
+            TempData["InterviewEmailSchedulePromptApplicationId"] = applicationId;
+            TempData["InterviewEmailSchedulePromptCandidateName"] = application.Applicant != null
+                ? application.Applicant.FullName
+                : "Candidate";
+            return RedirectToAction("Index");
+        }
+
+        private async Task SendInterviewUpdateEmail(Application application, Interview interview, string recipientEmail, string trimmedMessage)
+        {
             var positionTitle = application.Position != null ? application.Position.Title : "the position";
             var subject = string.Format("Interview update for {0}", positionTitle);
             var body = BuildInterviewCandidateEmailBody(
@@ -237,14 +315,6 @@ namespace HR.Web.Controllers
                 trimmedMessage);
 
             await _email.SendAsync(recipientEmail.Trim(), subject, body);
-            Session.Remove(GetPendingInterviewEmailSessionKey(applicationId));
-            TempData["InterviewEmailSuccess"] = string.Format(
-                "Email sent to {0}.",
-                application.Applicant != null && !string.IsNullOrWhiteSpace(application.Applicant.FullName)
-                    ? application.Applicant.FullName
-                    : recipientEmail.Trim());
-
-            return RedirectToAction("Index");
         }
 
         [HttpPost]
@@ -322,10 +392,10 @@ namespace HR.Web.Controllers
             }
 
             // Check tenant access
-            var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && interview.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            var accessDenied = ValidateInterviewTenantAccess(interview.CompanyId);
+            if (accessDenied != null)
             {
-                return new HttpStatusCodeResult(403, "Access Denied");
+                return accessDenied;
             }
 
             return View(interview);
@@ -349,21 +419,27 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult Create(Interview model)
         {
+            if (model == null)
+            {
+                LoadLookups();
+                return View(new Interview { ScheduledAt = DateTime.UtcNow.AddDays(1) });
+            }
+
+            var interviewModel = model;
             if (!ModelState.IsValid)
             {
-                LoadLookups(model);
-                return View(model);
+                LoadLookups(interviewModel);
+                return View(interviewModel);
             }
-            // Assign company
             var companyId = _tenantService.GetCurrentUserCompanyId();
             if (companyId.HasValue)
             {
-                model.CompanyId = companyId.Value;
+                interviewModel.CompanyId = companyId.Value;
             }
 
-            _uow.Interviews.Add(model);
+            _uow.Interviews.Add(interviewModel);
             _uow.Complete();
-            var interviewerEmail = model != null && model.Interviewer != null ? model.Interviewer.Email : null;
+            var interviewerEmail = interviewModel.Interviewer != null ? interviewModel.Interviewer.Email : null;
             _email.SendAsync(interviewerEmail, "Interview scheduled", "Please attend.");
             return RedirectToAction("Index");
         }
@@ -382,10 +458,10 @@ namespace HR.Web.Controllers
             }
 
             // Check tenant access
-            var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && interview.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            var accessDenied = ValidateInterviewTenantAccess(interview.CompanyId);
+            if (accessDenied != null)
             {
-                return new HttpStatusCodeResult(403, "Access Denied");
+                return accessDenied;
             }
 
             LoadLookups(interview);
@@ -397,29 +473,31 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult Edit(Interview model)
         {
+            if (model == null)
+            {
+                return RedirectToAction("Index");
+            }
+
+            var interviewModel = model;
             if (!ModelState.IsValid)
             {
-                LoadLookups(model);
-                return View(model);
+                LoadLookups(interviewModel);
+                return View(interviewModel);
             }
 
-            // Verify ownership
-            var existing = _uow.Interviews.GetAll(i => i.Application).FirstOrDefault(i => i.Id == model.Id);
+            var existing = _uow.Interviews.GetAll(i => i.Application).FirstOrDefault(i => i.Id == interviewModel.Id);
             if (existing == null) return HttpNotFound();
 
-            var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && existing.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            var accessDenied = ValidateInterviewTenantAccess(existing.CompanyId);
+            if (accessDenied != null)
             {
-                return new HttpStatusCodeResult(403, "Access Denied");
+                return accessDenied;
             }
             
-            // Re-assign basic properties but keep critical ones or use dedicated update logic if needed
-            // For now, assume model binding is safe enough if we validate ownership, but ideally fetch and update
-            existing.ScheduledAt = model.ScheduledAt;
-            existing.Mode = model.Mode;
-            existing.Notes = model.Notes;
-            existing.InterviewerId = model.InterviewerId;
-            // Don't change ApplicationId or CompanyId usually
+            existing.ScheduledAt = interviewModel.ScheduledAt;
+            existing.Mode = interviewModel.Mode;
+            existing.Notes = interviewModel.Notes;
+            existing.InterviewerId = interviewModel.InterviewerId;
 
             _uow.Interviews.Update(existing);
             _uow.Complete();
@@ -439,10 +517,10 @@ namespace HR.Web.Controllers
             }
 
             // Check tenant access
-            var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && interview.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            var accessDenied = ValidateInterviewTenantAccess(interview.CompanyId);
+            if (accessDenied != null)
             {
-                return new HttpStatusCodeResult(403, "Access Denied");
+                return accessDenied;
             }
 
             return View(interview);
@@ -460,10 +538,10 @@ namespace HR.Web.Controllers
             }
 
             // Check tenant access
-            var companyId = _tenantService.GetCurrentUserCompanyId();
-            if (companyId.HasValue && interview.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            var accessDenied = ValidateInterviewTenantAccess(interview.CompanyId);
+            if (accessDenied != null)
             {
-                return new HttpStatusCodeResult(403, "Access Denied");
+                return accessDenied;
             }
 
             _uow.Interviews.Remove(interview);

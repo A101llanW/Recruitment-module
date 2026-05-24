@@ -102,6 +102,18 @@ namespace HR.Web.Controllers
 
         private static QuestionGenerationRequestModel BuildQuestionGenerationRequest(NameValueCollection form)
         {
+            if (form == null)
+            {
+                return BuildQuestionGenerationRequest(
+                    string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    DefaultGeneratedQuestionCount,
+                    null,
+                    null);
+            }
+
             int count;
             if (!int.TryParse(form["count"], out count))
             {
@@ -125,17 +137,23 @@ namespace HR.Web.Controllers
 
         private static string ValidateQuestionGenerationRequest(QuestionGenerationRequestModel request)
         {
-            if (string.IsNullOrWhiteSpace(request.JobTitle) || string.IsNullOrWhiteSpace(request.JobDescription))
+            if (request == null)
+            {
+                return "Invalid question generation request";
+            }
+
+            var generationRequest = request;
+            if (string.IsNullOrWhiteSpace(generationRequest.JobTitle) || string.IsNullOrWhiteSpace(generationRequest.JobDescription))
             {
                 return "Job title and description are required";
             }
 
-            if (request.Count <= 0)
+            if (generationRequest.Count <= 0)
             {
                 return "Number of questions must be greater than 0";
             }
 
-            if (request.Count > MaxGeneratedQuestionCount)
+            if (generationRequest.Count > MaxGeneratedQuestionCount)
             {
                 return "Number of questions cannot exceed 50";
             }
@@ -145,13 +163,19 @@ namespace HR.Web.Controllers
 
         private static void LogQuestionGenerationRequest(QuestionGenerationRequestModel request)
         {
+            if (request == null)
+            {
+                return;
+            }
+
+            var generationRequest = request;
             var debugMsg = string.Format(
                 "=== GenerateQuestions Debug ===\njobTitle: {0}\njobDescription length: {1}\ncount: {2}\nexperience: {3}\nquestionTypes: {4}\n",
-                request.JobTitle,
-                request.JobDescription != null ? request.JobDescription.Length : 0,
-                request.Count,
-                request.Experience,
-                request.QuestionTypes != null ? string.Join(", ", request.QuestionTypes) : "null");
+                generationRequest.JobTitle,
+                generationRequest.JobDescription != null ? generationRequest.JobDescription.Length : 0,
+                generationRequest.Count,
+                generationRequest.Experience,
+                generationRequest.QuestionTypes != null ? string.Join(", ", generationRequest.QuestionTypes) : "null");
 
             System.Diagnostics.Debug.WriteLine(debugMsg);
             System.Diagnostics.Trace.WriteLine(debugMsg);
@@ -159,14 +183,20 @@ namespace HR.Web.Controllers
 
         private QuestionGenerationResult GenerateQuestions(QuestionGenerationRequestModel request)
         {
+            if (request == null)
+            {
+                return new QuestionGenerationResult { Success = false, Message = "Invalid request" };
+            }
+
+            var generationRequest = request;
             var result = _questionService.GenerateQuestions(
-                jobTitle: request.JobTitle,
-                jobDescription: request.JobDescription,
-                keyResponsibilities: request.KeyResponsibilities,
-                requiredQualifications: request.RequiredQualifications,
-                experience: request.Experience,
-                questionCount: request.Count,
-                questionTypes: request.QuestionTypes);
+                jobTitle: generationRequest.JobTitle,
+                jobDescription: generationRequest.JobDescription,
+                keyResponsibilities: generationRequest.KeyResponsibilities,
+                requiredQualifications: generationRequest.RequiredQualifications,
+                experience: generationRequest.Experience,
+                questionCount: generationRequest.Count,
+                questionTypes: generationRequest.QuestionTypes);
 
             System.Diagnostics.Debug.WriteLine(
                 string.Format("Question service returned: Success={0}, QuestionCount={1}", result.Success, result.Questions != null ? result.Questions.Count : 0));
@@ -176,15 +206,21 @@ namespace HR.Web.Controllers
 
         private ActionResult BuildQuestionGenerationResponse(QuestionGenerationResult result)
         {
-            if (result.Success)
+            if (result == null)
+            {
+                return Json(new { success = false, error = "No result returned", loading = false }, JsonRequestBehavior.AllowGet);
+            }
+
+            var generationResult = result;
+            if (generationResult.Success)
             {
                 return Json(
                     new
                     {
                         success = true,
                         loading = false,
-                        questions = MapGeneratedQuestions(result.Questions),
-                        metadata = result.Metadata
+                        questions = MapGeneratedQuestions(generationResult.Questions),
+                        metadata = generationResult.Metadata
                     },
                     JsonRequestBehavior.AllowGet);
             }
@@ -193,7 +229,7 @@ namespace HR.Web.Controllers
                 new
                 {
                     success = false,
-                    error = result.Message,
+                    error = generationResult.Message,
                     loading = false
                 },
                 JsonRequestBehavior.AllowGet);
@@ -207,15 +243,21 @@ namespace HR.Web.Controllers
 
         private static object MapGeneratedQuestion(GeneratedQuestion question)
         {
+            if (question == null)
+            {
+                return new { id = (string)null, text = string.Empty, type = "Text", category = string.Empty, difficulty = string.Empty, maxPoints = 0, suggestedOptions = new List<object>() };
+            }
+
+            var generatedQuestion = question;
             return new
             {
-                id = question.Id,
-                text = question.Text,
-                type = question.Type,
-                category = question.Category,
-                difficulty = question.Difficulty,
-                maxPoints = question.MaxPoints,
-                suggestedOptions = MapGeneratedQuestionOptions(question.Options)
+                id = generatedQuestion.Id,
+                text = generatedQuestion.Text,
+                type = generatedQuestion.Type,
+                category = generatedQuestion.Category,
+                difficulty = generatedQuestion.Difficulty,
+                maxPoints = generatedQuestion.MaxPoints,
+                suggestedOptions = MapGeneratedQuestionOptions(generatedQuestion.Options)
             };
         }
 
@@ -268,8 +310,14 @@ namespace HR.Web.Controllers
             ICollection<object> duplicates,
             ICollection<object> newQuestions)
         {
-            var questionText = question.Text ?? string.Empty;
-            var questionType = question.Type ?? "Text";
+            if (question == null || duplicates == null || newQuestions == null)
+            {
+                return;
+            }
+
+            var generatedQuestion = question;
+            var questionText = generatedQuestion.Text ?? string.Empty;
+            var questionType = generatedQuestion.Type ?? "Text";
             var similarQuestion = FindSimilarGeneratedQuestion(existingQuestions, questionText);
 
             if (similarQuestion != null)
@@ -277,7 +325,7 @@ namespace HR.Web.Controllers
                 duplicates.Add(
                     new
                     {
-                        id = question.Id,
+                        id = generatedQuestion.Id,
                         text = questionText,
                         type = questionType,
                         existingQuestionId = similarQuestion.Id,
@@ -290,7 +338,7 @@ namespace HR.Web.Controllers
             newQuestions.Add(
                 new
                 {
-                    id = question.Id,
+                    id = generatedQuestion.Id,
                     text = questionText,
                     type = questionType
                 });
@@ -434,10 +482,16 @@ namespace HR.Web.Controllers
 
         private int CreateQuestionForCompany(GeneratedQuestion generatedQuestion, int? companyId)
         {
+            if (generatedQuestion == null)
+            {
+                throw new ArgumentNullException("generatedQuestion");
+            }
+
+            var questionSource = generatedQuestion;
             var question = new Question
             {
-                Text = generatedQuestion.Text,
-                Type = generatedQuestion.Type,
+                Text = questionSource.Text,
+                Type = questionSource.Type,
                 IsActive = true,
                 CompanyId = companyId
             };
@@ -456,6 +510,11 @@ namespace HR.Web.Controllers
 
             foreach (var option in options)
             {
+                if (option == null)
+                {
+                    continue;
+                }
+
                 _uow.Context.Set<QuestionOption>().Add(
                     new QuestionOption
                     {

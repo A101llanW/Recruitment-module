@@ -88,6 +88,11 @@ namespace HR.Web.Controllers
 
         private User FindUserByUsername(string username, int? companyId)
         {
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return null;
+            }
+
             var lowerUsername = username.ToLower();
             var query = _uow.Context.Users.Where(u => u.UserName.ToLower() == lowerUsername);
             if (companyId.HasValue)
@@ -101,7 +106,7 @@ namespace HR.Web.Controllers
         private bool HasForcedPasswordChangeFlag()
         {
             var authCookie = Request.Cookies[FormsAuthentication.FormsCookieName];
-            if (authCookie == null)
+            if (authCookie == null || string.IsNullOrEmpty(authCookie.Value))
             {
                 return false;
             }
@@ -381,12 +386,13 @@ namespace HR.Web.Controllers
 
         private Applicant FindApplicantForTenantClient(User user, string currentEmail, string previousEmail)
         {
-            if (!user.CompanyId.HasValue)
+            if (user == null || !user.CompanyId.HasValue)
             {
                 return null;
             }
 
-            var applicants = _uow.Context.Applicants.Where(a => a.CompanyId == user.CompanyId.Value);
+            var companyId = user.CompanyId.Value;
+            var applicants = _uow.Context.Applicants.Where(a => a.CompanyId == companyId);
             var normalizedCurrentEmail = TrimToNull(currentEmail);
             var normalizedPreviousEmail = TrimToNull(previousEmail);
 

@@ -112,6 +112,11 @@ namespace HR.Web.Controllers
                 for (var i = 0; i < normalizedAssignments.Count; i++)
                 {
                     var assignment = normalizedAssignments[i];
+                    if (assignment == null)
+                    {
+                        continue;
+                    }
+
                     PositionQuestion positionQuestion;
                     if (existingByQuestionId.TryGetValue(assignment.QuestionId, out positionQuestion))
                     {
@@ -149,9 +154,9 @@ namespace HR.Web.Controllers
                 return;
             }
 
-            var normalizedWeights = NormalizeWeights(assignedQuestions.Select(q => q.Weight).ToList());
+            var normalizedWeights = NormalizeWeights(assignedQuestions.Select(q => q != null ? q.Weight : (decimal?)null).ToList());
             var index = 0;
-            foreach (var question in assignedQuestions.OrderBy(q => q.Order))
+            foreach (var question in assignedQuestions.Where(q => q != null).OrderBy(q => q.Order))
             {
                 question.Weight = normalizedWeights[index++];
             }
@@ -184,14 +189,7 @@ namespace HR.Web.Controllers
 
         private static List<decimal> NormalizeWeights(IList<decimal?> weights)
         {
-            var rawInput = (weights ?? new List<decimal?>())
-                .Select(w => new
-                {
-                    Original = w,
-                    Positive = Math.Max(0m, w ?? 0m)
-                })
-                .ToList();
-
+            var rawInput = PrepareRawWeightInput(weights);
             if (!rawInput.Any())
             {
                 return new List<decimal>();
@@ -202,50 +200,90 @@ namespace HR.Web.Controllers
                 return new List<decimal> { 100m };
             }
 
-            List<decimal> scaled;
+            var scaled = ScaleWeights(rawInput);
+            return RoundAndAdjustTo100(scaled);
+        }
+
+        private static List<RawWeightInput> PrepareRawWeightInput(IList<decimal?> weights)
+        {
+            return (weights ?? new List<decimal?>())
+                .Select(w => new RawWeightInput
+                {
+                    Original = w,
+                    Positive = Math.Max(0m, w ?? 0m)
+                })
+                .ToList();
+        }
+
+        private static List<decimal> ScaleWeights(List<RawWeightInput> rawInput)
+        {
             var configured = rawInput.Where(w => w.Original.HasValue && w.Original.Value > 0m).ToList();
             var configuredTotal = configured.Sum(w => w.Positive);
 
             if (configuredTotal <= 0m)
             {
-                var equalWeight = 100m / rawInput.Count;
-                scaled = Enumerable.Repeat(equalWeight, rawInput.Count).ToList();
+                return ScaleWeightsEqually(rawInput.Count);
             }
-            else if (configuredTotal < 100m && configured.Count < rawInput.Count)
-            {
-                var remainder = 100m - configuredTotal;
-                var unconfiguredCount = rawInput.Count - configured.Count;
-                var unconfiguredWeight = remainder / unconfiguredCount;
 
-                scaled = new List<decimal>(rawInput.Count);
-                foreach (var item in rawInput)
+            if (configuredTotal < 100m && configured.Count < rawInput.Count)
+            {
+                return ScaleWeightsWithRemainder(rawInput, configuredTotal);
+            }
+
+            return ScaleWeightsProportionally(rawInput);
+        }
+
+        private static List<decimal> ScaleWeightsEqually(int count)
+        {
+            var equalWeight = 100m / count;
+            return Enumerable.Repeat(equalWeight, count).ToList();
+        }
+
+        private static List<decimal> ScaleWeightsWithRemainder(List<RawWeightInput> rawInput, decimal configuredTotal)
+        {
+            var remainder = 100m - configuredTotal;
+            var unconfiguredCount = rawInput.Count - rawInput.Count(w => w.Original.HasValue && w.Original.Value > 0m);
+            var unconfiguredWeight = remainder / unconfiguredCount;
+
+            var scaled = new List<decimal>(rawInput.Count);
+            foreach (var item in rawInput)
+            {
+                if (item.Original.HasValue && item.Original.Value > 0m)
                 {
-                    if (item.Original.HasValue && item.Original.Value > 0m)
-                    {
-                        scaled.Add(item.Positive);
-                    }
-                    else
-                    {
-                        scaled.Add(unconfiguredWeight);
-                    }
+                    scaled.Add(item.Positive);
+                }
+                else
+                {
+                    scaled.Add(unconfiguredWeight);
                 }
             }
-            else
-            {
-                var total = rawInput.Sum(item => item.Positive);
-                scaled = rawInput
-                    .Select(item => total > 0m ? (item.Positive / total) * 100m : 0m)
-                    .ToList();
-            }
 
+            return scaled;
+        }
+
+        private static List<decimal> ScaleWeightsProportionally(List<RawWeightInput> rawInput)
+        {
+            var total = rawInput.Sum(item => item.Positive);
+            return rawInput
+                .Select(item => total > 0m ? (item.Positive / total) * 100m : 0m)
+                .ToList();
+        }
+
+        private static List<decimal> RoundAndAdjustTo100(List<decimal> scaled)
+        {
             var rounded = scaled
                 .Select(value => Math.Round(value, 2, MidpointRounding.AwayFromZero))
                 .ToList();
 
             var difference = 100m - rounded.Sum();
             rounded[rounded.Count - 1] += difference;
-
             return rounded;
+        }
+
+        private sealed class RawWeightInput
+        {
+            public decimal? Original { get; set; }
+            public decimal Positive { get; set; }
         }
     }
 

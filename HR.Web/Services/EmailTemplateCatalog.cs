@@ -6,23 +6,22 @@ namespace HR.Web.Services
 {
     public static class EmailTemplateCatalog
     {
-        public const string FailedCandidateStandard = "failed_candidate_standard";
-        public const string FailedCandidateNextSteps = "failed_candidate_next_steps";
-        public const string InterviewCandidateStandard = "interview_candidate_standard";
-        public const string InterviewCandidateReminder = "interview_candidate_reminder";
-        public const string InterviewerAssignedStandard = "interviewer_assigned_standard";
-        public const string ApplicationReceivedStandard = "application_received_standard";
-        public const string SecondaryStageInvitation = "secondary_stage_invitation";
+        public static readonly string FailedCandidateStandard = "failed_candidate_standard";
+        public static readonly string FailedCandidateNextSteps = "failed_candidate_next_steps";
+        public static readonly string InterviewCandidateStandard = "interview_candidate_standard";
+        public static readonly string InterviewCandidateReminder = "interview_candidate_reminder";
+        public static readonly string InterviewerAssignedStandard = "interviewer_assigned_standard";
+        public static readonly string ApplicationReceivedStandard = "application_received_standard";
+        public static readonly string SecondaryStageInvitation = "secondary_stage_invitation";
 
         /// <summary>Token for the questionnaire URL when HR opens a further stage (any stage after the first).</summary>
-        public const string QuestionnaireStageLinkToken = "QuestionnaireStageLink";
+        public static readonly string QuestionnaireStageLinkToken = "QuestionnaireStageLink";
 
         /// <summary>Legacy token name; always filled with the same value as <see cref="QuestionnaireStageLinkToken"/>.</summary>
-        public const string StageTwoLinkToken = "StageTwoLink";
-        public static readonly string AccountResetEmailTemplate =
-            string.Concat("pass", "word_reset_standard");
-        public const string MfaCodeStandard = "mfa_code_standard";
-        public const string EmailVerificationStandard = "email_verification_standard";
+        public static readonly string StageTwoLinkToken = "StageTwoLink";
+        public const string AccountResetEmailTemplate = "password_reset_standard";
+        public static readonly string MfaCodeStandard = "mfa_code_standard";
+        public static readonly string EmailVerificationStandard = "email_verification_standard";
 
         public sealed class TemplateDefinition
         {
@@ -141,7 +140,7 @@ namespace HR.Web.Services
 
             switch (normalizedKey)
             {
-                case FailedCandidateNextSteps:
+                case "failed_candidate_next_steps":
                     subjectTemplate = "Application update for {{PositionTitle}}";
                     bodyTemplate =
                         "<p>Dear {{CandidateName}},</p>" +
@@ -152,7 +151,7 @@ namespace HR.Web.Services
                         "<p>Regards,<br/>{{CompanyName}} Recruitment Team</p>";
                     return true;
 
-                case InterviewCandidateReminder:
+                case "interview_candidate_reminder":
                     subjectTemplate = "Interview reminder for {{PositionTitle}}";
                     bodyTemplate =
                         "<p>Dear {{CandidateName}},</p>" +
@@ -163,7 +162,7 @@ namespace HR.Web.Services
                         "<p>Best regards,<br/>{{CompanyName}} Recruitment Team</p>";
                     return true;
 
-                case InterviewerAssignedStandard:
+                case "interviewer_assigned_standard":
                     subjectTemplate = "Interview assigned for {{CandidateName}}";
                     bodyTemplate =
                         "<p>Hello {{InterviewerName}},</p>" +
@@ -176,7 +175,7 @@ namespace HR.Web.Services
                         "<p>Regards,<br/>{{CompanyName}} Recruitment Team</p>";
                     return true;
 
-                case ApplicationReceivedStandard:
+                case "application_received_standard":
                     subjectTemplate = "Application received for {{PositionTitle}}";
                     bodyTemplate =
                         "<p>Dear {{CandidateName}},</p>" +
@@ -186,7 +185,7 @@ namespace HR.Web.Services
                         "<p>Thank you for your interest.<br/>{{CompanyName}} Recruitment Team</p>";
                     return true;
 
-                case SecondaryStageInvitation:
+                case "secondary_stage_invitation":
                     subjectTemplate = "Next step: complete the questionnaire for {{PositionTitle}}";
                     bodyTemplate =
                         "<p>Dear {{CandidateName}},</p>" +
@@ -208,7 +207,7 @@ namespace HR.Web.Services
                         "<p>This link expires in 24 hours.</p>";
                     return true;
 
-                case MfaCodeStandard:
+                case "mfa_code_standard":
                     subjectTemplate = "Your verification code - {{CompanyName}}";
                     bodyTemplate =
                         "<p>Hello,</p>" +
@@ -217,7 +216,7 @@ namespace HR.Web.Services
                         "<p>This code expires in 10 minutes.</p>";
                     return true;
 
-                case EmailVerificationStandard:
+                case "email_verification_standard":
                     subjectTemplate = "Verify your email - {{CompanyName}}";
                     bodyTemplate =
                         "<p>Hello,</p>" +
@@ -226,7 +225,7 @@ namespace HR.Web.Services
                         "<p>This code expires in 15 minutes.</p>";
                     return true;
 
-                case InterviewCandidateStandard:
+                case "interview_candidate_standard":
                     subjectTemplate = "Interview update for {{PositionTitle}}";
                     bodyTemplate =
                         "<p>Dear {{CandidateName}},</p>" +
@@ -237,7 +236,7 @@ namespace HR.Web.Services
                         "<p>Regards,<br/>{{CompanyName}} Recruitment Team</p>";
                     return true;
 
-                case FailedCandidateStandard:
+                case "failed_candidate_standard":
                 default:
                     subjectTemplate = "Update on your application for {{PositionTitle}}";
                     bodyTemplate =

@@ -32,6 +32,11 @@ namespace HR.Web.Controllers
         private IEmailService EmailSvc => _emailService ?? (_emailService = new EmailService());
         private RealisticCaptchaService _captchaService = new RealisticCaptchaService();
 
+        private string GetAuthenticatedUsername()
+        {
+            return User?.Identity?.Name;
+        }
+
         [AllowAnonymous]
         public ActionResult Login(string returnUrl)
         {
@@ -58,7 +63,7 @@ namespace HR.Web.Controllers
                 }
             }
 
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.ToReturnUrlString(returnUri);
+            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
             return View();
         }
 
@@ -97,10 +102,10 @@ namespace HR.Web.Controllers
         {
             // Check if user is required to change password
             var authCookie = Request.Cookies[FormsAuthentication.FormsCookieName];
-            if (authCookie != null)
+            if (authCookie != null && !string.IsNullOrEmpty(authCookie.Value))
             {
                 var ticket = FormsAuthentication.Decrypt(authCookie.Value);
-                if (ticket != null && ticket.UserData.Contains("RequirePasswordChange"))
+                if (ticket != null && !string.IsNullOrEmpty(ticket.UserData) && ticket.UserData.Contains("RequirePasswordChange"))
                 {
                     ViewBag.ForcePasswordChange = true;
                     ViewBag.Message = TempData["PasswordChangeMessage"] as string;
@@ -119,11 +124,12 @@ namespace HR.Web.Controllers
                 return View();
             }
 
-            model.OldPassword = Request.Unvalidated.Form["OldPassword"];
-            model.NewPassword = Request.Unvalidated.Form["NewPassword"];
-            model.ConfirmPassword = Request.Unvalidated.Form["ConfirmPassword"];
+            var passwordModel = model;
+            passwordModel.CurrentPassword = Request.Unvalidated.Form["OldPassword"];
+            passwordModel.NewPassword = Request.Unvalidated.Form["NewPassword"];
+            passwordModel.ConfirmNewPassword = Request.Unvalidated.Form["ConfirmPassword"];
 
-            return HandleChangePassword(model);
+            return HandleChangePassword(passwordModel);
         }
 
         [Authorize]
@@ -131,8 +137,11 @@ namespace HR.Web.Controllers
         {
             try
             {
-                var user = GetCurrentUserFromIdentity(User.Identity.Name);
-                if (user == null) return HttpNotFound();
+                var user = GetCurrentUserFromIdentity(GetAuthenticatedUsername());
+                if (user == null)
+                {
+                    return HttpNotFound();
+                }
 
                 return View(BuildProfileViewModel(user));
             }
@@ -170,10 +179,13 @@ namespace HR.Web.Controllers
         [Authorize]
         public ActionResult VerifyEmail()
         {
-            var username = User.Identity.Name;
+            var username = GetAuthenticatedUsername();
             var user = GetCurrentUserFromIdentity(username);
 
-            if (user == null) return HttpNotFound();
+            if (user == null)
+            {
+                return HttpNotFound();
+            }
             
             // If already verified, move them to dashboard
             if (user.IsEmailVerified) {
@@ -189,10 +201,13 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<ActionResult> UpdateAndSendVerification(string newEmail)
         {
-            var username = User.Identity.Name;
+            var username = GetAuthenticatedUsername();
             var user = GetCurrentUserFromIdentity(username);
 
-            if (user == null) return HttpNotFound();
+            if (user == null)
+            {
+                return HttpNotFound();
+            }
             
             if (string.IsNullOrWhiteSpace(newEmail))
             {
@@ -237,11 +252,17 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<ActionResult> SendVerificationEmail()
         {
-            var username = User.Identity.Name;
+            var username = GetAuthenticatedUsername();
             var user = GetCurrentUserFromIdentity(username);
 
-            if (user == null) return HttpNotFound();
-            if (user.IsEmailVerified) return Json(new { success = false, message = "Email is already verified." });
+            if (user == null)
+            {
+                return HttpNotFound();
+            }
+            if (user.IsEmailVerified)
+            {
+                return Json(new { success = false, message = "Email is already verified." });
+            }
 
             // Generate 6-digit OTP
             string otp = SecuritySvc.GenerateTemporaryCode();
@@ -284,12 +305,18 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult VerifyEmail(string code)
         {
-            if (string.IsNullOrEmpty(code)) return Json(new { success = false, message = "Please enter the verification code." });
+            if (string.IsNullOrEmpty(code))
+            {
+                return Json(new { success = false, message = "Please enter the verification code." });
+            }
 
-            var username = User.Identity.Name;
+            var username = GetAuthenticatedUsername();
             var user = GetCurrentUserFromIdentity(username);
 
-            if (user == null) return HttpNotFound();
+            if (user == null)
+            {
+                return HttpNotFound();
+            }
 
             if (user.EmailVerificationCode == code && user.EmailVerificationExpiry > DateTime.Now)
             {
@@ -311,7 +338,7 @@ namespace HR.Web.Controllers
         [Authorize]
         public ActionResult Logout()
         {
-            var username = User.Identity.Name;
+            var username = GetAuthenticatedUsername();
             
             FormsAuthentication.SignOut();
             Session.Clear();
@@ -336,7 +363,7 @@ namespace HR.Web.Controllers
         [AllowAnonymous]
         public ActionResult Register(int? companyId = null, bool isSuperAdmin = false, string returnUrl = null)
         {
-            return HandleRegisterGet(companyId, isSuperAdmin, returnUrl ?? string.Empty);
+            return HandleRegisterGet(companyId, isSuperAdmin, ParseReturnUriOrNull(returnUrl));
         }
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -349,7 +376,7 @@ namespace HR.Web.Controllers
                 model.ConfirmPassword = Request.Unvalidated.Form["ConfirmPassword"];
             }
 
-            return HandleRegisterPost(model, isSuperAdmin, returnUrl ?? string.Empty);
+            return HandleRegisterPost(model, isSuperAdmin, ParseRegisterReturnPath(returnUrl));
         }
 
         // Forgot Password Actions
@@ -422,10 +449,16 @@ namespace HR.Web.Controllers
             try 
             {
                 string username = Session["ForcedMfaSetup"] as string;
-                if (string.IsNullOrEmpty(username)) return RedirectToAction("Login");
+                if (string.IsNullOrEmpty(username))
+                {
+                    return RedirectToAction("Login");
+                }
 
                 var user = _uow.Context.Users.FirstOrDefault(u => u.UserName == username);
-                if (user == null) return RedirectToAction("Login");
+                if (user == null)
+                {
+                    return RedirectToAction("Login");
+                }
 
                 // Prepare setup data for Email
                 ViewBag.Email = user.Email;
@@ -444,14 +477,18 @@ namespace HR.Web.Controllers
         public ActionResult SetupMFA(string method, string code)
         {
             string username = Session["ForcedMfaSetup"] as string;
-            if (string.IsNullOrEmpty(username)) return RedirectToAction("Login");
+            if (string.IsNullOrEmpty(username))
+            {
+                return RedirectToAction("Login");
+            }
 
             var user = _uow.Context.Users.FirstOrDefault(u => u.UserName == username);
-            if (user == null) return RedirectToAction("Login");
+            if (user == null)
+            {
+                return RedirectToAction("Login");
+            }
 
-            bool isValid = false;
-
-            isValid = SecuritySvc.ValidateTemporaryCode(user, code);
+            bool isValid = SecuritySvc.ValidateTemporaryCode(user, code ?? string.Empty);
 
             if (isValid)
             {
@@ -479,10 +516,16 @@ namespace HR.Web.Controllers
         public JsonResult SendSetupCode(string method)
         {
             string username = Session["ForcedMfaSetup"] as string;
-            if (string.IsNullOrEmpty(username)) return Json(new { success = false, message = "Session expired" });
+            if (string.IsNullOrEmpty(username))
+            {
+                return Json(new { success = false, message = "Session expired" });
+            }
 
             var user = _uow.Context.Users.FirstOrDefault(u => u.UserName == username);
-            if (user == null) return Json(new { success = false, message = "User not found" });
+            if (user == null)
+            {
+                return Json(new { success = false, message = "User not found" });
+            }
 
             if (!SendMfaCode(user, method))
             {
@@ -498,11 +541,19 @@ namespace HR.Web.Controllers
         {
             try 
             {
-                string username = Session["PendingMfaUsername"] as string ?? (User.Identity.IsAuthenticated ? User.Identity.Name : null);
-                if (string.IsNullOrEmpty(username)) return RedirectToAction("Login");
+                var identity = User?.Identity;
+                string username = Session["PendingMfaUsername"] as string
+                    ?? (identity != null && identity.IsAuthenticated ? identity.Name : null);
+                if (string.IsNullOrEmpty(username))
+                {
+                    return RedirectToAction("Login");
+                }
 
                 var user = FindPendingMfaUser(username);
-                if (user == null) return RedirectToAction("Login");
+                if (user == null)
+                {
+                    return RedirectToAction("Login");
+                }
 
                 ViewBag.MfaMethod = user.MfaMethod ?? "Email";
                 ViewBag.EmailHint = MaskContactInfo(user.Email);
@@ -540,10 +591,16 @@ namespace HR.Web.Controllers
         public JsonResult ResendCode()
         {
             string username = Session["PendingMfaUsername"] as string;
-            if (string.IsNullOrEmpty(username)) return Json(new { success = false, message = "Session expired" });
+            if (string.IsNullOrEmpty(username))
+            {
+                return Json(new { success = false, message = "Session expired" });
+            }
 
             var user = FindPendingMfaUser(username);
-            if (user == null) return Json(new { success = false, message = "User not found" });
+            if (user == null)
+            {
+                return Json(new { success = false, message = "User not found" });
+            }
 
             if (!UsesEmailMfa(user))
             {

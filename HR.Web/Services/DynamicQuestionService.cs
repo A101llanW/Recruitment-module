@@ -159,14 +159,18 @@ namespace HR.Web.Services
 
         private JobAnalysis AnalyzeJob(string jobTitle, string jobDescription, string keyResponsibilities, string requiredQualifications, string experience)
         {
+            var safeTitle = jobTitle ?? string.Empty;
+            var safeDescription = jobDescription ?? string.Empty;
+            var safeResponsibilities = keyResponsibilities ?? string.Empty;
+            var safeQualifications = requiredQualifications ?? string.Empty;
             var analysis = new JobAnalysis
             {
-                JobTitle = jobTitle != null ? jobTitle.Trim() : "",
-                SeniorityLevel = DetermineSeniority(experience, jobTitle, jobDescription)
+                JobTitle = safeTitle.Trim(),
+                SeniorityLevel = DetermineSeniority(experience, safeTitle, safeDescription)
             };
 
             // Combine all text for analysis
-            var allText = string.Format("{0} {1} {2} {3}", jobTitle, jobDescription, keyResponsibilities, requiredQualifications).ToLower();
+            var allText = string.Format("{0} {1} {2} {3}", safeTitle, safeDescription, safeResponsibilities, safeQualifications).ToLower();
 
             // Extract technical skills
             analysis.TechnicalSkills = ExtractTechnicalSkills(allText);
@@ -175,10 +179,10 @@ namespace HR.Web.Services
             analysis.SoftSkills = ExtractSoftSkills(allText);
 
             // Extract responsibilities
-            analysis.Responsibilities = ExtractResponsibilities(keyResponsibilities, jobDescription);
+            analysis.Responsibilities = ExtractResponsibilities(safeResponsibilities, safeDescription);
 
             // Extract qualifications
-            analysis.Qualifications = ExtractQualifications(requiredQualifications, jobDescription);
+            analysis.Qualifications = ExtractQualifications(safeQualifications, safeDescription);
 
             // Determine industry
             analysis.Industry = DetermineIndustry(allText);
@@ -213,9 +217,15 @@ namespace HR.Web.Services
 
         private List<GeneratedQuestion> GenerateQuestionsByType(string type, int count, JobAnalysis analysis)
         {
-            var questions = new List<GeneratedQuestion>();
+            if (analysis == null || string.IsNullOrWhiteSpace(type))
+            {
+                return new List<GeneratedQuestion>();
+            }
 
-            switch (type.ToLower())
+            var questions = new List<GeneratedQuestion>();
+            var questionType = type;
+
+            switch (questionType.ToLower())
             {
                 case "text":
                     questions.AddRange(GenerateTextQuestions(count, analysis));
@@ -236,6 +246,11 @@ namespace HR.Web.Services
 
         private List<GeneratedQuestion> GenerateTextQuestions(int count, JobAnalysis analysis)
         {
+            if (analysis == null || count <= 0)
+            {
+                return new List<GeneratedQuestion>();
+            }
+
             var questions = new List<GeneratedQuestion>();
             
             for (int i = 0; i < count; i++)
@@ -325,6 +340,11 @@ namespace HR.Web.Services
 
         private List<GeneratedQuestion> GenerateChoiceQuestions(int count, JobAnalysis analysis)
         {
+            if (analysis == null || count <= 0)
+            {
+                return new List<GeneratedQuestion>();
+            }
+
             var questions = new List<GeneratedQuestion>();
             
             for (int i = 0; i < count; i++)
@@ -446,52 +466,72 @@ namespace HR.Web.Services
 
         private string GetVariationText(string baseText, int variationIndex, JobAnalysis analysis)
         {
-            if (variationIndex == 0) return baseText;
-            
-            var variations = new List<string>();
-            
-            // Create variations based on the base text
+            if (string.IsNullOrEmpty(baseText))
+            {
+                return string.Empty;
+            }
+
+            if (variationIndex == 0)
+            {
+                return baseText;
+            }
+
             if (baseText.Contains("feedback"))
             {
-                variations.Add("How do you prefer to give feedback to your colleagues?");
-                variations.Add("What type of feedback motivates you most to improve?");
-                variations.Add("How do you handle constructive criticism in the workplace?");
+                return PickVariationText(variationIndex, "How do you prefer to give feedback to your colleagues?",
+                    "What type of feedback motivates you most to improve?",
+                    "How do you handle constructive criticism in the workplace?");
             }
-            else if (baseText.Contains("work environment"))
+
+            if (baseText.Contains("work environment"))
             {
-                variations.Add("What type of team structure helps you perform at your best?");
-                variations.Add("How do you maintain focus in a busy work environment?");
-                variations.Add("What tools or resources help you be most productive?");
+                return PickVariationText(variationIndex, "What type of team structure helps you perform at your best?",
+                    "How do you maintain focus in a busy work environment?",
+                    "What tools or resources help you be most productive?");
             }
-            else if (baseText.Contains("proficiency"))
+
+            if (baseText.Contains("proficiency"))
             {
-                // Use different technical skills for variations
-                if (analysis.TechnicalSkills.Count > variationIndex)
-                {
-                    return string.Format("How would you rate your proficiency in {0}?", analysis.TechnicalSkills[variationIndex]);
-                }
-                variations.Add("How comfortable are you learning new technical skills?");
-                variations.Add("How do you stay updated with technical developments in your field?");
+                return GetProficiencyVariationText(baseText, variationIndex, analysis);
             }
-            else if (baseText.Contains("conflicting priorities"))
+
+            if (baseText.Contains("conflicting priorities"))
             {
-                variations.Add("How do you approach managing multiple projects simultaneously?");
-                variations.Add("What strategies do you use to meet tight deadlines?");
-                variations.Add("How do you prioritize tasks when everything seems urgent?");
+                return PickVariationText(variationIndex, "How do you approach managing multiple projects simultaneously?",
+                    "What strategies do you use to meet tight deadlines?",
+                    "How do you prioritize tasks when everything seems urgent?");
             }
-            else
+
+            return PickVariationText(variationIndex,
+                string.Format("In your experience, how would you approach {0}?", baseText.ToLower()),
+                string.Format("What strategies have worked well for you regarding {0}?", baseText.ToLower()),
+                string.Format("How would you improve your approach to {0}?", baseText.ToLower()));
+        }
+
+        private static string PickVariationText(int variationIndex, params string[] variations)
+        {
+            return variations[Math.Min(variationIndex - 1, variations.Length - 1)];
+        }
+
+        private static string GetProficiencyVariationText(string baseText, int variationIndex, JobAnalysis analysis)
+        {
+            if (analysis?.TechnicalSkills != null && analysis.TechnicalSkills.Count > variationIndex)
             {
-                // Generic variations
-                variations.Add(string.Format("In your experience, how would you approach {0}?", baseText.ToLower()));
-                variations.Add(string.Format("What strategies have worked well for you regarding {0}?", baseText.ToLower()));
-                variations.Add(string.Format("How would you improve your approach to {0}?", baseText.ToLower()));
+                return string.Format("How would you rate your proficiency in {0}?", analysis.TechnicalSkills[variationIndex]);
             }
-            
-            return variations[Math.Min(variationIndex - 1, variations.Count - 1)];
+
+            return PickVariationText(variationIndex,
+                "How comfortable are you learning new technical skills?",
+                "How do you stay updated with technical developments in your field?");
         }
 
         private List<GeneratedQuestion> GenerateNumberQuestions(int count, JobAnalysis analysis)
         {
+            if (analysis == null || count <= 0)
+            {
+                return new List<GeneratedQuestion>();
+            }
+
             var questions = new List<GeneratedQuestion>();
             
             for (int i = 0; i < count; i++)
@@ -597,6 +637,11 @@ namespace HR.Web.Services
 
         private List<GeneratedQuestion> GenerateRatingQuestions(int count, JobAnalysis analysis)
         {
+            if (analysis == null || count <= 0)
+            {
+                return new List<GeneratedQuestion>();
+            }
+
             var questions = new List<GeneratedQuestion>();
             
             for (int i = 0; i < count; i++)
@@ -741,8 +786,13 @@ namespace HR.Web.Services
             }
 
             // Pick a responsibility and try to clean/shorten it
-            var raw = analysis.Responsibilities[GetSecureRandomInt(analysis.Responsibilities.Count)];
+            var raw = analysis.Responsibilities[GetSecureRandomInt(analysis.Responsibilities.Count)] ?? string.Empty;
             
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return defaultResponsibilities[GetSecureRandomInt(defaultResponsibilities.Length)];
+            }
+
             // If it's too long, try to take just the first part (before a comma or period)
             if (raw.Length > 80)
             {
@@ -798,12 +848,16 @@ namespace HR.Web.Services
                 // Helper methods for template variable replacement
         private string ReplaceTemplateVariables(string text, JobAnalysis analysis)
         {
-            if (string.IsNullOrEmpty(text)) return text;
-            
+            if (string.IsNullOrEmpty(text) || analysis == null)
+            {
+                return text;
+            }
+
+            var jobAnalysis = analysis;
             return text
-                .Replace("{jobTitle}", analysis.JobTitle ?? "position")
-                .Replace("{industry}", analysis.Industry ?? "industry")
-                .Replace("{seniority}", analysis.SeniorityLevel ?? "level");
+                .Replace("{jobTitle}", jobAnalysis.JobTitle ?? "position")
+                .Replace("{industry}", jobAnalysis.Industry ?? "industry")
+                .Replace("{seniority}", jobAnalysis.SeniorityLevel ?? "level");
         }
 
         private bool IsValidQuestionType(string type)
@@ -814,24 +868,44 @@ namespace HR.Web.Services
 
                 private string DetermineSeniority(string experience, string jobTitle, string jobDescription)
         {
-            var allText = string.Format("{0} {1} {2}", experience, jobTitle, jobDescription).ToLower();
+            var seniorityFromText = MatchSeniorityFromText(string.Format("{0} {1} {2}", experience, jobTitle, jobDescription).ToLower());
+            if (seniorityFromText != null)
+            {
+                return seniorityFromText;
+            }
 
+            return MapExperienceLevelToSeniority(experience);
+        }
+
+        private static string MatchSeniorityFromText(string allText)
+        {
             if (allText.Contains("senior") || allText.Contains("lead") || allText.Contains("principal") || allText.Contains("architect"))
+            {
                 return "Senior";
-            if (allText.Contains("junior") || allText.Contains("entry") || allText.Contains("intern"))
-                return "Junior";
-            if (allText.Contains("mid") || allText.Contains("intermediate"))
-                return "Mid-level";
+            }
 
+            if (allText.Contains("junior") || allText.Contains("entry") || allText.Contains("intern"))
+            {
+                return "Junior";
+            }
+
+            if (allText.Contains("mid") || allText.Contains("intermediate"))
+            {
+                return "Mid-level";
+            }
+
+            return null;
+        }
+
+        private static string MapExperienceLevelToSeniority(string experience)
+        {
             var expLower = experience != null ? experience.ToLower() : "mid";
             switch (expLower)
             {
                 case "senior":
-                    return "Senior";
-                case "junior":
-                    return "Junior";
                 case "lead":
                     return "Senior";
+                case "junior":
                 case "entry":
                     return "Junior";
                 default:
@@ -858,20 +932,22 @@ namespace HR.Web.Services
             var skills = new List<string>();
             foreach (var keyword in techKeywords)
             {
-                // For keywords with space, we match literals, for short ones like 'ai', we use boundaries
-                if (keyword.Length <= 3 || !keyword.Contains(" "))
-                {
-                    if (Regex.IsMatch(text, @"\b" + Regex.Escape(keyword) + @"\b", RegexOptions.IgnoreCase))
-                    {
-                        skills.Add(keyword);
-                    }
-                }
-                else if (text.Contains(keyword))
+                if (MatchesTechnicalKeyword(text, keyword))
                 {
                     skills.Add(keyword);
                 }
             }
             return skills;
+        }
+
+        private static bool MatchesTechnicalKeyword(string text, string keyword)
+        {
+            if (keyword.Length <= 3 || !keyword.Contains(" "))
+            {
+                return Regex.IsMatch(text, @"\b" + Regex.Escape(keyword) + @"\b", RegexOptions.IgnoreCase);
+            }
+
+            return text.Contains(keyword);
         }
 
         private List<string> ExtractSoftSkills(string text)
@@ -896,44 +972,53 @@ namespace HR.Web.Services
             
             foreach (var line in lines)
             {
-                var clean = line.Trim();
-                // Filter out short filler words or meta-text
-                if (clean.Length > 15 && clean.Length < 150)
-                {
-                    responsibilities.Add(clean);
-                }
-                else if (clean.Length >= 150)
-                {
-                    // If it's a long paragraph, break it into sentences
-                    var sentences = Regex.Split(clean, @"(?<=[.!?])\s+").Where(s => s.Length > 15 && s.Length < 150);
-                    responsibilities.AddRange(sentences);
-                }
+                AddResponsibilityLines(responsibilities, line.Trim());
             }
             
             return responsibilities.Distinct().ToList();
         }
 
+        private static void AddResponsibilityLines(List<string> responsibilities, string clean)
+        {
+            if (clean.Length > 15 && clean.Length < 150)
+            {
+                responsibilities.Add(clean);
+                return;
+            }
+
+            if (clean.Length >= 150)
+            {
+                var sentences = Regex.Split(clean, @"(?<=[.!?])\s+").Where(s => s.Length > 15 && s.Length < 150);
+                responsibilities.AddRange(sentences);
+            }
+        }
+
         private List<string> ExtractQualifications(string requiredQualifications, string jobDescription)
         {
-            var text = requiredQualifications + " " + jobDescription;
+            var text = (requiredQualifications ?? string.Empty) + " " + (jobDescription ?? string.Empty);
             var sentences = Regex.Split(text, @"(?<=[.!?])\s+").Where(s => s.Length > 10).ToList();
             return sentences.Take(5).Select(s => s.Trim().TrimEnd('.')).ToList();
         }
 
         private string DetermineIndustry(string text)
         {
-            if (text.Contains("software") || text.Contains("developer") || text.Contains("programming"))
-                return "Technology";
-            if (text.Contains("marketing") || text.Contains("sales") || text.Contains("advertising"))
-                return "Marketing/Sales";
-            if (text.Contains("finance") || text.Contains("accounting") || text.Contains("banking"))
-                return "Finance";
-            if (text.Contains("healthcare") || text.Contains("medical") || text.Contains("nursing"))
-                return "Healthcare";
-            if (text.Contains("education") || text.Contains("teaching") || text.Contains("academic"))
-                return "Education";
-            if (text.Contains("hr") || text.Contains("human resources") || text.Contains("recruitment"))
-                return "Recruitment";
+            var industryMatchers = new[]
+            {
+                new { Keywords = new[] { "software", "developer", "programming" }, Industry = "Technology" },
+                new { Keywords = new[] { "marketing", "sales", "advertising" }, Industry = "Marketing/Sales" },
+                new { Keywords = new[] { "finance", "accounting", "banking" }, Industry = "Finance" },
+                new { Keywords = new[] { "healthcare", "medical", "nursing" }, Industry = "Healthcare" },
+                new { Keywords = new[] { "education", "teaching", "academic" }, Industry = "Education" },
+                new { Keywords = new[] { "hr", "human resources", "recruitment" }, Industry = "Recruitment" }
+            };
+
+            foreach (var matcher in industryMatchers)
+            {
+                if (matcher.Keywords.Any(text.Contains))
+                {
+                    return matcher.Industry;
+                }
+            }
 
             return "General";
         }
