@@ -55,19 +55,32 @@
                         }
                     </td>
                     <td>
-                        <span class="badge badge-@(user.IsLocked ? "danger" : "success") badge-system">
-                            @(user.IsLocked ? "LOCKED" : "ACTIVE")
-                        </span>
+                        @if (user.IsLocked)
+                        {
+                            <span class="badge badge-danger badge-system">LOCKED</span>
+                            if (user.LockoutEndTime.HasValue)
+                            {
+                                <div class="text-danger x-small mt-1">Until @user.LockoutEndTime.Value.ToString("g")</div>
+                            }
+                            if (user.FailedLoginAttempts > 0)
+                            {
+                                <div class="text-muted x-small">@user.FailedLoginAttempts failed attempt@(user.FailedLoginAttempts == 1 ? "" : "s")</div>
+                            }
+                        }
+                        else
+                        {
+                            <span class="badge badge-success badge-system">ACTIVE</span>
+                        }
                     </td>
                     <td class="text-right">
-                        <div class="d-flex justify-content-end gap-2">
+                        <div class="d-flex justify-content-end gap-2 flex-wrap">
                             @if (user.IsLocked)
                             {
                                 using (Html.BeginForm("UnlockUserAccount", "Admin", new { id = user.Id }, FormMethod.Post, new { @class = "d-inline" }))
                                 {
                                     @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-sm btn-outline-success" title="Unlock" onclick="return confirm('Unlock user?');">
-                                        <i class="fas fa-unlock"></i>
+                                    <button type="submit" class="btn btn-sm btn-success" title="Clear lockout and failed login attempts" onclick="return confirm('Unlock @user.UserName? They will be able to sign in immediately.');">
+                                        <i class="fas fa-unlock mr-1"></i> Unlock account
                                     </button>
                                 }
                             }

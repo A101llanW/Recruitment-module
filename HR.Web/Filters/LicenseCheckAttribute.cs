@@ -1,5 +1,6 @@
 using System;
 using System.Web.Mvc;
+using HR.Web.Helpers;
 using HR.Web.Services;
 
 namespace HR.Web.Filters
@@ -64,7 +65,10 @@ namespace HR.Web.Filters
 
             System.Web.Security.FormsAuthentication.SignOut();
             filterContext.HttpContext.Session.Abandon();
-            filterContext.Result = new RedirectResult("~/Account/Login");
+            var tenant = filterContext.RouteData.Values["tenant"] as string;
+            var returnUrl = filterContext.HttpContext.Request != null ? filterContext.HttpContext.Request.RawUrl : null;
+            var urlHelper = new System.Web.Mvc.UrlHelper(filterContext.RequestContext);
+            filterContext.Result = new RedirectResult(urlHelper.Action("Login", "Account", new { tenant = tenant, returnUrl = returnUrl }));
             return true;
         }
     }

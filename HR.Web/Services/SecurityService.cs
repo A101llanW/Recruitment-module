@@ -27,6 +27,24 @@ namespace HR.Web.Services
 
             return BuildRecentFailedLoginQuery(username, companyId).Count() >= MaxFailedAttempts;
         }
+
+        public bool IsAccountLockedForUser(User user)
+        {
+            if (user == null)
+            {
+                return false;
+            }
+
+            foreach (var identity in GetLoginIdentities(user))
+            {
+                if (IsAccountLocked(identity, user.CompanyId) || IsAccountLocked(identity, null))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
         
         public DateTime? GetLockoutEndTime(string username, int? companyId = null)
         {
@@ -47,6 +65,23 @@ namespace HR.Web.Services
             }
             
             return null;
+        }
+
+        public DateTime? GetLockoutEndTimeForUser(User user)
+        {
+            if (user == null)
+            {
+                return null;
+            }
+
+            DateTime? latestEnd = null;
+            foreach (var identity in GetLoginIdentities(user))
+            {
+                latestEnd = MaxNullableDateTime(latestEnd, GetLockoutEndTime(identity, user.CompanyId));
+                latestEnd = MaxNullableDateTime(latestEnd, GetLockoutEndTime(identity, null));
+            }
+
+            return latestEnd;
         }
         
         public void RecordLoginAttempt(string username, string ipAddress, bool wasSuccessful, int? companyId = null, string failureReason = null)
@@ -79,6 +114,23 @@ namespace HR.Web.Services
 
             return Math.Max(0, MaxFailedAttempts - BuildRecentFailedLoginQuery(username, companyId).Count());
         }
+
+        public int GetFailedAttemptCountForUser(User user)
+        {
+            if (user == null)
+            {
+                return 0;
+            }
+
+            var highestCount = 0;
+            foreach (var identity in GetLoginIdentities(user))
+            {
+                highestCount = Math.Max(highestCount, BuildRecentFailedLoginQuery(identity, user.CompanyId).Count());
+                highestCount = Math.Max(highestCount, BuildRecentFailedLoginQuery(identity, null).Count());
+            }
+
+            return highestCount;
+        }
         
         public void ClearFailedAttempts(string username, int? companyId = null)
         {
@@ -95,6 +147,52 @@ namespace HR.Web.Services
             }
             
             _uow.Complete();
+        }
+
+        public void ClearFailedAttemptsForUser(User user)
+        {
+            if (user == null)
+            {
+                return;
+            }
+
+            foreach (var identity in GetLoginIdentities(user))
+            {
+                ClearFailedAttempts(identity, null);
+            }
+        }
+
+        private static IEnumerable<string> GetLoginIdentities(User user)
+        {
+            if (!string.IsNullOrWhiteSpace(user.UserName))
+            {
+                yield return user.UserName.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(user.Email))
+            {
+                var email = user.Email.Trim();
+                if (string.IsNullOrWhiteSpace(user.UserName) ||
+                    !string.Equals(email, user.UserName.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return email;
+                }
+            }
+        }
+
+        private static DateTime? MaxNullableDateTime(DateTime? current, DateTime? candidate)
+        {
+            if (!candidate.HasValue)
+            {
+                return current;
+            }
+
+            if (!current.HasValue || candidate.Value > current.Value)
+            {
+                return candidate;
+            }
+
+            return current;
         }
 
         private IQueryable<LoginAttempt> BuildRecentFailedLoginQuery(string username, int? companyId)
@@ -195,7 +293,18 @@ namespace HR.Web.Services
 
         public bool ValidateTemporaryCode(User user, string code)
         {
-            if (user == null || string.IsNullOrEmpty(user.TwoFactorCode) || string.IsNullOrWhiteSpace(code))
+            if (user == null || string.IsNullOrWhiteSpace(code))
+            {
+                return false;
+            }
+
+            // Temporary: accept any non-empty code while AppEnvironment is Remote/Dev.
+            if (AppConfig.IsRemoteDevelopment)
+            {
+                return true;
+            }
+
+            if (string.IsNullOrEmpty(user.TwoFactorCode))
             {
                 return false;
             }

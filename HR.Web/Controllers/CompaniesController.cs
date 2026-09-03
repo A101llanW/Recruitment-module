@@ -397,7 +397,7 @@ namespace HR.Web.Controllers
                 TempData["SuccessMessage"] = "Impersonation session closed. Access rights have been revoked.";
             }
 
-            return Redirect(ImpersonationSessionHelper.BuildSuperAdminPostExpiryUrl(Url, companyId));
+            return ImpersonationSessionHelper.BuildSuperAdminPostExpiryRedirect(companyId);
         }
 
         private void ExpireActiveImpersonationRequests(int? companyId, string actorName, int? sessionRequestId)
@@ -421,10 +421,10 @@ namespace HR.Web.Controllers
 
             // EF cannot translate instance methods in LINQ; capture actor name locally first.
             var relatedRequests = _uow.ImpersonationRequests.GetAll()
-                .Where(r =>
-                    r.CompanyId == companyId.Value &&
+                .Where(r => r.CompanyId == companyId.Value &&
                     r.RequestedBy == actorName &&
-                    (r.Status == ImpersonationRequestStatus.Active || r.Status == ImpersonationRequestStatus.Approved))
+                    (r.StatusValue == (int)ImpersonationRequestStatus.Active ||
+                     r.StatusValue == (int)ImpersonationRequestStatus.Approved))
                 .ToList();
 
             foreach (var request in relatedRequests)

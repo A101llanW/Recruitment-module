@@ -1,5 +1,6 @@
 using System;
 using System.Web.Mvc;
+using HR.Web.Filters;
 using HR.Web.Helpers;
 using HR.Web.Services;
 using HR.Web.ViewModels;
@@ -12,7 +13,7 @@ namespace HR.Web.Controllers
         private static readonly string LinkedInImportPositionIdSession = "__Applications_LinkedInImport_PositionId";
         private static readonly string LinkedInImportedProfileSession = "__Applications_LinkedInImport_Profile";
 
-        [Authorize]
+        [TenantAuthorize]
         public ActionResult StartLinkedInImport(int positionId)
         {
             if (!IsCurrentUserAuthenticated())
@@ -67,7 +68,7 @@ namespace HR.Web.Controllers
             return Redirect(authorizationUrl.ToString());
         }
 
-        [Authorize]
+        [TenantAuthorize]
         public ActionResult LinkedInImportCallback(string code, string state, string error, string error_description)
         {
             var tenantToken = RouteData.Values["tenant"] as string;

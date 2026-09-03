@@ -3,6 +3,11 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "New User";
+    var isGlobalCreator = ViewBag.IsGlobalCreator as bool? ?? true;
+    var userManagementUrl = isGlobalCreator
+        ? Url.Action("GlobalUserManagement", "Admin")
+        : Url.Action("UserManagement", "Admin");
+    var singleCompany = Model.Companies != null && Model.Companies.Count == 1 ? Model.Companies[0] : null;
 }
 
 <style>
@@ -94,7 +99,7 @@
                     <h4><i class="fas fa-user-plus mr-2 text-primary"></i> Manual User Provisioning</h4>
                     <p class="text-muted small mb-0 mt-1">Create a user and optionally assign a custom company role template.</p>
                 </div>
-                <a href="@Url.Action("GlobalUserManagement")" class="btn btn-outline-secondary btn-sm">
+                <a href="@userManagementUrl" class="btn btn-outline-secondary btn-sm">
                     <i class="fas fa-arrow-left mr-1"></i> Back to List
                 </a>
             </div>
@@ -179,8 +184,16 @@
                         </div>
                         <div class="col-md-6 mb-4">
                             <label class="info-label" for="CompanyId">Organization Assignment</label>
-                            @Html.DropDownListFor(m => m.CompanyId, new SelectList(Model.Companies, "Id", "Name"), "System (Global/No Company)", new { @class = "form-control custom-select" })
-                            <span class="text-muted small">SuperAdmin accounts stay global. Custom roles require a company assignment.</span>
+                            @if (singleCompany != null)
+                            {
+                                @Html.HiddenFor(m => m.CompanyId)
+                                <div class="form-control bg-light">@singleCompany.Name</div>
+                            }
+                            else
+                            {
+                                @Html.DropDownListFor(m => m.CompanyId, new SelectList(Model.Companies, "Id", "Name"), "System (Global/No Company)", new { @class = "form-control custom-select" })
+                            }
+                            <span class="text-muted small">@(isGlobalCreator ? "SuperAdmin accounts stay global. Custom roles require a company assignment." : "New users are created in your organization.")</span>
                         </div>
                     </div>
 
@@ -201,7 +214,7 @@
                     <hr class="my-4" />
 
                     <div class="d-flex justify-content-end align-items-center">
-                        <a href="@Url.Action("GlobalUserManagement")" class="text-muted mr-4" style="text-decoration: none; font-weight: 600;">
+                        <a href="@userManagementUrl" class="text-muted mr-4" style="text-decoration: none; font-weight: 600;">
                             Cancel
                         </a>
                         <button type="submit" class="btn-blue" style="padding: 12px 35px;">

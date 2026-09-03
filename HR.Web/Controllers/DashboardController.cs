@@ -39,7 +39,8 @@ namespace HR.Web.Controllers
             ViewBag.TotalUsers = totalUsers;
 
             ViewBag.PendingImpersonationRequests = _uow.ImpersonationRequests.GetAll()
-                .Where(r => r.RequestedFrom == User.Identity.Name && r.Status == ImpersonationRequestStatus.Pending)
+                .Where(r => r.RequestedFrom == User.Identity.Name &&
+                    r.StatusValue == (int)ImpersonationRequestStatus.Pending)
                 .ToList();
 
             return View();
@@ -50,8 +51,9 @@ namespace HR.Web.Controllers
             if (!User.IsInRole("Admin")) return Json(new { count = 0 }, JsonRequestBehavior.AllowGet);
 
             var requests = _uow.ImpersonationRequests.GetAll()
-                .Where(r => r.RequestedFrom == User.Identity.Name && r.Status == ImpersonationRequestStatus.Pending)
-                .ToList() // Execute query first
+                .Where(r => r.RequestedFrom == User.Identity.Name)
+                .ToList()
+                .Where(r => r.Status == ImpersonationRequestStatus.Pending)
                 .Select(r => new {
                     id = r.Id,
                     requestedBy = r.RequestedBy,
@@ -144,7 +146,8 @@ namespace HR.Web.Controllers
         {
             // CLEAR ALL ACTIVE OR APPROVED SESSIONS NATIONWIDE
             var activeRequests = _uow.ImpersonationRequests.GetAll()
-                .Where(r => r.Status == ImpersonationRequestStatus.Active || r.Status == ImpersonationRequestStatus.Approved)
+                .Where(r => r.StatusValue == (int)ImpersonationRequestStatus.Active ||
+                    r.StatusValue == (int)ImpersonationRequestStatus.Approved)
                 .ToList();
 
             foreach (var req in activeRequests)
@@ -207,7 +210,8 @@ namespace HR.Web.Controllers
         private ImpersonationRequest GetActiveImpersonationRequest(int companyId)
         {
             return _uow.ImpersonationRequests.GetAll()
-                .Where(r => r.CompanyId == companyId && r.Status == ImpersonationRequestStatus.Active)
+                .Where(r => r.CompanyId == companyId &&
+                    r.StatusValue == (int)ImpersonationRequestStatus.Active)
                 .OrderByDescending(r => r.ExpiryDate)
                 .FirstOrDefault();
         }

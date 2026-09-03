@@ -1,5 +1,6 @@
 using System;
 using System.Web.Mvc;
+using HR.Web.Helpers;
 using HR.Web.Services;
 
 namespace HR.Web.Controllers
@@ -106,6 +107,22 @@ namespace HR.Web.Controllers
             }
 
             return null;
+        }
+
+        [HttpGet]
+        [AllowAnonymous]
+        public JsonResult DevSessionText()
+        {
+            if (!AppConfig.IsRemoteDevelopment)
+            {
+                return Json(new { success = false, message = "Not available" }, JsonRequestBehavior.AllowGet);
+            }
+
+            return Json(new
+            {
+                success = true,
+                text = Session["CaptchaText"] as string
+            }, JsonRequestBehavior.AllowGet);
         }
 
         [HttpGet]

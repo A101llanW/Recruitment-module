@@ -78,10 +78,7 @@ namespace HR.Web.Filters
                 null,
                 null);
 
-            var urlHelper = new System.Web.Mvc.UrlHelper(filterContext.RequestContext);
-            var redirectUrl = ImpersonationSessionHelper.BuildSuperAdminPostExpiryUrl(urlHelper, companyId)
-                ?? "/Companies/Index";
-            filterContext.Result = new RedirectResult(redirectUrl);
+            filterContext.Result = ImpersonationSessionHelper.BuildSuperAdminPostExpiryRedirect(companyId);
         }
 
         private static bool IsWhitelisted(string controllerName, string actionName)

@@ -46,8 +46,18 @@ namespace HR.Web.Controllers
 
         private ActionResult LoginCore(Uri returnUri)
         {
-            // If no tenant is specified in the URL, check if we have a remembered company
+            var returnPath = LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
             var urlTenantToken = RouteData.Values["tenant"] as string;
+            if (string.IsNullOrEmpty(urlTenantToken) && !string.IsNullOrEmpty(returnPath))
+            {
+                var tenantFromReturn = TenantAuthRedirectHelper.ExtractTenantSlugFromPath(returnPath);
+                if (!string.IsNullOrEmpty(tenantFromReturn))
+                {
+                    return RedirectToAction("Login", "Account", new { tenant = tenantFromReturn, returnUrl = returnPath });
+                }
+            }
+
+            // If no tenant is specified in the URL, check if we have a remembered company
             ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(urlTenantToken);
             if (string.IsNullOrEmpty(urlTenantToken))
             {
@@ -64,7 +74,7 @@ namespace HR.Web.Controllers
                 }
             }
 
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
+            ViewBag.ReturnUrl = returnPath ?? LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
             return View();
         }
 
@@ -556,17 +566,8 @@ namespace HR.Web.Controllers
 
                 ViewBag.MfaMethod = user.MfaMethod ?? "Email";
                 ViewBag.EmailHint = MaskContactInfo(user.Email);
-
-                if (UsesEmailMfa(user))
-                {
-                    if (!HasActiveMfaCode(user))
-                    {
-                        if (!SendMfaCode(user))
-                        {
-                            ViewBag.MfaSendError = "We could not send a verification email. Check SMTP settings or use Resend below.";
-                        }
-                    }
-                }
+                ViewBag.ShouldSendMfaOnLoad = UsesEmailMfa(user) && !HasActiveMfaCode(user);
+                ViewBag.HasActiveMfaCode = UsesEmailMfa(user) && HasActiveMfaCode(user);
 
                 return View();
             }
@@ -587,6 +588,7 @@ namespace HR.Web.Controllers
         }
 
         [HttpPost]
+        [AllowAnonymous]
         [ValidateAntiForgeryToken]
         public JsonResult ResendCode()
         {
@@ -699,42 +701,35 @@ namespace HR.Web.Controllers
             var recipientEmail = mfaUser.Email;
             DevDiagnostics.LogOneTimeCode("MFA CODE", recipientEmail, code);
 
-            QueueMfaEmailSend(recipientEmail.Trim(), code, mfaUser.UserName, mfaUser.Id.ToString());
-            return true;
+            return SendMfaEmailNow(recipientEmail.Trim(), code, mfaUser.UserName, mfaUser.Id.ToString());
         }
 
-        private void QueueMfaEmailSend(string recipientEmail, string code, string username, string userId)
+        private bool SendMfaEmailNow(string recipientEmail, string code, string username, string userId)
         {
             if (string.IsNullOrWhiteSpace(recipientEmail))
             {
-                return;
+                return false;
             }
 
-            ThreadPool.QueueUserWorkItem(_ =>
+            try
             {
-                try
-                {
-                    var emailService = new EmailService();
-                    emailService.SendMfaCodeEmailAsync(recipientEmail, code).GetAwaiter().GetResult();
-                }
-                catch (Exception ex)
-                {
-                    DevDiagnostics.LogOneTimeCode("MFA CODE (email failed — use code above)", recipientEmail, code);
-                    System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
-                    try
-                    {
-                        using (var uow = new UnitOfWork())
-                        {
-                            var audit = new AuditService();
-                            audit.LogAction(username, "MFA_EMAIL_SEND_FAILED", "Account", userId, ex.Message);
-                        }
-                    }
-                    catch
-                    {
-                        // Best-effort audit only.
-                    }
-                }
-            });
+                var emailService = new EmailService();
+                emailService.SendMfaCodeEmailAsync(recipientEmail, code).ConfigureAwait(false).GetAwaiter().GetResult();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DevDiagnostics.LogOneTimeCode("MFA CODE (email failed — use code above)", recipientEmail, code);
+                System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
+                AuditSvc.LogAction(
+                    username,
+                    "MFA_EMAIL_SEND_FAILED",
+                    "Account",
+                    userId,
+                    wasSuccessful: false,
+                    errorMessage: ex.Message);
+                return false;
+            }
         }
 
         private string MaskContactInfo(string email)

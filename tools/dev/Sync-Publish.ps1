@@ -54,7 +54,7 @@ if ((Test-Path $preserveSecretsPath) -and -not $UpdateSecrets) {
 
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-function Set-ProductionWebConfig {
+function Set-DeployWebConfig {
     param([string]$WebConfigPath)
 
     if (-not (Test-Path $WebConfigPath)) {
@@ -64,16 +64,16 @@ function Set-ProductionWebConfig {
     [xml]$doc = Get-Content -Path $WebConfigPath
     foreach ($add in $doc.configuration.appSettings.add) {
         if ($add.key -eq "AppEnvironment") {
-            $add.SetAttribute("value", "Production")
+            $add.SetAttribute("value", "Remote/Dev")
         }
         elseif ($add.key -eq "LastRestart") {
-            $add.SetAttribute("value", [string](Get-Date -Format "yyyy-MM-dd-prod"))
+            $add.SetAttribute("value", [string](Get-Date -Format "yyyy-MM-dd-debug"))
         }
     }
 
     $systemWeb = $doc.configuration."system.web"
     $customErrors = $doc.CreateElement("customErrors")
-    $customErrors.SetAttribute("mode", "On")
+    $customErrors.SetAttribute("mode", "Off")
     $customErrors.SetAttribute("defaultRedirect", "~/Home/Error")
     foreach ($status in @(
             @{ code = "404"; redirect = "~/Account/Login" },
@@ -85,11 +85,11 @@ function Set-ProductionWebConfig {
         $null = $customErrors.AppendChild($errorNode)
     }
     $null = $systemWeb.ReplaceChild($customErrors, $systemWeb.customErrors)
-    $systemWeb.compilation.SetAttribute("debug", "false")
+    $systemWeb.compilation.SetAttribute("debug", "true")
 
     $httpErrors = $doc.CreateElement("httpErrors")
-    $httpErrors.SetAttribute("existingResponse", "Auto")
-    $httpErrors.SetAttribute("errorMode", "Custom")
+    $httpErrors.SetAttribute("existingResponse", "PassThrough")
+    $httpErrors.SetAttribute("errorMode", "Detailed")
     $webServer = $doc.configuration."system.webServer"
     $null = $webServer.ReplaceChild($httpErrors, $webServer.httpErrors)
 
@@ -106,7 +106,7 @@ function Set-ProductionWebConfig {
         $writer.Close()
     }
 
-    Write-Host "  Applied production Web.config (AppEnvironment=Production, debug=false)" -ForegroundColor Green
+    Write-Host "  Applied debug Web.config (AppEnvironment=Remote/Dev, debug=true)" -ForegroundColor Green
 }
 
 function Invoke-RoboMirror {
@@ -158,7 +158,7 @@ foreach ($file in $rootFiles) {
 
 $publishWebConfig = Join-Path $dest "Web.config"
 if (Test-Path $publishWebConfig) {
-    Set-ProductionWebConfig -WebConfigPath $publishWebConfig
+    Set-DeployWebConfig -WebConfigPath $publishWebConfig
 }
 
 if ($UpdateSecrets -and (Test-Path (Join-Path $source "secrets.config"))) {

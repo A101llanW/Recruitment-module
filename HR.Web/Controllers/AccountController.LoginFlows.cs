@@ -424,6 +424,17 @@ namespace HR.Web.Controllers
                     AuditSvc.LogLogin(request.Username, false, "Global admin attempted tenant portal login");
                     return View();
                 }
+
+                if (request.IsEmailLogin && TryGetGlobalManagementUserByEmail(request.LowerUsername) != null)
+                {
+                    ModelState.AddModelError(
+                        "",
+                        "System administrators must sign in from the global login page, not a company portal URL.");
+                    ViewBag.GlobalLoginUrl = Url.Action("Login", "Account", new { tenant = (string)null, returnUrl = ViewBag.ReturnUrl });
+                    SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, "Global admin used tenant portal");
+                    AuditSvc.LogLogin(request.Username, false, "Global admin attempted tenant portal login via email");
+                    return View();
+                }
             }
 
             ModelState.AddModelError("", "Invalid username or password.");
@@ -443,6 +454,21 @@ namespace HR.Web.Controllers
                 u.CompanyId == null &&
                 u.UserName != null &&
                 u.UserName.ToLower() == lowerUsername &&
+                (string.Equals(u.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(u.Role, "Admin", StringComparison.OrdinalIgnoreCase)));
+        }
+
+        private User TryGetGlobalManagementUserByEmail(string lowerEmail)
+        {
+            if (string.IsNullOrWhiteSpace(lowerEmail))
+            {
+                return null;
+            }
+
+            return _uow.Context.Users.FirstOrDefault(u =>
+                u.CompanyId == null &&
+                u.Email != null &&
+                u.Email.ToLower() == lowerEmail &&
                 (string.Equals(u.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(u.Role, "Admin", StringComparison.OrdinalIgnoreCase)));
         }
@@ -699,6 +725,11 @@ namespace HR.Web.Controllers
         private ActionResult HandleUnverifiedEmailRedirect(string username, User user, string tenantSlug)
         {
             if (user.IsEmailVerified)
+            {
+                return null;
+            }
+
+            if (string.Equals(user.Role, "Client", StringComparison.OrdinalIgnoreCase))
             {
                 return null;
             }

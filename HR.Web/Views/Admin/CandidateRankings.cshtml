@@ -198,13 +198,14 @@
                 <div class="candidates-list position-candidates">
                     @if (positionGroup.Value.Count > 0)
                     {
-                        var rankedCandidates = positionGroup.Value.OrderByDescending(c => c.TotalScore).ToList();
-                        @for (int i = 0; i < rankedCandidates.Count; i++)
+                        foreach (var rankedEntry in positionGroup.Value
+                            .OrderByDescending(c => c.TotalScore)
+                            .Select((candidate, index) => new { Candidate = candidate, Rank = index + 1 }))
                         {
-                            var candidate = rankedCandidates[i];
+                            var candidate = rankedEntry.Candidate;
                             <div class="candidate-row" onclick="toggleCandidateDetails(this)">
                                 <div class="candidate-info">
-                                    <span class="rank-badge">@(i + 1)</span>
+                                    <span class="rank-badge">@rankedEntry.Rank</span>
                                     <span class="candidate-name force-capitalize">@candidate.CandidateName</span>
                                     <div class="candidate-email">@candidate.CandidateEmail</div>
                                 </div>

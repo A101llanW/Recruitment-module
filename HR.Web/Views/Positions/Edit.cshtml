@@ -207,7 +207,7 @@
                             new SelectListItem { Text = "Non-Technical", Value = "false" }
                         },
                         "-- Select Job Type --",
-                        new { @class = "form-control mx-auto", style = "max-width: 350px;" })
+                        new { @class = "form-control mx-auto", style = "max-width: 350px;", required = "required" })
                     @Html.ValidationMessageFor(m => m.IsTechnical, "", new { @class = "text-danger" })
                 </div>
                 <div class="form-group mb-3">

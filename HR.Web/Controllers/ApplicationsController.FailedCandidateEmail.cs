@@ -317,7 +317,7 @@ namespace HR.Web.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult GetFailedCandidateTemplatePreview(int applicationId, string templateKey)
         {
@@ -368,7 +368,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public async Task<ActionResult> SendFailedCandidateEmail()
         {
@@ -465,7 +465,7 @@ namespace HR.Web.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult GetFailedCandidatesBulkTemplatePreview(int positionId, string templateKey)
         {
@@ -520,7 +520,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public async Task<ActionResult> SendFailedCandidatesBulkEmail()
         {

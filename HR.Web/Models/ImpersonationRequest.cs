@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace HR.Web.Models
 {
@@ -27,8 +28,16 @@ namespace HR.Web.Models
         public string RequestedFrom { get; set; } // Admin Username (Target Admin)
 
         public DateTime RequestDate { get; set; }
-        
-        public ImpersonationRequestStatus Status { get; set; }
+
+        [Column("Status")]
+        public int StatusValue { get; set; }
+
+        [NotMapped]
+        public ImpersonationRequestStatus Status
+        {
+            get { return (ImpersonationRequestStatus)StatusValue; }
+            set { StatusValue = (int)value; }
+        }
 
         public string Reason { get; set; }
 

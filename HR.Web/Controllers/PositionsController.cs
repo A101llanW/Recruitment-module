@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Web.Mvc;
+using System.Data.Entity;
 using HR.Web.Data;
 using HR.Web.Models;
 using HR.Web.Services;
@@ -217,7 +218,21 @@ namespace HR.Web.Controllers
         [RoleBasedAuthorization("Admin")]
         public ActionResult DatabaseTest()
         {
-            return View();
+            if (!AppConfig.IsRemoteDevelopment)
+            {
+                return HttpNotFound();
+            }
+
+            try
+            {
+                _uow.Context.Database.Connection.Open();
+                _uow.Context.Database.Connection.Close();
+                return Content("Database connection OK.", "text/plain");
+            }
+            catch (Exception ex)
+            {
+                return Content("Database connection failed: " + ex.Message, "text/plain");
+            }
         }
 
         [Authorize(Roles = "Admin, SuperAdmin")]

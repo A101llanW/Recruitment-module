@@ -386,9 +386,14 @@ namespace HR.Web.Controllers
                 return ReturnCreateUserView(new CreateUserViewModel());
             }
 
-            if (!_tenantService.IsActualSuperAdmin())
+            if (!TryGetUserCreationScope(out var actorCompanyId, out var isGlobalCreator))
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            if (!isGlobalCreator)
+            {
+                model.CompanyId = actorCompanyId;
             }
 
             if (!ModelState.IsValid)
@@ -396,7 +401,7 @@ namespace HR.Web.Controllers
                 return ReturnCreateUserView(model);
             }
 
-            var roleSelection = ResolveRoleSelection(model.SelectedRoleKey, true, null, model.CompanyId);
+            var roleSelection = ResolveRoleSelection(model.SelectedRoleKey, isGlobalCreator, actorCompanyId, model.CompanyId);
             if (!roleSelection.IsValid)
             {
                 ModelState.AddModelError("SelectedRoleKey", roleSelection.ErrorMessage);
@@ -431,9 +436,61 @@ namespace HR.Web.Controllers
         private ActionResult ReturnCreateUserView(CreateUserViewModel model)
         {
             var viewModel = model ?? new CreateUserViewModel();
-            viewModel.Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
-            viewModel.AvailableRoleOptions = BuildAvailableRoleOptions(true, null, viewModel.CompanyId, false, viewModel.SelectedRoleKey);
+            if (!TryGetUserCreationScope(out var actorCompanyId, out var isGlobalCreator))
+            {
+                viewModel.Companies = new List<Company>();
+                viewModel.AvailableRoleOptions = new List<SelectListItem>();
+                return View("CreateUser", viewModel);
+            }
+
+            if (!isGlobalCreator)
+            {
+                viewModel.CompanyId = actorCompanyId;
+            }
+
+            viewModel.Companies = LoadCreatableCompanies(isGlobalCreator, actorCompanyId);
+            viewModel.AvailableRoleOptions = BuildAvailableRoleOptions(
+                isGlobalCreator,
+                actorCompanyId,
+                viewModel.CompanyId,
+                !isGlobalCreator,
+                viewModel.SelectedRoleKey);
+            ViewBag.IsGlobalCreator = isGlobalCreator;
             return View("CreateUser", viewModel);
+        }
+
+        private bool TryGetUserCreationScope(out int? actorCompanyId, out bool isGlobalCreator)
+        {
+            actorCompanyId = null;
+            isGlobalCreator = _tenantService.IsActualSuperAdmin();
+            if (isGlobalCreator)
+            {
+                return true;
+            }
+
+            if (User.IsInRole("Admin"))
+            {
+                actorCompanyId = _tenantService.GetCurrentUserCompanyId();
+                return actorCompanyId.HasValue;
+            }
+
+            return false;
+        }
+
+        private List<Company> LoadCreatableCompanies(bool isGlobalCreator, int? actorCompanyId)
+        {
+            if (isGlobalCreator)
+            {
+                return _uow.Companies.GetAll().OrderBy(c => c.Name).ToList();
+            }
+
+            if (!actorCompanyId.HasValue)
+            {
+                return new List<Company>();
+            }
+
+            var company = _uow.Companies.Get(actorCompanyId.Value);
+            return company != null ? new List<Company> { company } : new List<Company>();
         }
 
         private bool ValidateCreateUserUniqueness(CreateUserViewModel model)

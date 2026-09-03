@@ -54,6 +54,7 @@ namespace HR.Web.Models
         [StringLength(200)]
         public string Location { get; set; }
 
+        [Required(ErrorMessage = "Please specify whether this role is technical or non-technical.")]
         public bool? IsTechnical { get; set; }
 
         [Range(0, 100)]

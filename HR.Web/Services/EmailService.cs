@@ -42,18 +42,30 @@ namespace HR.Web.Services
             _settingsService = settingsService;
 
             // Prioritize Database Settings, fall back to Web.config
-            _smtpHost = _settingsService.GetSetting("SmtpHost") ?? ConfigurationManager.AppSettings["SmtpHost"] ?? "smtp.gmail.com";
+            _smtpHost = ResolveSetting("SmtpHost", "smtp.gmail.com");
             _smtpPort = _settingsService.GetSetting<int>("SmtpPort", int.Parse(ConfigurationManager.AppSettings["SmtpPort"] ?? "587"));
-            _smtpUser = _settingsService.GetSetting("SmtpUser") ?? ConfigurationManager.AppSettings["SmtpUser"] ?? "";
-            _smtpPass = _settingsService.GetSetting("SmtpPassword") ?? ConfigurationManager.AppSettings["SmtpPassword"] ?? "";
+            _smtpUser = ResolveSetting("SmtpUser", string.Empty);
+            _smtpPass = ResolveSetting("SmtpPassword", string.Empty);
             _enableSsl = _settingsService.GetSetting<bool>("SmtpEnableSsl", bool.Parse(ConfigurationManager.AppSettings["SmtpEnableSsl"] ?? "true"));
-            _fromEmail = _settingsService.GetSetting("FromEmail") ?? ConfigurationManager.AppSettings["FromEmail"] ?? "noreply@nanosoft.com";
-            _fromName = _settingsService.GetSetting("FromName") ?? ConfigurationManager.AppSettings["FromName"] ?? AppConfig.ProductName;
+            _fromEmail = ResolveSetting("FromEmail", "noreply@nanosoft.com");
+            _fromName = ResolveSetting("FromName", AppConfig.ProductName);
+        }
+
+        private string ResolveSetting(string key, string fallback)
+        {
+            var configured = _settingsService.GetSetting(key);
+            if (!string.IsNullOrWhiteSpace(configured))
+            {
+                return configured.Trim();
+            }
+
+            configured = ConfigurationManager.AppSettings[key];
+            return string.IsNullOrWhiteSpace(configured) ? fallback : configured.Trim();
         }
 
         public async Task SendAsync(string to, string subject, string body)
         {
-            await SendAsync(to, subject, body, null);
+            await SendAsync(to, subject, body, null).ConfigureAwait(false);
         }
 
         public async Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients)
@@ -65,7 +77,7 @@ namespace HR.Web.Services
 
             try
             {
-                await SendMailCoreAsync(to, subject, body, ccRecipients);
+                await SendMailCoreAsync(to, subject, body, ccRecipients).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -83,6 +95,8 @@ namespace HR.Web.Services
             var recipient = to.Trim();
             var messageSubject = subject ?? string.Empty;
             var messageBody = body ?? string.Empty;
+
+            ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; // TLS 1.2
 
             using (var client = new SmtpClient(_smtpHost, _smtpPort))
             {
@@ -112,7 +126,8 @@ namespace HR.Web.Services
                     }
                 }
 
-                await Task.Factory.StartNew(() => client.Send(mailMessage));
+                client.Send(mailMessage);
+                LogEmailSuccess(recipient, messageSubject);
             }
         }
 
@@ -120,12 +135,27 @@ namespace HR.Web.Services
         {
             try
             {
-                await SendMailCoreAsync(to, subject, body, null);
+                await SendMailCoreAsync(to, subject, body, null).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 LogEmailFailure(to, ex);
                 throw;
+            }
+        }
+
+        private static void LogEmailSuccess(string to, string subject)
+        {
+            try
+            {
+                string logPath = AppDomain.CurrentDomain.BaseDirectory + "email_sent.log";
+                string logMessage = string.Format("[{0}] SENT to {1}: {2}{3}",
+                    DateTime.Now, to ?? string.Empty, subject ?? string.Empty, Environment.NewLine);
+                System.IO.File.AppendAllText(logPath, logMessage);
+            }
+            catch (Exception)
+            {
+                // Best-effort local log write only.
             }
         }
 
@@ -212,7 +242,7 @@ namespace HR.Web.Services
 </body>
 </html>", link, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
-            await SendAsync(to, subject, body);
+            await SendAsync(to, subject, body).ConfigureAwait(false);
         }
         public async Task SendMfaCodeEmailAsync(string to, string code)
         {
@@ -261,9 +291,9 @@ namespace HR.Web.Services
 </body>
 </html>", verificationCode, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
-            LogSensitiveCodeForDevelopment("MFA CODE", to, verificationCode, "mfa_codes.txt");
+            await SendCriticalAsync(to, subject, body).ConfigureAwait(false);
 
-            await SendCriticalAsync(to, subject, body);
+            LogSensitiveCodeForDevelopment("MFA CODE", to, verificationCode, "mfa_codes.txt");
         }
 
         public async Task SendEmailVerificationOtpAsync(string to, string code)
@@ -313,7 +343,7 @@ namespace HR.Web.Services
 
             LogSensitiveCodeForDevelopment("EMAIL VERIFICATION OTP", to, verificationCode, "verification_codes.txt");
 
-            await SendCriticalAsync(to, subject, body);
+            await SendCriticalAsync(to, subject, body).ConfigureAwait(false);
         }
 
         private static void LogSensitiveCodeForDevelopment(string label, string to, string code, string fileName)

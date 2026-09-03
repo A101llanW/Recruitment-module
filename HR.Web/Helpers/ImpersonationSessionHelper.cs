@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using System.Web;
+using System.Web.Mvc;
+using System.Web.Routing;
 using HR.Web.Data;
 using MvcUrlHelper = System.Web.Mvc.UrlHelper;
 using HR.Web.Models;
@@ -106,10 +108,9 @@ namespace HR.Web.Helpers
             var staleRequests = uow.ImpersonationRequests.GetAll()
                 .Where(r => r.CompanyId == companyId &&
                     r.ExpiryDate.HasValue &&
-                    r.ExpiryDate < now)
-                .ToList()
-                .Where(r => r.Status == ImpersonationRequestStatus.Active ||
-                    r.Status == ImpersonationRequestStatus.Approved)
+                    r.ExpiryDate < now &&
+                    (r.StatusValue == (int)ImpersonationRequestStatus.Active ||
+                     r.StatusValue == (int)ImpersonationRequestStatus.Approved))
                 .ToList();
 
             if (!staleRequests.Any())
@@ -126,6 +127,25 @@ namespace HR.Web.Helpers
             uow.Complete();
         }
 
+        public static ActionResult BuildSuperAdminPostExpiryRedirect(int? companyId)
+        {
+            if (companyId.HasValue)
+            {
+                return new RedirectToRouteResult("Default", new RouteValueDictionary
+                {
+                    { "controller", "Companies" },
+                    { "action", "CompanyDetails" },
+                    { "id", companyId.Value }
+                });
+            }
+
+            return new RedirectToRouteResult("Default", new RouteValueDictionary
+            {
+                { "controller", "Companies" },
+                { "action", "Index" }
+            });
+        }
+
         public static string BuildSuperAdminPostExpiryUrl(MvcUrlHelper url, int? companyId)
         {
             if (url == null)
@@ -140,7 +160,7 @@ namespace HR.Web.Helpers
                 : (object)new { controller = "Companies", action = "Index" };
 
             var generated = url.RouteUrl("Default", routeValues);
-            if (!string.IsNullOrEmpty(generated))
+            if (!string.IsNullOrEmpty(generated) && url.IsLocalUrl(generated))
             {
                 return generated;
             }
@@ -177,10 +197,11 @@ namespace HR.Web.Helpers
             }
 
             var request = uow.ImpersonationRequests.GetAll()
-                .Where(r => r.RequestedBy == username && r.CompanyId.HasValue)
+                .Where(r => r.RequestedBy == username &&
+                    r.CompanyId.HasValue &&
+                    r.StatusValue == (int)ImpersonationRequestStatus.Active)
                 .OrderByDescending(r => r.DecisionDate ?? r.RequestDate)
-                .ToList()
-                .FirstOrDefault(r => r.Status == ImpersonationRequestStatus.Active);
+                .FirstOrDefault();
 
             if (request == null)
             {

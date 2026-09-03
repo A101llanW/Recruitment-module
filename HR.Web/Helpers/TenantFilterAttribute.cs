@@ -67,12 +67,12 @@ namespace HR.Web.Helpers
                         
                         if (dbUser != null)
                         {
-                            // 3. Email Verification Enforcement
-                            if (!dbUser.IsEmailVerified)
-                            {
-                                var currentController = filterContext.ActionDescriptor.ControllerDescriptor.ControllerName;
-                                var currentAction = filterContext.ActionDescriptor.ActionName;
+                            var currentController = filterContext.ActionDescriptor.ControllerDescriptor.ControllerName;
+                            var currentAction = filterContext.ActionDescriptor.ActionName;
 
+                            // 3. Email Verification Enforcement
+                            if (!dbUser.IsEmailVerified && !IsAllowedWithoutEmailVerification(currentController, currentAction, dbUser.Role))
+                            {
                                 // Allow verification actions and logout to bypass the redirect
                                 var isVerificationAction = currentController == "Account" && 
                                     (currentAction == "VerifyEmail" || currentAction == "VerifyEmailSubmit" || 
@@ -116,6 +116,33 @@ namespace HR.Web.Helpers
             }
 
             base.OnActionExecuting(filterContext);
+        }
+
+        private static bool IsAllowedWithoutEmailVerification(string controller, string action, string role)
+        {
+            if (!string.Equals(role, "Client", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (string.Equals(controller, "Applications", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.Equals(controller, "Positions", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(action, "Index", StringComparison.OrdinalIgnoreCase) ||
+                       string.Equals(action, "Details", StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (string.Equals(controller, "Account", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(action, "Logout", StringComparison.OrdinalIgnoreCase) ||
+                       string.Equals(action, "Profile", StringComparison.OrdinalIgnoreCase);
+            }
+
+            return false;
         }
     }
 }

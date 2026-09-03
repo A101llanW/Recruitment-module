@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Mvc;
+using HR.Web.Filters;
 using HR.Web.Helpers;
 using HR.Web.Models;
 using HR.Web.Services;
@@ -14,7 +15,7 @@ namespace HR.Web.Controllers
     public partial class ApplicationsController
     {
         [HttpPost]
-        [Authorize]
+        [TenantAuthorize]
         [ValidateAntiForgeryToken]
         public async Task<ActionResult> InviteNextQuestionnaireStage(int applicationId)
         {

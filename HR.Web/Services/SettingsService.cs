@@ -26,6 +26,12 @@ namespace HR.Web.Services
             _context = new HrContext();
         }
 
+        public static void ClearCache()
+        {
+            _cache.Clear();
+            _lastCacheUpdate = DateTime.MinValue;
+        }
+
         public string GetSetting(string key, string defaultValue = null)
         {
             if (string.IsNullOrWhiteSpace(key))

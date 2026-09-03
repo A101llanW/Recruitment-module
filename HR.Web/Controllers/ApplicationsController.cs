@@ -24,7 +24,7 @@ namespace HR.Web.Controllers
     private readonly ScoringService _scoringService = new ScoringService();
     private readonly TenantService _tenantService = new TenantService();
 
-    [Authorize]
+    [TenantAuthorize]
     public ActionResult TestQuestionnaire()
     {
         var positionId = 4; // Software Developer
@@ -50,7 +50,7 @@ namespace HR.Web.Controllers
     }
     
     [HttpPost]
-    [Authorize]
+    [TenantAuthorize]
     [ValidateAntiForgeryToken]
     public ActionResult TestQuestionnaire(int positionId, FormCollection form)
     {
@@ -95,6 +95,7 @@ namespace HR.Web.Controllers
     }
 
     // Questionnaire for position application
+    [TenantAuthorize]
     public ActionResult Questionnaire(int positionId)
     {
         if (!IsCurrentUserAuthenticated())
@@ -146,7 +147,7 @@ namespace HR.Web.Controllers
     }
 
     [HttpPost]
-    [Authorize]
+    [TenantAuthorize]
     [ValidateAntiForgeryToken]
     public ActionResult Questionnaire(int positionId, FormCollection form)
     {
@@ -190,7 +191,7 @@ namespace HR.Web.Controllers
     }
 
     [HttpPost]
-    [Authorize]
+    [TenantAuthorize]
     [ValidateAntiForgeryToken]
     public ActionResult FinishQuestionnaire(ApplicationReviewViewModel model, FormCollection form)
     {
@@ -259,7 +260,7 @@ namespace HR.Web.Controllers
         return RedirectToAction("Index", "Positions");
     }
 
-    [Authorize]
+    [TenantAuthorize]
     public ActionResult ProfileDetails(int positionId)
     {
         if (!IsCurrentUserAuthenticated())
@@ -299,7 +300,7 @@ namespace HR.Web.Controllers
     }
 
     [HttpPost]
-    [Authorize]
+    [TenantAuthorize]
     [ValidateAntiForgeryToken]
     public ActionResult ProfileDetails(ApplicantProfileViewModel model)
     {
@@ -395,7 +396,7 @@ namespace HR.Web.Controllers
             return View(GetApplicantApplications(user));
         }
 
-        [Authorize]
+        [TenantAuthorize]
         public ActionResult Details(int id)
         {
             var app = _uow.Applications.GetAll(a => a.Applicant, a => a.Position)
@@ -501,7 +502,7 @@ namespace HR.Web.Controllers
             return RedirectToAction("Index");
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(int id)
         {
@@ -517,7 +518,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(Application model)
         {
@@ -549,7 +550,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult UpdatePositionPassMark(int positionId, decimal passMark)
         {
@@ -584,7 +585,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult UpdateStatus(int id, string status)
         {
@@ -600,7 +601,7 @@ namespace HR.Web.Controllers
             return RedirectToAction("Details", new { id });
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Delete(int id)
         {
@@ -615,7 +616,7 @@ namespace HR.Web.Controllers
 
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult DeleteConfirmed(int id)
         {

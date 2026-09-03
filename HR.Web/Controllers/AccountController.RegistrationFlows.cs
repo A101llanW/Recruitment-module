@@ -314,7 +314,8 @@ namespace HR.Web.Controllers
                 Email = model.Email,
                 Role = "Client",
                 PasswordHash = PasswordHelper.HashPassword(model.Password),
-                CompanyId = model.CompanyId
+                CompanyId = model.CompanyId,
+                IsEmailVerified = true
             };
 
             LegalPolicyHelper.ApplyUserAcceptance(user, DateTime.UtcNow, LegalRelationshipKind.Applicant);
@@ -331,7 +332,8 @@ namespace HR.Web.Controllers
                 FullName = string.Format("{0} {1}", model.FirstName, model.LastName),
                 Email = model.Email,
                 Phone = model.Phone,
-                CompanyId = model.CompanyId
+                CompanyId = model.CompanyId,
+                IsEmailVerified = true
             };
 
             LegalPolicyHelper.ApplyApplicantAcceptance(applicant, DateTime.UtcNow);

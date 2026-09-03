@@ -4,6 +4,7 @@ using System.Linq;
 using System.Web;
 using System.Web.Mvc;
 using System.Data.Entity;
+using HR.Web.Helpers;
 using HR.Web.Models;
 using HR.Web.Services;
 using HR.Web.ViewModels;
@@ -24,16 +25,29 @@ namespace HR.Web.Controllers
 
         private ActionResult RedirectToApplicationRegistration()
         {
-            var returnUrl = Request.Url != null ? Request.Url.PathAndQuery : null;
+            var rawReturnUrl = Request.Url != null ? Request.Url.PathAndQuery : null;
+            LocalReturnUrlHelper.TryParseLocalReturnUri(rawReturnUrl, Url, out var safeReturnUri);
+            var returnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(safeReturnUri);
             TempData["ReturnUrl"] = returnUrl;
             TempData["ApplicationMessage"] = "Please register or login to apply for this position.";
-            return RedirectToAction("Register", "Account", new { returnUrl = returnUrl });
+            var tenant = RouteData.Values["tenant"] as string;
+            return RedirectToAction("Register", "Account", new { tenant = tenant, returnUrl = returnUrl });
         }
 
         private Position GetPositionWithQuestions(int positionId)
         {
-            return _uow.Positions.GetAll(p => p.PositionQuestions.Select(pq => pq.Question).Select(q => q.QuestionOptions))
-                .FirstOrDefault(p => p.Id == positionId);
+            var position = _uow.Positions.Get(positionId);
+            if (position == null)
+            {
+                return null;
+            }
+
+            _uow.Context.Entry(position).Collection(p => p.PositionQuestions).Query()
+                .Include(pq => pq.Question)
+                .Include(pq => pq.Question.QuestionOptions)
+                .Load();
+
+            return position;
         }
 
         private ActionResult GetClosedPositionRedirect(Position position)
@@ -171,7 +185,8 @@ namespace HR.Web.Controllers
                 return closedPositionRedirect;
             }
 
-            existingApplication = _uow.Applications.GetAll()
+            existingApplication = _uow.Context.Set<Application>()
+                .AsNoTracking()
                 .FirstOrDefault(a => a.ApplicantId == applicant.Id && a.PositionId == positionId);
 
             var maxStages = Math.Max(1, position.QuestionnaireStageCount);

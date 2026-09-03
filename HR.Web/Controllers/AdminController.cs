@@ -425,10 +425,9 @@ namespace HR.Web.Controllers
 
             foreach (var user in users)
             {
-                var isLocked = _securityService.IsAccountLocked(user.UserName);
-                var lockoutEndTime = _securityService.GetLockoutEndTime(user.UserName);
-                var failedAttempts = _securityService.GetRemainingAttempts(user.UserName);
-                var actualFailedAttempts = 5 - failedAttempts; // Calculate actual failed attempts
+                var isLocked = _securityService.IsAccountLockedForUser(user);
+                var lockoutEndTime = _securityService.GetLockoutEndTimeForUser(user);
+                var actualFailedAttempts = _securityService.GetFailedAttemptCountForUser(user);
 
                 // Get last login info from audit logs
                 var lastLogin = _uow.AuditLogs.GetAll()
@@ -464,22 +463,24 @@ namespace HR.Web.Controllers
         }
 
         /// <summary>
-        /// Display form to create a new user
-        /// Only SuperAdmin role can access this
+        /// Display form to create a new user (SuperAdmin globally, Admin within their company).
         /// </summary>
         [Authorize(Roles = "Admin, SuperAdmin")]
         public ActionResult CreateUser()
         {
-            if (!_tenantService.IsActualSuperAdmin())
+            if (!TryGetUserCreationScope(out var actorCompanyId, out var isGlobalCreator))
             {
-                return new HttpStatusCodeResult(403, "Access Denied: Only SuperAdmins can manually create users.");
+                return new HttpStatusCodeResult(403, "Access Denied: You do not have permission to create users.");
             }
+
+            ViewBag.IsGlobalCreator = isGlobalCreator;
 
             var viewModel = new CreateUserViewModel
             {
-                Companies = _uow.Companies.GetAll().OrderBy(c => c.Name).ToList(),
+                CompanyId = actorCompanyId,
+                Companies = LoadCreatableCompanies(isGlobalCreator, actorCompanyId),
                 RequirePasswordChange = true,
-                AvailableRoleOptions = BuildAvailableRoleOptions(true, null, null, false, null),
+                AvailableRoleOptions = BuildAvailableRoleOptions(isGlobalCreator, actorCompanyId, actorCompanyId, !isGlobalCreator, null),
                 SelectedRoleKey = "builtin:Client"
             };
 
@@ -487,8 +488,7 @@ namespace HR.Web.Controllers
         }
 
         /// <summary>
-        /// Handle the creation of a new user
-        /// Only SuperAdmin role can access this
+        /// Handle the creation of a new user (SuperAdmin globally, Admin within their company).
         /// </summary>
         [HttpPost]
         [Authorize(Roles = "Admin, SuperAdmin")]
@@ -591,8 +591,8 @@ namespace HR.Web.Controllers
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
 
-            // Clear failed login attempts
-            _securityService.ClearFailedAttempts(user.UserName);
+            // Clear failed login attempts for username and email identifiers
+            _securityService.ClearFailedAttemptsForUser(user);
 
             // Log the account unlock
             _auditService.LogAction(
@@ -600,11 +600,10 @@ namespace HR.Web.Controllers
                 "ACCOUNT_UNLOCKED",
                 "Account",
                 user.Id.ToString(),
-                null,
-                new { UnlockedBy = User.Identity.Name, UnlockedAt = DateTime.Now }
-            );
+                wasSuccessful: true,
+                errorMessage: string.Format("Unlocked account for {0} ({1})", user.UserName, user.Email));
 
-            TempData["SuccessMessage"] = string.Format("User {0} account has been unlocked", user.UserName);
+            TempData["Message"] = string.Format("User {0} has been unlocked and can sign in again.", user.UserName);
             
             return RedirectToUserManagementHome();
         }

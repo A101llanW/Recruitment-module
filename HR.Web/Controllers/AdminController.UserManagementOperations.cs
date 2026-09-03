@@ -64,7 +64,9 @@ namespace HR.Web.Controllers
                 Role = _rolePermissionService.GetDisplayRole(user),
                 BaseRole = user.Role,
                 CompanyName = user.Company != null ? user.Company.Name : "System",
-                IsLocked = _securityService.IsAccountLocked(user.UserName),
+                IsLocked = _securityService.IsAccountLockedForUser(user),
+                LockoutEndTime = _securityService.GetLockoutEndTimeForUser(user),
+                FailedLoginAttempts = _securityService.GetFailedAttemptCountForUser(user),
                 LastLoginDate = lastLogin != null ? (DateTime?)lastLogin.Timestamp : null,
                 LastLoginIP = lastLogin != null ? lastLogin.IPAddress : null,
                 CreatedDate = DateTime.Now

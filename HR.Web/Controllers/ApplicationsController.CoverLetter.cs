@@ -1,4 +1,5 @@
 using System.Web.Mvc;
+using HR.Web.Filters;
 using HR.Web.Models;
 using HR.Web.ViewModels;
 
@@ -54,7 +55,7 @@ namespace HR.Web.Controllers
         }
 
         [HttpPost]
-        [Authorize]
+        [TenantAuthorize]
         [ValidateAntiForgeryToken]
         public ActionResult CoverLetter(CoverLetterViewModel model)
         {

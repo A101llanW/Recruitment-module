@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Web;
 using System.Web.Mvc;
 using System.Web.Routing;
@@ -9,6 +10,7 @@ using System.Linq;
 using System.Web.Optimization;
 using HR.Web.Data;
 using HR.Web.Helpers;
+using HR.Web.Services;
 
 namespace HR.Web
 {
@@ -16,6 +18,9 @@ namespace HR.Web
     {
         protected void Application_Start()
         {
+            ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; // TLS 1.2 for SMTP/API
+            SettingsService.ClearCache();
+
             AreaRegistration.RegisterAllAreas();
             FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
             RouteConfig.RegisterRoutes(RouteTable.Routes);
@@ -219,14 +224,10 @@ namespace HR.Web
             }
 
             FormsAuthentication.SignOut();
-            var loginUrl = FormsAuthentication.LoginUrl;
-            if (string.IsNullOrEmpty(loginUrl))
-            {
-                loginUrl = "~/Account/Login";
-            }
-
-            var separator = loginUrl.Contains("?") ? "&" : "?";
-            Response.Redirect(string.Format("{0}{1}reason={2}", loginUrl, separator, reason), false);
+            var tenant = TenantAuthRedirectHelper.ExtractTenantSlugFromPath(Request.Url != null ? Request.Url.AbsolutePath : null);
+            var loginPath = TenantAuthRedirectHelper.BuildLoginPath(tenant, Request != null ? Request.RawUrl : null);
+            var separator = loginPath.Contains("?") ? "&" : "?";
+            Response.Redirect(string.Format("{0}{1}reason={2}", loginPath, separator, reason), false);
             HttpContext.Current.ApplicationInstance.CompleteRequest();
         }
 
