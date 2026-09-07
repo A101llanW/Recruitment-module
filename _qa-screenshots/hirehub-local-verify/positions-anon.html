@@ -1,0 +1,650 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Positions - NanoHireHub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/Content/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="/Content/css/font-awesome.min.css" />
+    <link rel="stylesheet" href="/Content/css/recruitment-theme.css" />
+
+    <style>
+        /* Elevation Modal Custom Styles */
+        #elevationRequestModal .modal-content {
+            border-radius: 12px;
+            overflow: hidden;
+            border: none;
+        }
+        #elevationRequestModal .modal-header {
+            border-bottom: none;
+            padding: 1.5rem;
+        }
+        #elevationRequestModal .details-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #f39c12;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        #elevationRequestModal .modal-footer {
+            border-top: none;
+            padding: 1.2rem 1.5rem;
+        }
+
+        /* Freeze Overlay Styles */
+        #performance-freeze-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(13, 44, 74, 0.95);
+            z-index: 10000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+            text-align: center;
+            padding: 20px;
+        }
+        #performance-freeze-overlay .spinner-box {
+            margin-bottom: 25px;
+        }
+        #performance-freeze-overlay h2 {
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 10px;
+        }
+        #performance-freeze-overlay p {
+            font-size: 1.1rem;
+            opacity: 0.8;
+            max-width: 500px;
+        }
+        @keyframes logoPulse {
+            0% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.9; }
+        }
+        .pulse-logo {
+            animation: logoPulse 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="recruitment-app">
+    
+    <div id="performance-freeze-overlay">
+        <div class="spinner-box">
+            <img src="/Content/images/nanosoft-logo-transparent.png" alt="Nanosoft" style="height: 120px; filter: drop-shadow(0 0 15px rgba(243, 156, 18, 0.4));" class="pulse-logo" />
+        </div>
+        <h2>System Elevating...</h2>
+        <p>A SuperAdmin is currently performing maintenance or support operations on your company context.</p>
+        
+        <div class="mt-2 text-warning font-weight-bold" style="font-size: 1.5rem;">
+            <i class="far fa-clock mr-2"></i> Session expires in: <span id="freeze-countdown">--:--</span>
+        </div>
+
+        <div class="mt-4 px-4 py-2 bg-warning text-dark font-weight-bold rounded shadow-sm">
+            <i class="fas fa-lock mr-2"></i> CONTEXT LOCKED
+        </div>
+    </div>
+
+        <nav class="navbar navbar-expand-lg app-navbar app-navbar--sticky">
+
+
+<a class="navbar-brand d-flex align-items-center app-nav-brand" href="/default">
+            <span class="app-nav-brand-mark mr-2 is-fallback">
+                <i class="fas fa-building fa-2x text-info app-nav-brand-fallback-icon" aria-hidden="true"></i>
+            </span>
+        <div class="d-flex flex-column ml-1 app-brand-divider">
+                <span class="app-brand-title">Nanosoft Corporation</span>
+                            <small class="app-brand-sub">NanoHireHub</small>
+        </div>
+</a>
+
+
+<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+</button>
+
+<div class="collapse navbar-collapse" id="navbarNav">
+    <ul class="navbar-nav app-nav-primary">
+
+
+
+                    <li class="nav-item active">
+                        <a class="nav-link app-nav-top-link" href="/default" aria-current="page">
+                            <i class="fas fa-sitemap d-lg-none" aria-hidden="true"></i> Positions
+                        </a>
+                    </li>
+                    <li class="nav-item ">
+                        <a class="nav-link app-nav-top-link" href="/default/Applications" >
+                            <i class="fas fa-file-alt d-lg-none" aria-hidden="true"></i> Applications
+                        </a>
+                    </li>
+                    <li class="nav-item ">
+                        <a class="nav-link app-nav-top-link" href="/default/Interviews" >
+                            <i class="fas fa-comments d-lg-none" aria-hidden="true"></i> Interviews
+                        </a>
+                    </li>
+    </ul>
+
+    <ul class="navbar-nav ml-auto app-nav-account">
+        <li class="nav-item d-lg-none app-nav-drawer-heading" aria-hidden="true">Account</li>
+            <li class="nav-item"><a class="nav-link app-nav-top-link" href="/default/Account/Login"><i class="fas fa-sign-in-alt d-lg-none" aria-hidden="true"></i> Login</a></li>
+            <li class="nav-item"><a class="nav-link app-nav-top-link" href="/default/Account/Register"><i class="fas fa-user-plus d-lg-none" aria-hidden="true"></i> Register</a></li>
+    </ul>
+</div>
+        </nav>
+
+    <main class="app-main">
+    <div class="container app-container">
+
+        
+        
+            <div class="app-page">
+
+<header class="app-page-hero">
+    <p class="app-page-hero__eyebrow">NanoHireHub</p>
+    <h1 class="app-page-hero__title">Positions</h1>
+        <p class="app-page-hero__lead">Browse open roles, manage postings, and configure hiring requirements.</p>
+        </header>
+                
+
+<style>
+    .pos-detail-card {
+        background: #fafdff;
+        border-radius: 0.4rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        border: 1.2px solid #b2d7f7;
+        padding: 1.2rem;
+    }
+    .position-item { 
+        cursor: pointer; 
+        border: none;
+        border-bottom: 1px solid #e6f3fb;
+        background: #fafdff;
+        transition: all 0.2s;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 0.4rem;
+    }
+    .position-item:hover {
+        background: #eaf4fb;
+    }
+    .position-item.active { 
+        box-shadow: 0 0 8px 2px rgba(61, 143, 173, 0.35), 0 0 0 2px #fff inset;
+        border-radius: 8px;
+        background: rgba(111, 184, 220, 0.12);
+        border-left: 3px solid var(--app-accent-deep, #3d8fad);
+        border-bottom: 1px solid rgba(61, 143, 173, 0.35);
+    }
+    .position-item.active h5 {
+        color: var(--app-accent-deep, #3d8fad) !important;
+        font-weight: 600;
+    }
+    .position-item.active p {
+        color: #333 !important;
+    }
+    .position-item.active .text-muted {
+        color: var(--app-accent-deep, #3d8fad) !important;
+        opacity: 0.9;
+    }
+    .position-item.active small {
+        color: var(--app-accent-deep, #3d8fad) !important;
+        opacity: 0.9;
+    }
+    .text-truncate { 
+        white-space: nowrap; 
+        overflow: hidden; 
+        text-overflow: ellipsis; 
+    }
+    .list-group {
+        background: transparent;
+        border: none;
+    }
+    .card-title, h4, h5 {
+        color: #0d2c4a;
+        font-weight: 600;
+    }
+    .btn-blue {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        border: none;
+        transition: background 0.2s;
+        font-size: 0.97rem;
+        padding: 0.5rem 1.2rem;
+        border-radius: 0.4rem;
+        font-weight: 600;
+    }
+    .btn-blue:hover {
+        background: #3498db;
+        color: #fff;
+    }
+    .btn-primary {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        border: none;
+        transition: background 0.2s;
+    }
+    .btn-primary:hover {
+        background: #3498db;
+        color: #fff;
+    }
+    .btn-outline-primary {
+        border-color: #6fb8dc;
+        color: #6fb8dc;
+    }
+    .btn-outline-primary:hover {
+        background: #6fb8dc;
+        color: #0d2c4a;
+    }
+    .text-muted {
+        color: #6c757d !important;
+    }
+    .modal-content {
+        border-radius: 0.4rem;
+    }
+    .modal-header {
+        background: #f6faff;
+        border-bottom: 1px solid #e6f3fb;
+    }
+    .modal-body {
+        background: #fafdff;
+    }
+    .modal-footer {
+        background: #f6faff;
+        border-top: 1px solid #e6f3fb;
+    }
+    .gap-2 {
+        gap: 0.5rem;
+    }
+    .d-flex.gap-2 {
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    @media (max-width: 767.98px) {
+        .position-item .d-flex.w-100.justify-content-between {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .position-item .text-right.ml-3 {
+            margin-left: 0 !important;
+            text-align: left;
+        }
+
+        #positionDetail {
+            margin-top: 1rem;
+        }
+    }
+</style>
+
+
+    <div class="mb-4 bg-white p-3 rounded shadow-sm border-left border-info" style="border-left-width: 4px !important;">
+        <h4 class="mb-1"><i class="fas fa-globe mr-2"></i> Public Careers Portal</h4>
+        <p class="text-muted mb-0">Browse open opportunities across our network. You will be prompted to sign in or create an account when applying.</p>
+    </div>
+
+
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="list-group">
+                    <a class="list-group-item list-group-item-action position-item"
+                       href="#"
+                       data-title="QA Engineer Followup 20260903103555"
+                       data-desc="Follow-up position after IsTechnical validation."
+                       data-responsibilities="QA"
+                       data-qualifications="Forms"
+                       data-dept="Networks and Connectivity"
+                       data-posted="9/3/2026"
+                       data-expiry="12/31/2026"
+                       data-range="Salary Varies"
+                       data-is-open="true"
+                       data-url-edit="/default/Positions/Edit/3018"
+                       data-url-delete="/default/Positions/Delete/3018"
+                       data-url-question-weights="/default/Positions/Edit/3018#questionWeightPanel"
+                       data-url-apply="/default/Account/Register?returnUrl=%2Fdefault%2FApplications%2FCoverLetter%3FpositionId%3D3018"
+                       data-url-applications="/default/Applications?positionId=3018#appsCards-3018">
+                        <div class="d-flex w-100 justify-content-between align-items-start mb-2">
+                            <div class="flex-grow-1">
+                                <h5 class="mb-1">QA Engineer Followup 20260903103555</h5>
+                                <small class="text-muted d-block">Networks and Connectivity</small>
+                                    <small class="text-info d-block" style="font-size: 0.85em; margin-top: 2px;">
+                                        <i class="fas fa-building"></i> Nanosoft Corporation
+                                    </small>
+                            </div>
+                            <div class="text-right ml-3">
+                                <span class="badge badge-success mb-1">
+                                    Open
+                                </span>
+                                <br/>
+                                <small class="text-muted d-block">9/3/2026</small>
+                            </div>
+                        </div>
+                        <p class="mb-2">Follow-up position after IsTechnical validation.</p>
+                    </a>
+                    <a class="list-group-item list-group-item-action position-item"
+                       href="#"
+                       data-title="QA Engineer Followup 20260903103555"
+                       data-desc="Follow-up position after IsTechnical validation."
+                       data-responsibilities="QA"
+                       data-qualifications="Forms"
+                       data-dept="Networks and Connectivity"
+                       data-posted="9/3/2026"
+                       data-expiry="12/31/2026"
+                       data-range="Salary Varies"
+                       data-is-open="true"
+                       data-url-edit="/default/Positions/Edit/3017"
+                       data-url-delete="/default/Positions/Delete/3017"
+                       data-url-question-weights="/default/Positions/Edit/3017#questionWeightPanel"
+                       data-url-apply="/default/Account/Register?returnUrl=%2Fdefault%2FApplications%2FCoverLetter%3FpositionId%3D3017"
+                       data-url-applications="/default/Applications?positionId=3017#appsCards-3017">
+                        <div class="d-flex w-100 justify-content-between align-items-start mb-2">
+                            <div class="flex-grow-1">
+                                <h5 class="mb-1">QA Engineer Followup 20260903103555</h5>
+                                <small class="text-muted d-block">Networks and Connectivity</small>
+                                    <small class="text-info d-block" style="font-size: 0.85em; margin-top: 2px;">
+                                        <i class="fas fa-building"></i> Nanosoft Corporation
+                                    </small>
+                            </div>
+                            <div class="text-right ml-3">
+                                <span class="badge badge-success mb-1">
+                                    Open
+                                </span>
+                                <br/>
+                                <small class="text-muted d-block">9/3/2026</small>
+                            </div>
+                        </div>
+                        <p class="mb-2">Follow-up position after IsTechnical validation.</p>
+                    </a>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div id="positionDetail" class="pos-detail-card" style="display:none;">
+                <h4 id="posTitle" class="mb-3"></h4>
+                <p class="text-muted mb-2" id="posDept"></p>
+                <p class="mb-2"><strong>Posted:</strong> <span id="posPosted"></span></p>
+                <p class="mb-2"><strong>Expiry:</strong> <span id="posExpiry"></span></p>
+                <p class="mb-3"><strong>Salary:</strong> <span id="posRange"></span></p>
+                <div class="d-flex flex-wrap gap-2">
+
+    <a id="posApply" class="btn btn-sm btn-blue" href="#">
+        <i class="fas fa-paper-plane"></i> Sign In to Apply
+    </a>
+                    <button id="posViewDetails" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-eye"></i> View Details
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- Modal -->
+<div class="modal fade" id="positionModal" tabindex="-1" role="dialog" aria-labelledby="positionModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalPosTitle">Position</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-2" id="modalPosDept"></p>
+        <div id="modalPosDesc" class="mb-3"></div>
+        <div id="modalPosResponsibilities" class="mb-3" style="display:none;">
+          <strong class="d-block mb-2" style="color: #0d2c4a;">Key Responsibilities:</strong>
+          <div id="modalPosResponsibilitiesContent" style="white-space: pre-line; line-height: 1.8; color: #333;"></div>
+        </div>
+        <div id="modalPosQualifications" class="mb-3" style="display:none;">
+          <strong class="d-block mb-2" style="color: #0d2c4a;">Required Qualifications:</strong>
+          <div id="modalPosQualificationsContent" style="white-space: pre-line; line-height: 1.8; color: #333;"></div>
+        </div>
+        <p class="mb-2"><strong>Posted:</strong> <span id="modalPosPosted"></span></p>
+        <p class="mb-2"><strong>Expiry:</strong> <span id="modalPosExpiry"></span></p>
+        <p class="mb-2"><strong>Salary:</strong> <span id="modalPosRange"></span></p>
+      </div>
+      <div class="modal-footer">
+    <a id="modalApply" class="btn btn-blue" href="#">
+        <i class="fas fa-paper-plane"></i> Sign In to Apply
+    </a>
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+            </div>
+    </div>
+    </main>
+
+    <footer class="app-footer">
+        <div class="app-footer__inner">
+            <div>
+                <p class="app-footer__brand mb-0">NanoHireHub</p>
+                <p class="app-footer__copy mb-0">&copy; 2026 Nanosoft Technologies</p>
+            </div>
+                <nav class="app-footer__links" aria-label="Legal and social">
+                    <a href="/default/Home/Privacy">Privacy</a>
+                    <a href="/default/Home/Terms">Terms</a>
+                    <a href="https://ntlafrica.com" target="_blank" rel="noopener noreferrer">ntlafrica.com</a>
+                    <span class="app-footer__social">
+                        <a href="https://www.instagram.com/nanosoft_kenya/" target="_blank" rel="noopener noreferrer" aria-label="Instagram @nanosoft_kenya"><i class="fab fa-instagram"></i></a>
+                    </span>
+                </nav>
+        </div>
+    </footer>
+
+    <script src="/Scripts/jquery-3.6.0.min.js"></script>
+    <script src="/Scripts/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Security logic to prevent "Back Button" after Logout
+        window.addEventListener('pageshow', function (event) {
+            if (event.persisted || (typeof window.performance != "undefined" && window.performance.navigation.type === 2)) {
+                // If the page was loaded from history/cache, force a reload to trigger auth check
+                window.location.reload();
+            }
+        });
+    </script>
+
+
+
+    
+    <script>
+        (function () {
+            // Wait for DOM and jQuery to be ready
+            if (typeof jQuery === 'undefined') {
+                console.error('jQuery is not loaded');
+                return;
+            }
+
+            jQuery(document).ready(function ($) {
+                var items = document.querySelectorAll('.position-item');
+                var title = document.getElementById('posTitle');
+                var dept = document.getElementById('posDept');
+                var posted = document.getElementById('posPosted');
+                var expiry = document.getElementById('posExpiry');
+                var range = document.getElementById('posRange');
+                var detail = document.getElementById('positionDetail');
+                var linkEdit = document.getElementById('posEdit');
+                var linkDelete = document.getElementById('posDelete');
+                var linkApply = document.getElementById('posApply');
+                var linkViewApplications = document.getElementById('posViewApplications');
+                var linkQuestionWeights = document.getElementById('posQuestionWeights');
+
+                // Check if required elements exist
+                if (!title || !dept || !posted || !range || !detail) {
+                    console.error('Required DOM elements not found');
+                    return;
+                }
+
+                function makeActive(el) {
+                    if (!el) return;
+                    items.forEach(function (i) { i.classList.remove('active'); });
+                    el.classList.add('active');
+                    if (title) title.textContent = el.getAttribute('data-title') || '';
+                    if (dept) dept.textContent = el.getAttribute('data-dept') || '';
+                    if (posted) posted.textContent = el.getAttribute('data-posted') || '';
+                    if (expiry) expiry.textContent = el.getAttribute('data-expiry') || '';
+                    if (range) range.textContent = el.getAttribute('data-range') || '';
+                    if (linkEdit) { linkEdit.href = el.getAttribute('data-url-edit') || '#'; }
+                    if (linkDelete) { linkDelete.href = el.getAttribute('data-url-delete') || '#'; }
+                    if (linkApply) { linkApply.href = el.getAttribute('data-url-apply') || '#'; }
+                    if (linkViewApplications) { linkViewApplications.href = el.getAttribute('data-url-applications') || '#'; }
+                    if (linkQuestionWeights) { linkQuestionWeights.href = el.getAttribute('data-url-question-weights') || '#'; }
+                    if (detail) detail.style.display = '';
+                }
+
+                items.forEach(function (el) {
+                    el.addEventListener('click', function () { makeActive(el); });
+                });
+
+                // modal elements
+                var modalTitle = document.getElementById('modalPosTitle');
+                var modalDesc = document.getElementById('modalPosDesc');
+                var modalResponsibilities = document.getElementById('modalPosResponsibilities');
+                var modalResponsibilitiesContent = document.getElementById('modalPosResponsibilitiesContent');
+                var modalQualifications = document.getElementById('modalPosQualifications');
+                var modalQualificationsContent = document.getElementById('modalPosQualificationsContent');
+                var modalDept = document.getElementById('modalPosDept');
+                var modalPosted = document.getElementById('modalPosPosted');
+                var modalExpiry = document.getElementById('modalPosExpiry');
+                var modalRange = document.getElementById('modalPosRange');
+                var modalEdit = document.getElementById('modalEdit');
+                var modalDelete = document.getElementById('modalDelete');
+                var modalApply = document.getElementById('modalApply');
+                var modalViewApplications = document.getElementById('modalViewApplications');
+                var modalQuestionWeights = document.getElementById('modalQuestionWeights');
+
+                function populateModal(src) {
+                    if (!src) return;
+                    if (modalTitle) modalTitle.textContent = src.getAttribute('data-title') || '';
+                    var descText = src.getAttribute('data-desc') || '';
+                    if (modalDesc) {
+                        modalDesc.textContent = descText || 'No description provided.';
+                        modalDesc.style.display = descText ? 'block' : 'none';
+                    }
+                    var respText = src.getAttribute('data-responsibilities') || '';
+                    if (modalResponsibilities && modalResponsibilitiesContent) {
+                        if (respText) {
+                            modalResponsibilitiesContent.textContent = respText;
+                            modalResponsibilities.style.display = 'block';
+                        } else {
+                            modalResponsibilities.style.display = 'none';
+                        }
+                    }
+                    var qualText = src.getAttribute('data-qualifications') || '';
+                    if (modalQualifications && modalQualificationsContent) {
+                        if (qualText) {
+                            modalQualificationsContent.textContent = qualText;
+                            modalQualifications.style.display = 'block';
+                        } else {
+                            modalQualifications.style.display = 'none';
+                        }
+                    }
+                    if (modalDept) modalDept.textContent = src.getAttribute('data-dept') || '';
+                    if (modalPosted) modalPosted.textContent = src.getAttribute('data-posted') || '';
+                    if (modalExpiry) modalExpiry.textContent = src.getAttribute('data-expiry') || '';
+                    if (modalRange) modalRange.textContent = src.getAttribute('data-range') || '';
+                    if (modalEdit) modalEdit.href = src.getAttribute('data-url-edit') || '#';
+                    if (modalDelete) modalDelete.href = src.getAttribute('data-url-delete') || '#';
+                    if (modalApply) modalApply.href = src.getAttribute('data-url-apply') || '#';
+                    if (modalViewApplications) modalViewApplications.href = src.getAttribute('data-url-applications') || '#';
+                    if (modalQuestionWeights) modalQuestionWeights.href = src.getAttribute('data-url-question-weights') || '#';
+                }
+
+
+                var cardView = document.getElementById('posViewDetails');
+                if (cardView) {
+                    cardView.addEventListener('click', function () {
+                        var active = document.querySelector('.position-item.active');
+                        if (!active) return;
+                        populateModal(active);
+                        var modal = $('#positionModal');
+                        if (modal.length) {
+                            modal.modal('show');
+                        }
+                    });
+                }
+
+                // Admin filter functionality
+                var filterAll = document.getElementById('filterAll');
+                var filterOpen = document.getElementById('filterOpen');
+                var filterClosed = document.getElementById('filterClosed');
+                
+                if (filterAll && filterOpen && filterClosed) {
+                    function setActiveFilter(activeBtn) {
+                        [filterAll, filterOpen, filterClosed].forEach(function(btn) {
+                            btn.classList.remove('active');
+                        });
+                        activeBtn.classList.add('active');
+                    }
+                    
+                    function filterPositions(filterType) {
+                        var items = document.querySelectorAll('.position-item');
+                        items.forEach(function(item) {
+                            var isOpen = item.getAttribute('data-is-open') === 'true';
+                            var show = false;
+                            
+                            switch(filterType) {
+                                case 'all':
+                                    show = true;
+                                    break;
+                                case 'open':
+                                    show = isOpen;
+                                    break;
+                                case 'closed':
+                                    show = !isOpen;
+                                    break;
+                            }
+                            
+                            item.style.display = show ? '' : 'none';
+                        });
+                        
+                        // Update detail card visibility
+                        var detail = document.getElementById('positionDetail');
+                        if (detail) {
+                            var visibleItems = Array.from(items).filter(function(item) {
+                                return item.style.display !== 'none';
+                            });
+                            if (visibleItems.length === 0) {
+                                detail.style.display = 'none';
+                            }
+                        }
+                    }
+                    
+                    filterAll.addEventListener('click', function() {
+                        setActiveFilter(filterAll);
+                        filterPositions('all');
+                    });
+                    
+                    filterOpen.addEventListener('click', function() {
+                        setActiveFilter(filterOpen);
+                        filterPositions('open');
+                    });
+                    
+                    filterClosed.addEventListener('click', function() {
+                        setActiveFilter(filterClosed);
+                        filterPositions('closed');
+                    });
+                }
+            });
+        })();
+    </script>
+
+
+    <!-- Secure Credential Download Modal -->
+
+</body>
+</html>
+
+
+
+
+

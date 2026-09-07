@@ -98,24 +98,30 @@ namespace HR.Web.Controllers
     [TenantAuthorize]
     public ActionResult Questionnaire(int positionId)
     {
+        if (positionId <= 0)
+        {
+            TempData["ErrorMessage"] = "Please select a valid position.";
+            return RedirectToAction("Index", "Positions");
+        }
+
         if (!IsCurrentUserAuthenticated())
         {
             return RedirectToApplicationRegistration();
         }
 
-        var positionForCompany = _uow.Positions.Get(positionId);
-        if (positionForCompany == null)
+        var position = _uow.Positions.Get(positionId);
+        if (position == null)
         {
             return HttpNotFound();
         }
 
-        var applicantResult = RequireApplicantForPosition(positionForCompany.CompanyId, out var applicant);
+        var applicantResult = RequireApplicantForPosition(position.CompanyId, out var applicant);
         if (applicantResult != null)
         {
             return applicantResult;
         }
 
-        var workflowResult = TryValidateQuestionnaireWorkflow(positionId, applicant, out var position, out var activeQuestionnaireStage, out var existingApplication);
+        var workflowResult = TryValidateQuestionnaireWorkflow(positionId, applicant, out position, out var activeQuestionnaireStage, out var existingApplication);
         if (workflowResult != null)
         {
             return workflowResult;
@@ -138,10 +144,7 @@ namespace HR.Web.Controllers
 
         ViewBag.Position = position;
         PopulateApplicantViewBag(position.CompanyId);
-        ViewBag.PositionQuestions = position.PositionQuestions
-            .Where(pq => pq.StageNumber == activeQuestionnaireStage)
-            .OrderBy(pq => pq.Order)
-            .ToList();
+        ViewBag.PositionQuestions = GetPositionQuestions(positionId, includeOptions: true, activeQuestionnaireStage);
 
         return View();
     }
@@ -430,6 +433,12 @@ namespace HR.Web.Controllers
                 return RedirectToApplicationRegistration();
             }
 
+            var clientApplyRedirect = RedirectClientToApplyFlow(positionId);
+            if (clientApplyRedirect != null)
+            {
+                return clientApplyRedirect;
+            }
+
             // If the user is authenticated and not Admin/HR, attempt to preselect their Applicant record
             if (!User.IsInRole("Admin"))
             {
@@ -470,6 +479,12 @@ namespace HR.Web.Controllers
             {
                 LoadLookups();
                 return View(new Application { Status = "Interviewing", AppliedOn = DateTime.UtcNow });
+            }
+
+            var clientApplyRedirect = RedirectClientToApplyFlow(model.PositionId > 0 ? (int?)model.PositionId : null);
+            if (clientApplyRedirect != null)
+            {
+                return clientApplyRedirect;
             }
 
             var applicationModel = model;

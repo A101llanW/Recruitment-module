@@ -54,7 +54,7 @@ if ((Test-Path $preserveSecretsPath) -and -not $UpdateSecrets) {
 
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-function Set-DeployWebConfig {
+function Set-ProductionWebConfig {
     param([string]$WebConfigPath)
 
     if (-not (Test-Path $WebConfigPath)) {
@@ -64,10 +64,10 @@ function Set-DeployWebConfig {
     [xml]$doc = Get-Content -Path $WebConfigPath
     foreach ($add in $doc.configuration.appSettings.add) {
         if ($add.key -eq "AppEnvironment") {
-            $add.SetAttribute("value", "Remote/Dev")
+            $add.SetAttribute("value", "Production")
         }
         elseif ($add.key -eq "LastRestart") {
-            $add.SetAttribute("value", [string](Get-Date -Format "yyyy-MM-dd-debug"))
+            $add.SetAttribute("value", (Get-Date -Format "yyyy-MM-dd") + "-prod")
         }
     }
 
@@ -106,7 +106,7 @@ function Set-DeployWebConfig {
         $writer.Close()
     }
 
-    Write-Host "  Applied debug Web.config (AppEnvironment=Remote/Dev, debug=true)" -ForegroundColor Green
+    Write-Host "  Applied publish Web.config (AppEnvironment=Production, customErrors=Off, debug=true)" -ForegroundColor Green
 }
 
 function Invoke-RoboMirror {
@@ -158,7 +158,7 @@ foreach ($file in $rootFiles) {
 
 $publishWebConfig = Join-Path $dest "Web.config"
 if (Test-Path $publishWebConfig) {
-    Set-DeployWebConfig -WebConfigPath $publishWebConfig
+    Set-ProductionWebConfig -WebConfigPath $publishWebConfig
 }
 
 if ($UpdateSecrets -and (Test-Path (Join-Path $source "secrets.config"))) {

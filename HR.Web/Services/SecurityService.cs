@@ -298,12 +298,6 @@ namespace HR.Web.Services
                 return false;
             }
 
-            // Temporary: accept any non-empty code while AppEnvironment is Remote/Dev.
-            if (AppConfig.IsRemoteDevelopment)
-            {
-                return true;
-            }
-
             if (string.IsNullOrEmpty(user.TwoFactorCode))
             {
                 return false;

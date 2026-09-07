@@ -171,7 +171,7 @@
                 @Html.HiddenFor(m => m.PositionId)
                 @Html.HiddenFor(m => m.ApplicantId)
                 @Html.HiddenFor(m => m.IsTechnical)
-                @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+                @Html.ValidationSummary(false, "", new { @class = "text-danger" })
                 <div class="small text-muted mb-3"><span class="text-danger">*</span> indicates required fields.</div>
 
                 <h5 class="mt-3">Contact</h5>
@@ -388,6 +388,7 @@
 </div>
 
 @section Scripts {
+    @{ Html.RenderPartial("_ValidationScriptsPartial"); }
     <script>
         (function () {
             function initSelectableTextControl(selectId, hiddenId, customId) {

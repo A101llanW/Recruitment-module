@@ -251,7 +251,20 @@ namespace HR.Web.Services
                 return null;
             }
 
-            return Uri.TryCreate(path, UriKind.Relative, out var parsedUri) ? parsedUri : null;
+            if (Uri.TryCreate(path, UriKind.Relative, out var parsedUri))
+            {
+                return parsedUri;
+            }
+
+            // App-rooted paths (e.g. /HireHub/{tenant}/Account/Profile) are valid href
+            // targets but rejected by UriKind.Relative because of the leading slash.
+            if (path.StartsWith("/", StringComparison.Ordinal) &&
+                !path.StartsWith("//", StringComparison.Ordinal))
+            {
+                return new Uri(new Uri("http://localhost"), path);
+            }
+
+            return null;
         }
 
         private static NavUserIdentityModel BuildUserIdentity(

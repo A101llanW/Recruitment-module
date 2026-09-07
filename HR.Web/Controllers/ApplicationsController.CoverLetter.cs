@@ -98,7 +98,7 @@ namespace HR.Web.Controllers
 
             SetPendingCoverLetter(model.PositionId, model.CoverLetter);
 
-            return RedirectToAction("ProfileDetails", new { positionId = position.Id });
+            return RedirectToAction("ProfileDetails", GetApplicationFlowRouteValues(position.Id));
         }
 
         private bool HasPendingCoverLetter(int positionId)
@@ -137,7 +137,7 @@ namespace HR.Web.Controllers
         private ActionResult RedirectToCoverLetter(int positionId)
         {
             TempData["ErrorMessage"] = "Please write a cover letter for this position before continuing.";
-            return RedirectToAction("CoverLetter", new { positionId = positionId });
+            return RedirectToAction("CoverLetter", GetApplicationFlowRouteValues(positionId));
         }
 
         private void ClearPendingCoverLetter()

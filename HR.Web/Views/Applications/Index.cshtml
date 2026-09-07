@@ -14,6 +14,7 @@
     var canViewApplicationScores = ViewBag.CanViewApplicationScores != null && (bool)ViewBag.CanViewApplicationScores;
     var isManagementApplicationsView = ViewBag.IsManagementApplicationsView != null && (bool)ViewBag.IsManagementApplicationsView;
     var canInviteQuestionnaireSecondaryStage = ViewBag.CanInviteQuestionnaireSecondaryStage != null && (bool)ViewBag.CanInviteQuestionnaireSecondaryStage;
+    var tenantToken = ViewBag.TenantToken as string ?? ViewContext.RouteData.Values["tenant"] as string;
     var returnTo = Request != null ? Request.QueryString["returnTo"] : null;
     var shouldReturnToInterviewsAfterBooking = string.Equals(returnTo, "interviews", StringComparison.OrdinalIgnoreCase);
 
@@ -380,6 +381,11 @@
         width: 96vw;
         max-width: 920px;
         margin: 1.5vh auto;
+        pointer-events: auto;
+    }
+
+    .email-workflow-modal.show {
+        pointer-events: auto;
     }
 
     .email-workflow-modal .modal-content {
@@ -719,6 +725,16 @@ else
                                                                     </span>
                                                                 </div>
                                                             }
+                                                            else if (canViewApplicationScores
+                                                                     && !string.IsNullOrEmpty(item.ScoreReason)
+                                                                     && item.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase))
+                                                            {
+                                                                <div class="mt-1">
+                                                                    <span class="badge badge-danger" title="@item.ScoreReason">
+                                                                        Scoring error
+                                                                    </span>
+                                                                </div>
+                                                            }
                                                         </div>
                                                     </div>
                                                     <div class="mt-auto">
@@ -747,7 +763,7 @@ else
                                                         }
                                                         @if (canInviteNextQuestionnairePassed && canInviteQuestionnaireSecondaryStage)
                                                         {
-                                                            using (Html.BeginForm("InviteNextQuestionnaireStage", "Applications", FormMethod.Post))
+                                                            using (Html.BeginForm("InviteNextQuestionnaireStage", "Applications", new { tenant = tenantToken }, FormMethod.Post))
                                                             {
                                                                 @Html.AntiForgeryToken()
                                                                 @Html.Hidden("applicationId", item.Id)
@@ -919,6 +935,16 @@ else
                                                                     </span>
                                                                 </div>
                                                             }
+                                                            else if (canViewApplicationScores
+                                                                     && !string.IsNullOrEmpty(item.ScoreReason)
+                                                                     && item.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase))
+                                                            {
+                                                                <div class="mt-1">
+                                                                    <span class="badge badge-danger" title="@item.ScoreReason">
+                                                                        Scoring error
+                                                                    </span>
+                                                                </div>
+                                                            }
                                                         </div>
                                                     </div>
                                                     <div class="mt-auto">
@@ -947,7 +973,7 @@ else
                                                         }
                                                         @if (canInviteNextQuestionnaireFailed && canInviteQuestionnaireSecondaryStage)
                                                         {
-                                                            using (Html.BeginForm("InviteNextQuestionnaireStage", "Applications", FormMethod.Post))
+                                                            using (Html.BeginForm("InviteNextQuestionnaireStage", "Applications", new { tenant = tenantToken }, FormMethod.Post))
                                                             {
                                                                 @Html.AntiForgeryToken()
                                                                 @Html.Hidden("applicationId", item.Id)
@@ -1096,6 +1122,16 @@ else
                                             <span class="score-pill">Score @item.Score.Value.ToString("F1")</span>
                                         </div>
                                     }
+                                    else if (canViewApplicationScores
+                                             && !string.IsNullOrEmpty(item.ScoreReason)
+                                             && item.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <div class="mt-auto">
+                                            <span class="badge badge-danger" title="@item.ScoreReason">
+                                                Scoring error
+                                            </span>
+                                        </div>
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -1109,8 +1145,10 @@ else
 
 </div>
 
+@section Modals {
 @if (canManageApplications)
 {
+    <!-- Email workflow modals render outside .app-page so Bootstrap backdrop stacks correctly -->
     <div class="modal fade email-workflow-modal" id="failedEmailChoiceModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
@@ -1130,7 +1168,7 @@ else
                             <h6 class="font-weight-bold mb-2 text-center">Use Template</h6>
                             <p class="text-muted small mb-3 text-center">Load the wording from <strong>Admin &rarr; Email wording</strong> (already filled in for this candidate), edit in the same style as there, then send.</p>
                             <div class="text-center">
-                                <button type="button" class="btn btn-outline-primary px-4" onclick="openFailedCandidateTemplateEditor()">
+                                <button type="button" class="btn btn-outline-primary px-4" data-failed-email-action="template">
                                     <i class="fas fa-file-alt mr-2"></i>Use Template
                                 </button>
                             </div>
@@ -1139,7 +1177,7 @@ else
                             <h6 class="font-weight-bold mb-2 text-center">Compose from Scratch</h6>
                             <p class="text-muted small mb-3 text-center">Write a fully custom subject and message with rich formatting (bold, lists, links) for this candidate.</p>
                             <div class="text-center">
-                                <button type="button" class="btn btn-outline-secondary px-4" onclick="openFailedCandidateScratchEditor()">
+                                <button type="button" class="btn btn-outline-secondary px-4" data-failed-email-action="scratch">
                                     <i class="fas fa-pen mr-2"></i>Compose from Scratch
                                 </button>
                             </div>
@@ -1241,7 +1279,7 @@ else
                             <h6 class="font-weight-bold mb-2 text-center">Use Template</h6>
                             <p class="text-muted small mb-3 text-center">Load the wording from <strong>Admin &rarr; Email wording</strong>, edit like there, then send to every failed candidate for this position.</p>
                             <div class="text-center">
-                                <button type="button" class="btn btn-outline-primary px-4" onclick="openFailedBulkTemplateEditor()">
+                                <button type="button" class="btn btn-outline-primary px-4" data-failed-bulk-email-action="template">
                                     <i class="fas fa-file-alt mr-2"></i>Use Template
                                 </button>
                             </div>
@@ -1250,7 +1288,7 @@ else
                             <h6 class="font-weight-bold mb-2 text-center">Compose from Scratch</h6>
                             <p class="text-muted small mb-3 text-center">Write a custom subject and message to send to all failed candidates.</p>
                             <div class="text-center">
-                                <button type="button" class="btn btn-outline-secondary px-4" onclick="openFailedBulkScratchEditor()">
+                                <button type="button" class="btn btn-outline-secondary px-4" data-failed-bulk-email-action="scratch">
                                     <i class="fas fa-pen mr-2"></i>Compose from Scratch
                                 </button>
                             </div>
@@ -1334,12 +1372,56 @@ else
         </div>
     </div>
 }
+}
 
 @section Scripts {
     @if (canManageApplications)
     {
+        <script src="@Url.Content("~/Scripts/email-workflow-modals.js")"></script>
         <script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.4/tinymce.min.js" referrerpolicy="origin"></script>
         <script>
+            function fetchJsonWithTimeout(url, timeoutMs) {
+                var timeout = timeoutMs || 15000;
+                var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                var timer = null;
+
+                var fetchPromise = fetch(url, {
+                    method: 'GET',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
+                    signal: controller ? controller.signal : undefined
+                });
+
+                if (controller) {
+                    fetchPromise = Promise.race([
+                        fetchPromise,
+                        new Promise(function (_, reject) {
+                            timer = window.setTimeout(function () {
+                                controller.abort();
+                                reject(new Error('The request timed out. Please try again.'));
+                            }, timeout);
+                        })
+                    ]);
+                }
+
+                return fetchPromise
+                    .then(function (response) {
+                        if (timer) {
+                            window.clearTimeout(timer);
+                        }
+                        if (!response.ok) {
+                            throw new Error('Unable to load template preview.');
+                        }
+                        return response.json();
+                    })
+                    .catch(function (error) {
+                        if (timer) {
+                            window.clearTimeout(timer);
+                        }
+                        throw error;
+                    });
+            }
+
             function getFailedSingleBodyTextarea() {
                 return document.getElementById('failedEmailEditorBody');
             }
@@ -1384,6 +1466,9 @@ else
                     if (done) done();
                     return;
                 }
+                var finish = window.HrEmailWorkflow && window.HrEmailWorkflow.withCallbackTimeout
+                    ? window.HrEmailWorkflow.withCallbackTimeout(done, 10000)
+                    : done;
                 tinymce.init({
                     selector: '#failedEmailEditorBody',
                     height: 320,
@@ -1394,7 +1479,7 @@ else
                     license_key: 'gpl',
                     setup: function (editor) {
                         editor.on('init', function () {
-                            if (done) done();
+                            if (finish) finish();
                         });
                     }
                 });
@@ -1412,6 +1497,9 @@ else
                     if (done) done();
                     return;
                 }
+                var finish = window.HrEmailWorkflow && window.HrEmailWorkflow.withCallbackTimeout
+                    ? window.HrEmailWorkflow.withCallbackTimeout(done, 10000)
+                    : done;
                 tinymce.init({
                     selector: '#failedBulkEmailEditorBody',
                     height: 320,
@@ -1422,7 +1510,7 @@ else
                     license_key: 'gpl',
                     setup: function (editor) {
                         editor.on('init', function () {
-                            if (done) done();
+                            if (finish) finish();
                         });
                     }
                 });
@@ -1517,8 +1605,7 @@ else
 
                 resetFailedEmailEditorCcState();
                 $('#failedEmailEditorModal').data('failedSingleLoadPreview', true);
-                $('#failedEmailChoiceModal').modal('hide');
-                $('#failedEmailEditorModal').modal('show');
+                HrEmailWorkflow.swapModal('#failedEmailChoiceModal', '#failedEmailEditorModal');
             }
 
             function openFailedCandidateScratchEditor() {
@@ -1548,11 +1635,30 @@ else
 
                 resetFailedEmailEditorCcState();
                 $('#failedEmailEditorModal').data('failedSingleLoadPreview', false);
-                $('#failedEmailChoiceModal').modal('hide');
-                $('#failedEmailEditorModal').modal('show');
+                HrEmailWorkflow.swapModal('#failedEmailChoiceModal', '#failedEmailEditorModal');
             }
 
             $(function () {
+                $(document).on('click', '[data-failed-email-action]', function (event) {
+                    event.preventDefault();
+                    var action = this.getAttribute('data-failed-email-action');
+                    if (action === 'template') {
+                        openFailedCandidateTemplateEditor();
+                    } else if (action === 'scratch') {
+                        openFailedCandidateScratchEditor();
+                    }
+                });
+
+                $(document).on('click', '[data-failed-bulk-email-action]', function (event) {
+                    event.preventDefault();
+                    var action = this.getAttribute('data-failed-bulk-email-action');
+                    if (action === 'template') {
+                        openFailedBulkTemplateEditor();
+                    } else if (action === 'scratch') {
+                        openFailedBulkScratchEditor();
+                    }
+                });
+
                 $('#failedEmailEditorModal').on('shown.bs.modal', function () {
                     var loadPreview = $('#failedEmailEditorModal').data('failedSingleLoadPreview') === true;
                     ensureFailedSingleTinyMce(function () {
@@ -1697,15 +1803,7 @@ else
                     + '?applicationId=' + encodeURIComponent(failedEmailWorkflowContext.applicationId)
                     + '&templateKey=' + encodeURIComponent(templateKey);
 
-                fetch(previewUrl, {
-                    method: 'GET',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                    credentials: 'same-origin'
-                })
-                    .then(function (response) {
-                        if (!response.ok) throw new Error('Unable to load template preview.');
-                        return response.json();
-                    })
+                fetchJsonWithTimeout(previewUrl)
                     .then(function (result) {
                         if (!result || result.success !== true) {
                             throw new Error(result && result.message ? result.message : 'Unable to load template preview.');
@@ -1787,9 +1885,8 @@ else
                 if (ack) ack.classList.add('d-none');
 
                 resetFailedBulkEmailEditorCcState();
-                $('#failedBulkEmailChoiceModal').modal('hide');
                 $('#failedBulkEmailEditorModal').data('failedBulkLoadPreview', true);
-                $('#failedBulkEmailEditorModal').modal('show');
+                HrEmailWorkflow.swapModal('#failedBulkEmailChoiceModal', '#failedBulkEmailEditorModal');
             }
 
             function openFailedBulkScratchEditor() {
@@ -1818,9 +1915,8 @@ else
                 if (body) body.value = '';
 
                 resetFailedBulkEmailEditorCcState();
-                $('#failedBulkEmailChoiceModal').modal('hide');
                 $('#failedBulkEmailEditorModal').data('failedBulkLoadPreview', false);
-                $('#failedBulkEmailEditorModal').modal('show');
+                HrEmailWorkflow.swapModal('#failedBulkEmailChoiceModal', '#failedBulkEmailEditorModal');
             }
 
             function reloadFailedBulkTemplatePreview() {
@@ -1836,15 +1932,7 @@ else
                     + '?positionId=' + encodeURIComponent(failedBulkEmailWorkflowContext.positionId)
                     + '&templateKey=' + encodeURIComponent(templateKey);
 
-                fetch(previewUrl, {
-                    method: 'GET',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                    credentials: 'same-origin'
-                })
-                    .then(function (response) {
-                        if (!response.ok) throw new Error('Unable to load template preview.');
-                        return response.json();
-                    })
+                fetchJsonWithTimeout(previewUrl)
                     .then(function (result) {
                         if (!result || result.success !== true) {
                             throw new Error(result && result.message ? result.message : 'Unable to load template preview.');
@@ -1876,6 +1964,13 @@ else
                     });
                 }
             }
+
+            window.openFailedCandidateEmailChoice = openFailedCandidateEmailChoice;
+            window.openFailedCandidateTemplateEditor = openFailedCandidateTemplateEditor;
+            window.openFailedCandidateScratchEditor = openFailedCandidateScratchEditor;
+            window.openFailedBulkEmailChoice = openFailedBulkEmailChoice;
+            window.openFailedBulkTemplateEditor = openFailedBulkTemplateEditor;
+            window.openFailedBulkScratchEditor = openFailedBulkScratchEditor;
         </script>
     }
     <script>

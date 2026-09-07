@@ -24,6 +24,7 @@ namespace HR.Web
             AreaRegistration.RegisterAllAreas();
             FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
             RouteConfig.RegisterRoutes(RouteTable.Routes);
+            ControllerBuilder.Current.SetControllerFactory(new SafeControllerFactory());
             BundleConfig.RegisterBundles(BundleTable.Bundles);
 
             // Ensure Razor view engine is registered
@@ -57,6 +58,54 @@ namespace HR.Web
                 }
             }
             catch { /* Non-critical — purge failure is silent */ }
+        }
+
+        protected void Application_Error(object sender, EventArgs e)
+        {
+            var exception = Server.GetLastError();
+            if (!SafeNotFoundHandler.IsNotFoundException(exception))
+            {
+                return;
+            }
+
+            SafeNotFoundHandler.ExecuteBrandedNotFound(Context);
+        }
+
+        protected void Application_EndRequest()
+        {
+            if (Context == null || Context.Response == null)
+            {
+                return;
+            }
+
+            if (Context.Response.StatusCode != (int)HttpStatusCode.NotFound)
+            {
+                return;
+            }
+
+            if (Context.AllErrors != null && Context.AllErrors.Length > 0)
+            {
+                return;
+            }
+
+            if (!SafeNotFoundHandler.ShouldHandleRequest(Context))
+            {
+                return;
+            }
+
+            SafeNotFoundHandler.ExecuteBrandedNotFound(Context);
+        }
+
+        protected void Application_PreSendRequestHeaders()
+        {
+            if (Response == null)
+            {
+                return;
+            }
+
+            Response.Headers.Remove("Server");
+            Response.Headers.Remove("X-AspNet-Version");
+            Response.Headers.Remove("X-AspNetMvc-Version");
         }
 
         protected void Application_PostAuthenticateRequest(Object sender, EventArgs e)
@@ -124,6 +173,8 @@ namespace HR.Web
                 path.Contains("/home/privacy") ||
                 path.Contains("/home/terms") ||
                 path.Contains("/home/error") ||
+                path.Contains("/home/notfound") ||
+                path.Contains("/error/") ||
                 path.Contains("/content/") ||
                 path.Contains("/scripts/");
         }
@@ -224,7 +275,9 @@ namespace HR.Web
             }
 
             FormsAuthentication.SignOut();
-            var tenant = TenantAuthRedirectHelper.ExtractTenantSlugFromPath(Request.Url != null ? Request.Url.AbsolutePath : null);
+            var tenant = TenantAuthRedirectHelper.ExtractTenantSlugFromPath(
+                Request.Url != null ? Request.Url.AbsolutePath : null,
+                Request.ApplicationPath);
             var loginPath = TenantAuthRedirectHelper.BuildLoginPath(tenant, Request != null ? Request.RawUrl : null);
             var separator = loginPath.Contains("?") ? "&" : "?";
             Response.Redirect(string.Format("{0}{1}reason={2}", loginPath, separator, reason), false);

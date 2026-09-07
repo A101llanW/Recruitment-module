@@ -11,7 +11,7 @@ namespace HR.Web.Data
     //[DbConfigurationType(typeof(OracleEFConfiguration))] // Commented for local SQL testing; re-enable for Oracle
     public class HrContext : DbContext
     {
-        public HrContext() : base(ResolveConnectionString())
+        public HrContext() : base(ResolveConnectionNameOrString())
         {
             Configuration.LazyLoadingEnabled = false;
         }
@@ -174,12 +174,13 @@ namespace HR.Web.Data
                 .WillCascadeOnDelete(true);
         }
 
-        private static string ResolveConnectionString()
+        private static string ResolveConnectionNameOrString()
         {
-            var configuredConnectionString = ConfigurationManager.ConnectionStrings["HrContext"]?.ConnectionString;
-            if (!string.IsNullOrWhiteSpace(configuredConnectionString))
+            var configuredConnection = ConfigurationManager.ConnectionStrings["HrContext"];
+            if (configuredConnection != null && !string.IsNullOrWhiteSpace(configuredConnection.ConnectionString))
             {
-                return configuredConnectionString;
+                // Use the named entry so EF6 picks up providerName from Web.config.
+                return "HrContext";
             }
 
             // EF6 command-line tools do not load a web project's Web.config automatically.

@@ -9,6 +9,7 @@ using HR.Web.Models;
 using HR.Web.Services;
 using HR.Web.Filters;
 using HR.Web.Helpers;
+using HR.Web.ViewModels;
 
 namespace HR.Web.Controllers
 {
@@ -88,6 +89,7 @@ namespace HR.Web.Controllers
             }
             
             var result = query.OrderByDescending(p => p.PostedOn).ToList();
+            PopulateCandidatePositionActions(result, canManagePositions, isReadOnly);
             return View(result);
         }
 
@@ -116,11 +118,13 @@ namespace HR.Web.Controllers
                 User.IsInRole("Admin") &&
                 new RolePermissionService().CanCurrentUserAccessModule(RoleModuleCatalog.Positions, RoleAccessLevels.View) &&
                 !(bool)ViewBag.CanManagePositions;
+
+            ViewBag.CandidateAction = ResolveCandidatePositionAction(position);
             
             return View(position);
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Create()
         {
@@ -151,7 +155,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Create(Position model, int[] selectedQuestions, string questionWeightValues, string questionStagesPayload)
         {
@@ -159,7 +163,7 @@ namespace HR.Web.Controllers
             return HandleCreatePosition(model, selectedQuestions, questionWeights, questionStagesPayload);
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(int id)
         {
@@ -206,7 +210,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(Position model, int[] selectedQuestions, string questionWeightValues, string questionStagesPayload)
         {
@@ -214,7 +218,7 @@ namespace HR.Web.Controllers
             return HandleEditPosition(model, selectedQuestions, questionWeights, questionStagesPayload);
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult DatabaseTest()
         {
@@ -235,7 +239,7 @@ namespace HR.Web.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult CreateTestData()
         {
@@ -273,7 +277,7 @@ namespace HR.Web.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult TestEagerLoading()
         {
@@ -313,7 +317,7 @@ namespace HR.Web.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult TestQuestionOptions()
         {
@@ -410,6 +414,105 @@ namespace HR.Web.Controllers
             return expiryDate.HasValue && expiryDate.Value.Date <= DateTime.UtcNow.Date;
         }
 
+        private void PopulateCandidatePositionActions(IEnumerable<Position> positions, bool canManagePositions, bool isReadOnly)
+        {
+            if (canManagePositions || isReadOnly || positions == null)
+            {
+                ViewBag.CandidateActionsByPositionId = new Dictionary<int, PositionCandidateActionViewModel>();
+                return;
+            }
+
+            var applicationsByPositionId = LoadCandidateApplicationsByPositionId(positions);
+            var actions = positions.ToDictionary(
+                p => p.Id,
+                p => PositionCandidateActionHelper.Resolve(
+                    Request.IsAuthenticated,
+                    applicationsByPositionId.ContainsKey(p.Id) ? applicationsByPositionId[p.Id] : null,
+                    p,
+                    Url));
+
+            ViewBag.CandidateActionsByPositionId = actions;
+        }
+
+        private PositionCandidateActionViewModel ResolveCandidatePositionAction(Position position)
+        {
+            if (position == null)
+            {
+                return null;
+            }
+
+            var canManagePositions = ViewBag.CanManagePositions != null && (bool)ViewBag.CanManagePositions;
+            var isReadOnly = ViewBag.IsReadOnly != null && (bool)ViewBag.IsReadOnly;
+            if (canManagePositions || isReadOnly)
+            {
+                return null;
+            }
+
+            Application existingApplication = null;
+            if (Request.IsAuthenticated)
+            {
+                var applicationsByPositionId = LoadCandidateApplicationsByPositionId(new[] { position });
+                applicationsByPositionId.TryGetValue(position.Id, out existingApplication);
+            }
+
+            return PositionCandidateActionHelper.Resolve(Request.IsAuthenticated, existingApplication, position, Url);
+        }
+
+        private Dictionary<int, Application> LoadCandidateApplicationsByPositionId(IEnumerable<Position> positions)
+        {
+            var result = new Dictionary<int, Application>();
+            if (!Request.IsAuthenticated || positions == null || User?.Identity == null)
+            {
+                return result;
+            }
+
+            var email = User.Identity.Name;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return result;
+            }
+
+            var positionList = positions.Where(p => p != null).ToList();
+            if (!positionList.Any())
+            {
+                return result;
+            }
+
+            var positionIds = positionList.Select(p => p.Id).Distinct().ToList();
+            var companyIds = positionList
+                .Where(p => p.CompanyId.HasValue)
+                .Select(p => p.CompanyId.Value)
+                .Distinct()
+                .ToList();
+            if (!companyIds.Any())
+            {
+                return result;
+            }
+
+            var normalizedEmail = email.Trim().ToLowerInvariant();
+            var applicantIds = _uow.Context.Set<Applicant>()
+                .AsNoTracking()
+                .Where(a => a.Email.ToLower() == normalizedEmail && companyIds.Contains(a.CompanyId.Value))
+                .Select(a => a.Id)
+                .ToList();
+            if (!applicantIds.Any())
+            {
+                return result;
+            }
+
+            var applications = _uow.Context.Set<Application>()
+                .AsNoTracking()
+                .Where(a => applicantIds.Contains(a.ApplicantId) && positionIds.Contains(a.PositionId))
+                .ToList();
+
+            foreach (var application in applications)
+            {
+                result[application.PositionId] = application;
+            }
+
+            return result;
+        }
+
         private static IDictionary<int, decimal> ParseQuestionWeights(string payload)
         {
             var weights = new Dictionary<int, decimal>();
@@ -455,7 +558,7 @@ namespace HR.Web.Controllers
             return QuestionStagePayloadHelper.ValidateAllStagesHaveQuestions(questionnaireStageCount, selectedQuestions, stages);
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Delete(int id)
         {
@@ -477,14 +580,14 @@ namespace HR.Web.Controllers
 
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult DeleteConfirmed(int id)
         {
             return HandleDeletePosition(id);
         }
         [HttpPost]
-        [Authorize]
+        [TenantAuthorize]
         [ValidateAntiForgeryToken]
         public ActionResult ToggleCompanyVisibility(int companyId, bool isVisible)
         {

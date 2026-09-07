@@ -176,7 +176,7 @@
     <!-- Candidates by Position -->
     @if (Model?.CandidatesByPosition != null && Model.CandidatesByPosition.Count > 0)
     {
-        @foreach (var positionGroup in Model.CandidatesByPosition)
+        foreach (var positionGroup in Model.CandidatesByPosition)
         {
             <div class="position-section">
                 <div class="position-header" onclick="togglePositionCandidates(this)">

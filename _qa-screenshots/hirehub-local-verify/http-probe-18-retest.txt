@@ -1,0 +1,14 @@
+﻿404 /HireHub/F4359634/zzz/nope loc= mark=IIS_STOCK_404
+FOLLOW_ERR /HireHub/F4359634/zzz/nope Exception calling "DownloadString" with "1" argument(s): "The remote server returned an error: (404) Not Found."
+302 /HireHub/Admin/Positions loc=/Account/Login?aspxerrorpath=/HireHub/Admin/Positions mark=REDIR_OR_OK
+FOLLOW /HireHub/Admin/Positions mark=LOGIN title=Login - NanoHireHub
+302 /HireHub/Candidates loc=/Account/Login?aspxerrorpath=/HireHub/Candidates mark=REDIR_OR_OK
+FOLLOW /HireHub/Candidates mark=LOGIN title=Login - NanoHireHub
+302 /HireHub/Questionnaires loc=/Account/Login?aspxerrorpath=/HireHub/Questionnaires mark=REDIR_OR_OK
+FOLLOW /HireHub/Questionnaires mark=LOGIN title=Login - NanoHireHub
+302 /Admin/Positions loc=/Account/Login?aspxerrorpath=/Admin/Positions mark=REDIR_OR_OK
+FOLLOW /Admin/Positions mark=LOGIN title=Login - NanoHireHub
+302 /default/ThisDoesNotExist loc=/Account/Login?aspxerrorpath=/default/ThisDoesNotExist mark=REDIR_OR_OK
+FOLLOW /default/ThisDoesNotExist mark=LOGIN title=Login - NanoHireHub
+302 /ThisDoesNotExist loc=/Account/Login?aspxerrorpath=/ThisDoesNotExist mark=REDIR_OR_OK
+FOLLOW /ThisDoesNotExist mark=LOGIN title=Login - NanoHireHub

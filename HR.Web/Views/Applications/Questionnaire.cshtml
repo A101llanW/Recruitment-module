@@ -37,6 +37,11 @@
                 foreach (var pq in positionQuestions.OrderBy(pq => pq.Order))
                 {
                     var question = pq.Question;
+                    if (question == null)
+                    {
+                        continue;
+                    }
+
                     <div class="form-group mb-4">
                         <label class="font-weight-bold">
                             @(questionIndex). @question.Text

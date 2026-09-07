@@ -11,7 +11,12 @@ namespace HR.Web.Filters
     /// </summary>
     public class AuditLogAttribute : ActionFilterAttribute
     {
-        private readonly AuditService _auditService = new AuditService();
+        private AuditService _auditService;
+
+        private AuditService AuditService
+        {
+            get { return _auditService ?? (_auditService = new AuditService()); }
+        }
 
         public override void OnActionExecuted(ActionExecutedContext filterContext)
         {
@@ -47,7 +52,7 @@ namespace HR.Web.Filters
             string entityId = filterContext.RouteData.Values["id"]?.ToString();
 
             // Log the action
-            _auditService.LogAction(
+            AuditService.LogAction(
                 username, 
                 actionType + ":" + action, 
                 controller, 

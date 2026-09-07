@@ -48,6 +48,11 @@
         width: 96vw;
         max-width: 920px;
         margin: 1.5vh auto;
+        pointer-events: auto;
+    }
+
+    .email-workflow-modal.show {
+        pointer-events: auto;
     }
 
     .email-workflow-modal .modal-content {
@@ -299,8 +304,10 @@
     }
 </div>
 
+@section Modals {
 @if (canManageInterviews)
 {
+    <!-- Email workflow modals render outside .app-page so Bootstrap backdrop stacks correctly -->
     <div class="modal fade email-workflow-modal" id="interviewEmailChoiceModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
@@ -320,7 +327,7 @@
                             <h6 class="font-weight-bold mb-2 text-center">Use Template</h6>
                             <p class="text-muted small mb-3 text-center">Load wording from <strong>Admin &rarr; Email wording</strong> (merged with this candidate's interview details), edit, then send.</p>
                             <div class="text-center">
-                                <button type="button" class="btn btn-outline-primary px-4" onclick="openInterviewCandidateTemplateEditor()">
+                                <button type="button" class="btn btn-outline-primary px-4" data-interview-email-action="template">
                                     <i class="fas fa-file-alt mr-2"></i>Use Template
                                 </button>
                             </div>
@@ -329,7 +336,7 @@
                             <h6 class="font-weight-bold mb-2 text-center">Compose from Scratch</h6>
                             <p class="text-muted small mb-3 text-center">Write a custom subject and message with rich formatting for this candidate.</p>
                             <div class="text-center">
-                                <button type="button" class="btn btn-outline-secondary px-4" onclick="openInterviewCandidateScratchEditor()">
+                                <button type="button" class="btn btn-outline-secondary px-4" data-interview-email-action="scratch">
                                     <i class="fas fa-pen mr-2"></i>Compose from Scratch
                                 </button>
                             </div>
@@ -419,7 +426,7 @@
                             <h6 class="font-weight-bold mb-2 text-center">Use Template</h6>
                             <p class="text-muted small mb-3 text-center">Load wording from <strong>Admin &rarr; Email wording</strong> (sample merge), edit, then send to all scheduled candidates.</p>
                             <div class="text-center">
-                                <button type="button" class="btn btn-outline-primary px-4" onclick="openInterviewBulkTemplateEditor()">
+                                <button type="button" class="btn btn-outline-primary px-4" data-interview-bulk-email-action="template">
                                     <i class="fas fa-file-alt mr-2"></i>Use Template
                                 </button>
                             </div>
@@ -428,7 +435,7 @@
                             <h6 class="font-weight-bold mb-2 text-center">Compose from Scratch</h6>
                             <p class="text-muted small mb-3 text-center">Write a custom subject and message to send to every scheduled candidate.</p>
                             <div class="text-center">
-                                <button type="button" class="btn btn-outline-secondary px-4" onclick="openInterviewBulkScratchEditor()">
+                                <button type="button" class="btn btn-outline-secondary px-4" data-interview-bulk-email-action="scratch">
                                     <i class="fas fa-pen mr-2"></i>Compose from Scratch
                                 </button>
                             </div>
@@ -498,10 +505,12 @@
         </div>
     </div>
 }
+}
 
 @section Scripts {
     @if (canManageInterviews)
     {
+        <script src="@Url.Content("~/Scripts/email-workflow-modals.js")"></script>
         <script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.4/tinymce.min.js" referrerpolicy="origin"></script>
         <script>
             function setInterviewSingleEditorHtml(html) {
@@ -536,6 +545,9 @@
                     if (done) done();
                     return;
                 }
+                var finish = window.HrEmailWorkflow && window.HrEmailWorkflow.withCallbackTimeout
+                    ? window.HrEmailWorkflow.withCallbackTimeout(done, 10000)
+                    : done;
                 tinymce.init({
                     selector: '#interviewEmailEditorBody',
                     height: 320,
@@ -546,7 +558,7 @@
                     license_key: 'gpl',
                     setup: function (editor) {
                         editor.on('init', function () {
-                            if (done) done();
+                            if (finish) finish();
                         });
                     }
                 });
@@ -564,6 +576,9 @@
                     if (done) done();
                     return;
                 }
+                var finish = window.HrEmailWorkflow && window.HrEmailWorkflow.withCallbackTimeout
+                    ? window.HrEmailWorkflow.withCallbackTimeout(done, 10000)
+                    : done;
                 tinymce.init({
                     selector: '#interviewBulkEmailEditorBody',
                     height: 320,
@@ -574,7 +589,7 @@
                     license_key: 'gpl',
                     setup: function (editor) {
                         editor.on('init', function () {
-                            if (done) done();
+                            if (finish) finish();
                         });
                     }
                 });
@@ -638,8 +653,7 @@
 
                 resetInterviewEmailEditorCcState();
                 $('#interviewEmailEditorModal').data('interviewSingleLoadPreview', true);
-                $('#interviewEmailChoiceModal').modal('hide');
-                $('#interviewEmailEditorModal').modal('show');
+                HrEmailWorkflow.swapModal('#interviewEmailChoiceModal', '#interviewEmailEditorModal');
             }
 
             function openInterviewCandidateScratchEditor() {
@@ -658,8 +672,7 @@
 
                 resetInterviewEmailEditorCcState();
                 $('#interviewEmailEditorModal').data('interviewSingleLoadPreview', false);
-                $('#interviewEmailChoiceModal').modal('hide');
-                $('#interviewEmailEditorModal').modal('show');
+                HrEmailWorkflow.swapModal('#interviewEmailChoiceModal', '#interviewEmailEditorModal');
             }
 
             function reloadInterviewCandidateTemplatePreview() {
@@ -742,9 +755,8 @@
                 document.getElementById('interviewBulkTemplateSelectorSection').classList.remove('d-none');
 
                 resetInterviewBulkEmailEditorCcState();
-                $('#interviewBulkEmailChoiceModal').modal('hide');
                 $('#interviewBulkEmailEditorModal').data('interviewBulkLoadPreview', true);
-                $('#interviewBulkEmailEditorModal').modal('show');
+                HrEmailWorkflow.swapModal('#interviewBulkEmailChoiceModal', '#interviewBulkEmailEditorModal');
             }
 
             function openInterviewBulkScratchEditor() {
@@ -756,9 +768,8 @@
                 setInterviewBulkEditorHtml('');
 
                 resetInterviewBulkEmailEditorCcState();
-                $('#interviewBulkEmailChoiceModal').modal('hide');
                 $('#interviewBulkEmailEditorModal').data('interviewBulkLoadPreview', false);
-                $('#interviewBulkEmailEditorModal').modal('show');
+                HrEmailWorkflow.swapModal('#interviewBulkEmailChoiceModal', '#interviewBulkEmailEditorModal');
             }
 
             function toggleOptionalCcSection(toggleId, containerId, checkboxName) {
@@ -810,6 +821,26 @@
             }
 
             $(function () {
+                $(document).on('click', '[data-interview-email-action]', function (event) {
+                    event.preventDefault();
+                    var action = this.getAttribute('data-interview-email-action');
+                    if (action === 'template') {
+                        openInterviewCandidateTemplateEditor();
+                    } else if (action === 'scratch') {
+                        openInterviewCandidateScratchEditor();
+                    }
+                });
+
+                $(document).on('click', '[data-interview-bulk-email-action]', function (event) {
+                    event.preventDefault();
+                    var action = this.getAttribute('data-interview-bulk-email-action');
+                    if (action === 'template') {
+                        openInterviewBulkTemplateEditor();
+                    } else if (action === 'scratch') {
+                        openInterviewBulkScratchEditor();
+                    }
+                });
+
                 $('#interviewEmailEditorModal').on('shown.bs.modal', function () {
                     var loadPreview = $('#interviewEmailEditorModal').data('interviewSingleLoadPreview') === true;
                     ensureInterviewSingleTinyMce(function () {

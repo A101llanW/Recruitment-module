@@ -251,6 +251,8 @@
     </div>
     </main>
 
+    @RenderSection("Modals", required: false)
+
     @if (!hideChrome)
     {
     <footer class="app-footer">
@@ -459,6 +461,8 @@
 
                 checkElevationRequests();
                 setInterval(checkElevationRequests, 30000);
+                $('#elevationRequestModal').on('hidden.bs.modal', syncModalBackdrops);
+                setInterval(syncModalBackdrops, 5000);
 
                 // --- Freeze Overlay & Countdown ---
                 var freezeSecondsLeft = 0;
@@ -487,18 +491,43 @@
                     }
                 }
 
+                function syncModalBackdrops() {
+                    var shown = $('.modal.show');
+                    var backdropCount = $('.modal-backdrop').length;
+
+                    if (shown.length === 0) {
+                        if (backdropCount > 0) {
+                            $('.modal-backdrop').remove();
+                        }
+                        $('body').removeClass('modal-open');
+                        $('body').css({ 'padding-right': '', overflow: '' });
+                        return;
+                    }
+
+                    if (backdropCount > shown.length) {
+                        $('.modal-backdrop').slice(shown.length).remove();
+                    }
+                }
+
                 // Check for System Freeze (Authoritative Server Time)
                 function checkSystemFreeze() {
                     $.get('@Url.Action("GetImpersonationStatus", "Dashboard")', function(data) {
                         if (data.isLocked) {
+                            freezeSecondsLeft = parseInt(data.secondsLeft) || 0;
+                            if (freezeSecondsLeft <= 0) {
+                                $('#performance-freeze-overlay').hide();
+                                if (freezeInterval) {
+                                    clearInterval(freezeInterval);
+                                    freezeInterval = null;
+                                }
+                                return;
+                            }
+
                             wasFrozen = true;
                             $('#performance-freeze-overlay').css('display', 'flex');
-                            
-                            // Authoritative sync from server
-                            freezeSecondsLeft = parseInt(data.secondsLeft) || 0;
                             $('#freeze-countdown').text(formatTime(freezeSecondsLeft));
-                            
-                            if (freezeSecondsLeft > 0 && !freezeInterval) {
+
+                            if (!freezeInterval) {
                                 freezeInterval = setInterval(updateFreezeTimer, 1000);
                             }
                         } else {

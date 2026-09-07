@@ -42,11 +42,7 @@
                     }
                     @if (canManageDepartments || (User != null && User.Identity != null && User.IsInRole("HR")))
                     {
-                        if (canViewDepartments)
-                        {
-                            @: |
-                        }
-                        @Html.ActionLink("Edit", "Edit", new { id = item.Id }, new { @class = "btn btn-sm btn-secondary" }) @:|
+                        @Html.ActionLink("Edit", "Edit", new { id = item.Id }, new { @class = "btn btn-sm btn-secondary" })
                         @Html.ActionLink("Delete", "Delete", new { id = item.Id }, new { @class = "btn btn-sm btn-danger" })
                     }
                 </td>

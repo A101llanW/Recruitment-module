@@ -125,7 +125,8 @@ namespace HR.Web.Services
                     continue;
                 }
 
-                var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId);
+                var stageNumber = Math.Max(1, positionQuestion.StageNumber);
+                var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId, stageNumber);
                 if (rawMaxScore <= 0)
                 {
                     continue;
@@ -133,13 +134,13 @@ namespace HR.Web.Services
 
                 var answer = answers.FirstOrDefault(a =>
                     a.QuestionId == positionQuestion.QuestionId &&
-                    Math.Max(1, a.StageNumber) == Math.Max(1, positionQuestion.StageNumber));
+                    Math.Max(1, a.StageNumber) == stageNumber);
                 if (answer == null)
                 {
                     continue;
                 }
 
-                var rawQuestionScore = CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, application.PositionId);
+                var rawQuestionScore = CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, application.PositionId, stageNumber);
                 var normalizedScore = Clamp01(rawQuestionScore / rawMaxScore);
                 weightedScore += normalizedScore * questionWeight;
             }
@@ -274,22 +275,22 @@ namespace HR.Web.Services
         /// <summary>
         /// Calculate score for a single question using MCPService for content-based evaluation
         /// </summary>
-        public decimal CalculateQuestionScore(Question question, string answerText, int positionId)
+        public decimal CalculateQuestionScore(Question question, string answerText, int positionId, int stageNumber = 1)
         {
             if (string.IsNullOrEmpty(answerText))
             {
                 return 0;
             }
 
-            return CalculateQuestionScoreFallback(question, answerText, positionId);
+            return CalculateQuestionScoreFallback(question, answerText, positionId, stageNumber);
         }
 
         /// <summary>
         /// Fallback scoring method using traditional logic
         /// </summary>
-        public decimal CalculateQuestionScoreFallback(Question question, string answerText, int positionId)
+        public decimal CalculateQuestionScoreFallback(Question question, string answerText, int positionId, int stageNumber = 1)
         {
-            if (question == null || string.IsNullOrEmpty(answerText))
+            if (question == null || string.IsNullOrEmpty(answerText) || string.IsNullOrEmpty(question.Type))
             {
                 return 0;
             }
@@ -299,7 +300,7 @@ namespace HR.Web.Services
             switch (scoredQuestion.Type.ToLower())
             {
                 case "choice":
-                    return CalculateChoiceScore(scoredQuestion, text, positionId);
+                    return CalculateChoiceScore(scoredQuestion, text, positionId, stageNumber);
                 case "rating":
                     return CalculateRatingScore(scoredQuestion, text);
                 case "number":
@@ -314,17 +315,13 @@ namespace HR.Web.Services
         /// <summary>
         /// Calculate score for choice questions (existing logic - now fallback)
         /// </summary>
-        private decimal CalculateChoiceScoreFallback(Question question, string answerText, int positionId)
+        private decimal CalculateChoiceScoreFallback(Question question, string answerText, int positionId, int stageNumber = 1)
         {
-            // Get question options
             var options = _uow.Context.Set<HR.Web.Models.QuestionOption>()
                 .Where(qo => qo.QuestionId == question.Id)
                 .ToList();
 
-            // Check for position-specific overrides
-            var positionQuestion = _uow.Context.Set<PositionQuestion>()
-                .FirstOrDefault(pq => pq.PositionId == positionId && pq.QuestionId == question.Id);
-
+            var positionQuestion = GetPositionQuestionForScoring(positionId, question.Id, stageNumber);
             if (positionQuestion != null)
             {
                 var positionOptions = _uow.Context.Set<PositionQuestionOption>()
@@ -332,18 +329,17 @@ namespace HR.Web.Services
                     .Include(pqo => pqo.QuestionOption)
                     .ToList();
 
-                // Use position-specific points if available
-                var matchedOption = positionOptions.FirstOrDefault(pqo => 
+                var matchedOption = positionOptions.FirstOrDefault(pqo =>
+                    pqo.QuestionOption != null &&
                     pqo.QuestionOption.Text.Equals(answerText, StringComparison.OrdinalIgnoreCase));
 
-                if (matchedOption != null && matchedOption.Points.HasValue)
+                if (matchedOption != null)
                 {
-                    return matchedOption.Points.Value;
+                    return ResolveChoiceOptionPoints(matchedOption);
                 }
             }
 
-            // Fallback to default points
-            var defaultOption = options.FirstOrDefault(o => 
+            var defaultOption = options.FirstOrDefault(o =>
                 o.Text.Equals(answerText, StringComparison.OrdinalIgnoreCase));
 
             return defaultOption != null ? defaultOption.Points : 0;
@@ -1212,9 +1208,9 @@ namespace HR.Web.Services
         /// <summary>
         /// Calculate score for choice questions with AI enhancement
         /// </summary>
-        private decimal CalculateChoiceScore(Question question, string answerText, int positionId)
+        private decimal CalculateChoiceScore(Question question, string answerText, int positionId, int stageNumber = 1)
         {
-            return CalculateChoiceScoreFallback(question, answerText, positionId);
+            return CalculateChoiceScoreFallback(question, answerText, positionId, stageNumber);
         }
 
         /// <summary>
@@ -1244,7 +1240,7 @@ namespace HR.Web.Services
         /// <summary>
         /// Get maximum possible score for a question
         /// </summary>
-        public decimal GetMaxScoreForQuestion(Question question, int positionId)
+        public decimal GetMaxScoreForQuestion(Question question, int positionId, int stageNumber = 1)
         {
             if (question == null || string.IsNullOrEmpty(question.Type))
             {
@@ -1255,7 +1251,7 @@ namespace HR.Web.Services
             switch (scoredQuestion.Type.ToLower())
             {
                 case "choice":
-                    return GetMaxChoiceScore(scoredQuestion, positionId);
+                    return GetMaxChoiceScore(scoredQuestion, positionId, stageNumber);
                 case "rating":
                     return 10; // 1-5 rating scale -> max 10 points
                 case "number":
@@ -1270,31 +1266,69 @@ namespace HR.Web.Services
         /// <summary>
         /// Get maximum score for choice questions
         /// </summary>
-        private decimal GetMaxChoiceScore(Question question, int positionId)
+        private decimal GetMaxChoiceScore(Question question, int positionId, int stageNumber = 1)
         {
-            // Check for position-specific overrides
-            var positionQuestion = _uow.Context.Set<PositionQuestion>()
-                .FirstOrDefault(pq => pq.PositionId == positionId && pq.QuestionId == question.Id);
-
+            var positionQuestion = GetPositionQuestionForScoring(positionId, question.Id, stageNumber);
             if (positionQuestion != null)
             {
                 var positionOptions = _uow.Context.Set<PositionQuestionOption>()
                     .Where(pqo => pqo.PositionQuestionId == positionQuestion.Id)
+                    .Include(pqo => pqo.QuestionOption)
                     .ToList();
 
                 if (positionOptions.Any())
                 {
-                    return positionOptions.Where(pqo => pqo.Points.HasValue)
-                        .Max(pqo => pqo.Points.Value);
+                    return GetEffectiveChoicePoints(positionOptions).Max();
                 }
             }
 
-            // Fallback to default options
+            return GetMaxDefaultChoicePoints(question.Id);
+        }
+
+        private PositionQuestion GetPositionQuestionForScoring(int positionId, int questionId, int stageNumber)
+        {
+            var normalizedStage = Math.Max(1, stageNumber);
+            return _uow.Context.Set<PositionQuestion>()
+                .FirstOrDefault(pq =>
+                    pq.PositionId == positionId &&
+                    pq.QuestionId == questionId &&
+                    Math.Max(1, pq.StageNumber) == normalizedStage);
+        }
+
+        private static List<decimal> GetEffectiveChoicePoints(IEnumerable<PositionQuestionOption> positionOptions)
+        {
+            return positionOptions
+                .Select(ResolveChoiceOptionPoints)
+                .ToList();
+        }
+
+        private static decimal ResolveChoiceOptionPoints(PositionQuestionOption option)
+        {
+            if (option == null)
+            {
+                return 0m;
+            }
+
+            if (option.Points.HasValue)
+            {
+                return option.Points.Value;
+            }
+
+            return option.QuestionOption != null ? option.QuestionOption.Points : 0m;
+        }
+
+        private decimal GetMaxDefaultChoicePoints(int questionId)
+        {
             var defaultOptions = _uow.Context.Set<HR.Web.Models.QuestionOption>()
-                .Where(qo => qo.QuestionId == question.Id)
+                .Where(qo => qo.QuestionId == questionId)
                 .ToList();
 
-            return defaultOptions.Any() ? defaultOptions.Max(o => o.Points) : 0;
+            if (!defaultOptions.Any())
+            {
+                return 0m;
+            }
+
+            return defaultOptions.Max(o => o.Points);
         }
 
         /// <summary>
@@ -1321,12 +1355,13 @@ namespace HR.Web.Services
 
             foreach (var positionQuestion in positionQuestions)
             {
+                var stageNumber = Math.Max(1, positionQuestion.StageNumber);
                 var answer = answers.FirstOrDefault(a =>
                     a.QuestionId == positionQuestion.QuestionId &&
-                    Math.Max(1, a.StageNumber) == Math.Max(1, positionQuestion.StageNumber));
+                    Math.Max(1, a.StageNumber) == stageNumber);
                 var rawScore = answer != null ?
-                    CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, application.PositionId) : 0;
-                var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId);
+                    CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, application.PositionId, stageNumber) : 0;
+                var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId, stageNumber);
                 decimal weight;
                 if (!effectiveWeights.TryGetValue(positionQuestion.Id, out weight))
                 {

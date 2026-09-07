@@ -672,9 +672,7 @@ namespace HR.Web.Controllers
         private LoginRoutingContextModel BuildLoginRoutingContext(User user)
         {
             var userRole = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
-            var isSuperAdmin = !user.CompanyId.HasValue &&
-                               (string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(userRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
+            var isSuperAdmin = IsGlobalSuperAdminUser(user);
 
             if (isSuperAdmin)
             {
@@ -777,13 +775,10 @@ namespace HR.Web.Controllers
 
             AuditSvc.LogAction(username, "LOGIN_REDIRECT_MFA", "Account", user.Id.ToString(), true, "Redirecting to MFA challenge");
             Session["PendingMfaUsername"] = user.UserName;
+            Session.Remove(LegalConsentSession.PendingCompanyIdSession);
             if (user.CompanyId.HasValue)
             {
                 Session[LegalConsentSession.PendingCompanyIdSession] = user.CompanyId.Value;
-            }
-            else
-            {
-                Session.Remove(LegalConsentSession.PendingCompanyIdSession);
             }
 
             return RedirectToAction("VerifyMFA", "Account", new { tenant = tenantSlug });

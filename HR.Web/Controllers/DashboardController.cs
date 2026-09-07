@@ -2,13 +2,14 @@ using System;
 using System.Linq;
 using System.Web.Mvc;
 using HR.Web.Data;
+using HR.Web.Filters;
 using HR.Web.Helpers;
 using HR.Web.Models;
 using HR.Web.Services;
 
 namespace HR.Web.Controllers
 {
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [TenantAuthorize(Roles = "Admin,SuperAdmin")]
     public class DashboardController : Controller
     {
         private readonly UnitOfWork _uow = new UnitOfWork();
@@ -141,7 +142,7 @@ namespace HR.Web.Controllers
                 JsonRequestBehavior.AllowGet);
         }
 
-        [Authorize(Roles = "SuperAdmin")]
+        [TenantAuthorize(Roles = "SuperAdmin")]
         public ActionResult Rescue()
         {
             // CLEAR ALL ACTIVE OR APPROVED SESSIONS NATIONWIDE
@@ -209,9 +210,12 @@ namespace HR.Web.Controllers
 
         private ImpersonationRequest GetActiveImpersonationRequest(int companyId)
         {
+            var now = DateTime.Now;
             return _uow.ImpersonationRequests.GetAll()
                 .Where(r => r.CompanyId == companyId &&
-                    r.StatusValue == (int)ImpersonationRequestStatus.Active)
+                    r.StatusValue == (int)ImpersonationRequestStatus.Active &&
+                    r.ExpiryDate.HasValue &&
+                    r.ExpiryDate > now)
                 .OrderByDescending(r => r.ExpiryDate)
                 .FirstOrDefault();
         }
@@ -227,14 +231,22 @@ namespace HR.Web.Controllers
 
             var secondsLeft = activeImpersonation.ExpiryDate.HasValue
                 ? (int)(activeImpersonation.ExpiryDate.Value - DateTime.Now).TotalSeconds
-                : 3600;
+                : 0;
+
+            if (secondsLeft <= 0)
+            {
+                activeImpersonation.Status = ImpersonationRequestStatus.Expired;
+                _uow.ImpersonationRequests.Update(activeImpersonation);
+                _uow.Complete();
+                return Json(new { isLocked = false, unlockUrl = unlockUrl }, JsonRequestBehavior.AllowGet);
+            }
 
             return Json(
                 new
                 {
                     isLocked = true,
                     expiry = activeImpersonation.ExpiryDate.HasValue ? activeImpersonation.ExpiryDate.Value.ToString("yyyy-MM-ddTHH:mm:ss") : null,
-                    secondsLeft = Math.Max(0, secondsLeft),
+                    secondsLeft = secondsLeft,
                     unlockUrl = unlockUrl
                 },
                 JsonRequestBehavior.AllowGet);

@@ -50,7 +50,7 @@ namespace HR.Web.Controllers
             var urlTenantToken = RouteData.Values["tenant"] as string;
             if (string.IsNullOrEmpty(urlTenantToken) && !string.IsNullOrEmpty(returnPath))
             {
-                var tenantFromReturn = TenantAuthRedirectHelper.ExtractTenantSlugFromPath(returnPath);
+                var tenantFromReturn = TenantAuthRedirectHelper.ExtractTenantSlugFromPath(returnPath, Request.ApplicationPath);
                 if (!string.IsNullOrEmpty(tenantFromReturn))
                 {
                     return RedirectToAction("Login", "Account", new { tenant = tenantFromReturn, returnUrl = returnPath });
@@ -75,7 +75,34 @@ namespace HR.Web.Controllers
             }
 
             ViewBag.ReturnUrl = returnPath ?? LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
+            ApplyLoginApplicationContext(returnUri);
             return View();
+        }
+
+        private void ApplyLoginApplicationContext(Uri returnUri)
+        {
+            if (TempData["ApplicationMessage"] != null)
+            {
+                ViewBag.ApplicationMessage = TempData["ApplicationMessage"].ToString();
+                return;
+            }
+
+            if (returnUri == null)
+            {
+                return;
+            }
+
+            var positionId = LocalReturnUrlHelper.ExtractPositionId(returnUri);
+            if (!positionId.HasValue)
+            {
+                return;
+            }
+
+            var position = _uow.Positions.Get(positionId.Value);
+            if (position != null)
+            {
+                ViewBag.ApplicationMessage = string.Format("Sign in to apply for {0}.", position.Title);
+            }
         }
 
         private Uri ParseReturnUriOrNull(string returnUrl)
@@ -198,8 +225,13 @@ namespace HR.Web.Controllers
                 return HttpNotFound();
             }
             
-            // If already verified, move them to dashboard
+            // If already verified, send global admins to the platform portal.
             if (user.IsEmailVerified) {
+                if (IsGlobalSuperAdminUser(user))
+                {
+                    return RedirectToAction("Index", "Companies");
+                }
+
                 var tenantToken = RouteData.Values["tenant"] as string;
                 return RedirectToAction("Index", "Dashboard", new { tenant = tenantToken });
             }
@@ -624,12 +656,26 @@ namespace HR.Web.Controllers
                 return null;
             }
 
-            var companyId = LegalConsentSession.TryReadCompanyId(Session);
             var lowerUsername = username.ToLower();
             var matches = _uow.Context.Users
                 .Where(u => u.UserName.ToLower() == lowerUsername)
                 .ToList();
 
+            if (matches.Count == 0)
+            {
+                return null;
+            }
+
+            // Global SuperAdmin must win over a stale tenant session left from /{slug}/Account/Login.
+            var globalSuperAdmin = matches.FirstOrDefault(u =>
+                !u.CompanyId.HasValue &&
+                string.Equals(u.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
+            if (globalSuperAdmin != null)
+            {
+                return globalSuperAdmin;
+            }
+
+            var companyId = LegalConsentSession.TryReadCompanyId(Session);
             if (companyId.HasValue)
             {
                 var tenantUser = matches.FirstOrDefault(u => u.CompanyId == companyId.Value);
@@ -639,7 +685,6 @@ namespace HR.Web.Controllers
                 }
             }
 
-            // Global SuperAdmin accounts have CompanyId IS NULL.
             return matches.FirstOrDefault(u => !u.CompanyId.HasValue) ?? matches.FirstOrDefault();
         }
 
@@ -700,6 +745,7 @@ namespace HR.Web.Controllers
 
             var recipientEmail = mfaUser.Email;
             DevDiagnostics.LogOneTimeCode("MFA CODE", recipientEmail, code);
+            LogMfaCodeForDiagnostics(recipientEmail.Trim(), code);
 
             return SendMfaEmailNow(recipientEmail.Trim(), code, mfaUser.UserName, mfaUser.Id.ToString());
         }
@@ -720,6 +766,7 @@ namespace HR.Web.Controllers
             catch (Exception ex)
             {
                 DevDiagnostics.LogOneTimeCode("MFA CODE (email failed — use code above)", recipientEmail, code);
+                LogMfaCodeForDiagnostics(recipientEmail, code);
                 System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
                 AuditSvc.LogAction(
                     username,
@@ -729,6 +776,30 @@ namespace HR.Web.Controllers
                     wasSuccessful: false,
                     errorMessage: ex.Message);
                 return false;
+            }
+        }
+
+        private static void LogMfaCodeForDiagnostics(string recipientEmail, string code)
+        {
+            if (!DevDiagnostics.IsEnabled())
+            {
+                return;
+            }
+
+            try
+            {
+                string logPath = AppDomain.CurrentDomain.BaseDirectory + "mfa_codes.txt";
+                string logMessage = string.Format(
+                    "[{0}] MFA CODE for {1}: {2}{3}",
+                    DateTime.Now,
+                    recipientEmail ?? string.Empty,
+                    code ?? string.Empty,
+                    Environment.NewLine);
+                System.IO.File.AppendAllText(logPath, logMessage);
+            }
+            catch (Exception)
+            {
+                // Best-effort debug log only.
             }
         }
 

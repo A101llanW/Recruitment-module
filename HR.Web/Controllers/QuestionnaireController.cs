@@ -11,7 +11,7 @@ using HR.Web.Filters;
 
 namespace HR.Web.Controllers
 {
-    [Authorize(Roles = "Admin, HR, SuperAdmin")]
+    [TenantAuthorize(Roles = "Admin, HR, SuperAdmin")]
     [RoleBasedAuthorization("Admin", "HR")]
     [ModuleAccess(RoleModuleCatalog.Questions)]
     public class QuestionnaireController : Controller
@@ -23,9 +23,15 @@ namespace HR.Web.Controllers
         /// <summary>
         /// Preview questionnaire for a position
         /// </summary>
-        public ActionResult Preview(int positionId)
+        public ActionResult Preview(int? positionId)
         {
-            var position = _uow.Positions.Get(positionId);
+            if (!positionId.HasValue || positionId.Value <= 0)
+            {
+                TempData["ErrorMessage"] = "Select a position to preview its questionnaire.";
+                return RedirectToAction("Index", "Positions");
+            }
+
+            var position = _uow.Positions.Get(positionId.Value);
             if (position == null) return HttpNotFound();
 
             // Check tenant access
@@ -35,8 +41,9 @@ namespace HR.Web.Controllers
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
 
+            var resolvedPositionId = positionId.Value;
             var positionQuestions = _uow.Context.Set<PositionQuestion>()
-                .Where(pq => pq.PositionId == positionId)
+                .Where(pq => pq.PositionId == resolvedPositionId)
                 .Include(pq => pq.Question)
                 .OrderBy(pq => pq.Order)
                 .ToList();
@@ -51,7 +58,7 @@ namespace HR.Web.Controllers
                     QuestionType = pq.Question.Type,
                     AllowMultipleChoices = pq.Question.AllowMultipleChoices,
                     Order = pq.Order,
-                    Options = GetQuestionOptions(pq.Question.Id, positionId),
+                    Options = GetQuestionOptions(pq.Question.Id, resolvedPositionId),
                     IsRequired = true
                 }).ToList()
             };

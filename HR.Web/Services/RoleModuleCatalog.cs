@@ -42,6 +42,15 @@ namespace HR.Web.Services
         public const string SecurityLogs = "SecurityLogs";
         public const string UserManagement = "UserManagement";
 
+        // Candidate apply-flow POST actions must stay at View access; Clients cannot use Manage.
+        private static readonly HashSet<string> CandidateSelfServiceActions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "CoverLetter",
+            "ProfileDetails",
+            "Questionnaire",
+            "FinishQuestionnaire"
+        };
+
         private static readonly HashSet<string> ManageActions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "AddGeneratedQuestionsToBank",
@@ -62,6 +71,7 @@ namespace HR.Web.Services
             "DeleteQuestion",
             "DeleteQuestionnaireTemplate",
             "Edit",
+            "EditQuestion",
             "EditQuestionnaireTemplate",
             "GenerateQuestions",
             "GetDepartments",
@@ -204,12 +214,19 @@ namespace HR.Web.Services
 
         public static string ResolveRequiredAccessLevel(string httpMethod, string actionName)
         {
+            var normalizedActionName = actionName ?? string.Empty;
+
             if (!string.Equals(httpMethod, "GET", StringComparison.OrdinalIgnoreCase))
             {
+                if (CandidateSelfServiceActions.Contains(normalizedActionName))
+                {
+                    return RoleAccessLevels.View;
+                }
+
                 return RoleAccessLevels.Manage;
             }
 
-            return ManageActions.Contains(actionName ?? string.Empty)
+            return ManageActions.Contains(normalizedActionName)
                 ? RoleAccessLevels.Manage
                 : RoleAccessLevels.View;
         }

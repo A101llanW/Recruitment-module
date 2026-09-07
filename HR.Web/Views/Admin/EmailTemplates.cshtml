@@ -168,7 +168,10 @@
     private static string JsonForInlineScript(string value)
     {
         var json = JsonConvert.SerializeObject(value ?? string.Empty);
-        return json.Replace("<", "\\u003c");
+        return json
+            .Replace("<", "\\u003c")
+            .Replace("\u2028", "\\u2028")
+            .Replace("\u2029", "\\u2029");
     }
 
     private string EmailChipBuildHtml(string tokenName)
@@ -224,10 +227,12 @@
             <li>Use the <strong>round icon buttons</strong> to drop a field into the subject line or the message (hover for a short explanation).</li>
             <li>Fields look like <strong>pills</strong> in the editor - do not delete the pill if you still want that information in the sent email.</li>
             <li><strong>CC</strong> is chosen when someone sends the email, not in this screen.</li>
-            <li>Use <strong>Edit</strong> to focus the message editor; <strong>Save</strong> stores all templates on this page.</li>
+            <li>Use <strong>Edit</strong> to load the rich message editor for a template; <strong>Save</strong> stores all templates on this page.</li>
             <li>While you work, the template shows a blue <strong>Edit mode</strong> banner and border so you always know which one is active.</li>
         </ul>
     </div>
+
+    <div id="emailTemplatesEditorStatus" class="alert alert-warning d-none mb-4" role="alert"></div>
 
     @using (Html.BeginForm("SaveEmailTemplates", "Admin", new { tenant = ViewContext.RouteData.Values["tenant"] }, FormMethod.Post, new { id = "emailTemplatesForm" }))
     {
@@ -257,6 +262,7 @@
                     @Html.HiddenFor(m => m.Templates[i].Category)
 
                     <div class="email-template-compose border rounded p-3 bg-white"
+                         data-template-index="@i"
                          data-subject-compose-id="@subjectComposeId"
                          data-subject-storage-id="@defaultSubjectId"
                          data-body-id="@defaultBodyId">
@@ -355,7 +361,8 @@
                                     <button type="button"
                                             class="btn btn-outline-primary btn-sm email-template-edit-btn"
                                             data-body-id="@defaultBodyId"
-                                            title="Move focus to this message editor">
+                                            data-template-index="@i"
+                                            title="Load the rich message editor for this template">
                                         <i class="fas fa-edit mr-1" aria-hidden="true"></i>Edit
                                     </button>
                                     <button type="submit"
@@ -369,6 +376,7 @@
                             <textarea name="@Html.NameFor(m => m.Templates[i].DefaultBodyTemplate)"
                                       id="@defaultBodyId"
                                       class="email-template-body-html"
+                                      data-template-index="@i"
                                       autocomplete="off"
                                       style="width:100%;min-height:280px;resize:vertical;"
                                       maxlength="200000"></textarea>
@@ -387,9 +395,176 @@
     }
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.3/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
     (function () {
+        var editorInitState = {};
+        var editorInitWaiters = {};
+        var tinymceScriptPromise = null;
+        var tinymceCdnUrl = 'https://cdn.jsdelivr.net/npm/tinymce@6.8.3/tinymce.min.js';
+
+        function showEditorUnavailable(message) {
+            var status = document.getElementById('emailTemplatesEditorStatus');
+            if (!status) {
+                return;
+            }
+            status.textContent = message || 'The rich text editor could not be loaded. Check your network connection or try again later. Subject lines can still be edited.';
+            status.classList.remove('d-none');
+        }
+
+        function loadTinyMceScript() {
+            if (typeof tinymce !== 'undefined') {
+                return Promise.resolve();
+            }
+            if (tinymceScriptPromise) {
+                return tinymceScriptPromise;
+            }
+
+            tinymceScriptPromise = new Promise(function (resolve, reject) {
+                var script = document.createElement('script');
+                script.src = tinymceCdnUrl;
+                script.referrerPolicy = 'origin';
+                script.async = true;
+                script.onload = function () {
+                    if (typeof tinymce !== 'undefined') {
+                        resolve();
+                    } else {
+                        reject(new Error('tinymce unavailable after load'));
+                    }
+                };
+                script.onerror = function () {
+                    reject(new Error('tinymce script failed to load'));
+                };
+                document.head.appendChild(script);
+            });
+
+            return tinymceScriptPromise;
+        }
+
+        function whenTinyMceReady(callback) {
+            if (typeof tinymce !== 'undefined') {
+                callback();
+                return;
+            }
+
+            loadTinyMceScript()
+                .then(function () {
+                    callback();
+                })
+                .catch(function () {
+                    showEditorUnavailable('The rich text editor script failed to load. Subject lines can still be edited.');
+                });
+        }
+
+        function readInitialBodyHtml(idx, bid) {
+            var jsonEl = document.getElementById('emailBodyInitialJson_' + idx);
+            var html = '';
+            try {
+                if (jsonEl && jsonEl.textContent && jsonEl.textContent.trim()) {
+                    html = JSON.parse(jsonEl.textContent);
+                }
+            } catch (parseErr) {
+                if (typeof console !== 'undefined' && console.warn) {
+                    console.warn('email template body JSON parse failed', parseErr);
+                }
+                html = '';
+            }
+            if (typeof html !== 'string') {
+                html = '';
+            }
+            if (!html || !html.length) {
+                var ta = document.getElementById(bid);
+                if (ta && ta.value && ta.value.length) {
+                    html = ta.value;
+                }
+            }
+            return html && html.length ? html : '<p></p>';
+        }
+
+        function queueEditorWaiter(bid, callback) {
+            if (!editorInitWaiters[bid]) {
+                editorInitWaiters[bid] = [];
+            }
+            if (callback) {
+                editorInitWaiters[bid].push(callback);
+            }
+        }
+
+        function flushEditorWaiters(bid, editor) {
+            var waiters = editorInitWaiters[bid] || [];
+            editorInitWaiters[bid] = [];
+            waiters.forEach(function (cb) {
+                try {
+                    cb(editor);
+                } catch (err) { /* ignore */ }
+            });
+        }
+
+        function ensureEmailTemplateTinyMce(idx, bid, compose, done) {
+            if (!bid) {
+                if (done) done(null);
+                return;
+            }
+
+            var existing = getTinyMceEditorForTextareaId(bid);
+            if (existing) {
+                if (done) done(existing);
+                return;
+            }
+
+            if (editorInitState[bid] === 'initializing') {
+                queueEditorWaiter(bid, done);
+                return;
+            }
+
+            whenTinyMceReady(function () {
+                existing = getTinyMceEditorForTextareaId(bid);
+                if (existing) {
+                    if (done) done(existing);
+                    return;
+                }
+
+                editorInitState[bid] = 'initializing';
+                queueEditorWaiter(bid, done);
+
+                tinymce.init({
+                    selector: '#' + bid,
+                    height: 340,
+                    menubar: false,
+                    branding: false,
+                    plugins: 'link lists autoresize noneditable',
+                    noneditable_class: 'mceNonEditable',
+                    toolbar: 'undo redo | styles | bold italic underline | alignleft aligncenter alignright | bullist numlist | link removeformat',
+                    content_style: 'body { font-family: Segoe UI, Arial, sans-serif; font-size: 15px; line-height: 1.6; }',
+                    entity_encoding: 'raw',
+                    valid_elements: '*[*]',
+                    verify_html: false,
+                    convert_urls: false,
+                    setup: function (editor) {
+                        editor.on('focus', function () {
+                            markEmailComposeEditing(compose);
+                            saveBodySelection(editor);
+                        });
+                        editor.on('NodeChange keyup mouseup', function () {
+                            saveBodySelection(editor);
+                        });
+                        editor.on('change keyup SetContent Undo Redo', function () {
+                            editor.save();
+                        });
+                    },
+                    init_instance_callback: function (editor) {
+                        editor.setContent(readInitialBodyHtml(idx, bid), { format: 'html' });
+                        editor.save();
+                        editorInitState[bid] = 'ready';
+                        flushEditorWaiters(bid, editor);
+                    }
+                }).catch(function () {
+                    editorInitState[bid] = 'failed';
+                    showEditorUnavailable();
+                    flushEditorWaiters(bid, null);
+                });
+            });
+        }
+
         function markEmailComposeEditing(compose) {
             if (!compose) {
                 return;
@@ -639,22 +814,19 @@
                 ed.save();
                 saveBodySelection(ed);
             }
+
+            var idx = compose.getAttribute('data-template-index');
             var editor = getTinyMceEditorForTextareaId(textareaId);
             if (editor) {
                 runInsert(editor);
                 return;
             }
-            var attempts = 0;
-            var timer = setInterval(function () {
-                attempts++;
-                var e2 = getTinyMceEditorForTextareaId(textareaId);
-                if (e2) {
-                    clearInterval(timer);
-                    runInsert(e2);
-                } else if (attempts > 50) {
-                    clearInterval(timer);
+
+            ensureEmailTemplateTinyMce(idx, textareaId, compose, function (ed) {
+                if (ed) {
+                    runInsert(ed);
                 }
-            }, 50);
+            });
         }
 
         document.addEventListener('click', function (ev) {
@@ -702,6 +874,44 @@
             });
         }
 
+        function syncAllBodyStorages() {
+            document.querySelectorAll('#emailTemplatesForm textarea.email-template-body-html').forEach(function (ta) {
+                if (!ta || !ta.id) {
+                    return;
+                }
+                var ed = getTinyMceEditorForTextareaId(ta.id);
+                if (ed) {
+                    ed.save();
+                    return;
+                }
+                var idx = ta.getAttribute('data-template-index');
+                if (idx === null || idx === '') {
+                    return;
+                }
+                ta.value = readInitialBodyHtml(idx, ta.id);
+            });
+        }
+
+        function primeBodyTextareaPreviews() {
+            document.querySelectorAll('#emailTemplatesForm textarea.email-template-body-html').forEach(function (ta) {
+                if (!ta) {
+                    return;
+                }
+                ta.placeholder = 'Click Edit to load the rich message editor for this template.';
+            });
+        }
+
+        function scheduleIdleWork(callback) {
+            if (!callback) {
+                return;
+            }
+            if (window.requestIdleCallback) {
+                window.requestIdleCallback(function () { callback(); }, { timeout: 2000 });
+            } else {
+                window.setTimeout(callback, 0);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
             /* Layout may disable POST textareas for module read-only before this runs; editors need enabled targets. */
             document.querySelectorAll('#emailTemplatesForm textarea.email-template-body-html, #emailTemplatesForm textarea.email-subject-storage').forEach(function (ta) {
@@ -712,22 +922,24 @@
                 ta.style.opacity = '';
             });
 
-            document.querySelectorAll('.email-subject-compose').forEach(function (div) {
-                var sid = div.getAttribute('data-subject-storage-id');
-                var ta = document.getElementById(sid);
-                if (ta && div) {
-                    writeComposeHtml(div, ta.value);
-                }
-                div.addEventListener('input', function () {
-                    if (ta) {
-                        ta.value = readComposeHtml(div);
+            scheduleIdleWork(function () {
+                document.querySelectorAll('.email-subject-compose').forEach(function (div) {
+                    var sid = div.getAttribute('data-subject-storage-id');
+                    var ta = document.getElementById(sid);
+                    if (ta && div) {
+                        writeComposeHtml(div, ta.value);
                     }
-                    saveSubjectSelection(div);
+                    div.addEventListener('input', function () {
+                        if (ta) {
+                            ta.value = readComposeHtml(div);
+                        }
+                        saveSubjectSelection(div);
+                    });
+                    div.addEventListener('keyup', function () { saveSubjectSelection(div); });
+                    div.addEventListener('mouseup', function () { saveSubjectSelection(div); });
+                    div.addEventListener('focus', function () { saveSubjectSelection(div); });
+                    div.addEventListener('blur', function () { saveSubjectSelection(div); });
                 });
-                div.addEventListener('keyup', function () { saveSubjectSelection(div); });
-                div.addEventListener('mouseup', function () { saveSubjectSelection(div); });
-                div.addEventListener('focus', function () { saveSubjectSelection(div); });
-                div.addEventListener('blur', function () { saveSubjectSelection(div); });
             });
 
             document.querySelectorAll('.email-template-edit-btn').forEach(function (btn) {
@@ -737,14 +949,22 @@
                         markEmailComposeEditing(composeEl);
                     }
                     var bid = btn.getAttribute('data-body-id');
-                    var ed = bid ? getTinyMceEditorForTextareaId(bid) : null;
-                    if (ed) {
+                    var idx = btn.getAttribute('data-template-index');
+                    if (!bid || idx === null || idx === '') {
+                        return;
+                    }
+                    btn.disabled = true;
+                    ensureEmailTemplateTinyMce(idx, bid, composeEl, function (ed) {
+                        btn.disabled = false;
+                        if (!ed) {
+                            return;
+                        }
                         ed.focus();
                         var host = ed.getContainer();
                         if (host && host.scrollIntoView) {
                             host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }
-                    }
+                    });
                 });
             });
 
@@ -752,77 +972,14 @@
             if (form) {
                 form.addEventListener('submit', function () {
                     syncSubjectStorages();
+                    syncAllBodyStorages();
                     if (typeof tinymce !== 'undefined') {
                         tinymce.triggerSave();
                     }
                 });
             }
 
-            var index = 0;
-            while (true) {
-                var bodyId = 'defaultBodyTemplate_' + index;
-                var bodyTa = document.getElementById(bodyId);
-                var compose = bodyTa ? bodyTa.closest('.email-template-compose') : null;
-                if (!bodyTa || !compose) {
-                    break;
-                }
-
-                (function (idx, bid) {
-                    tinymce.init({
-                        selector: '#' + bid,
-                        height: 340,
-                        menubar: false,
-                        branding: false,
-                        plugins: 'link lists autoresize noneditable',
-                        noneditable_class: 'mceNonEditable',
-                        toolbar: 'undo redo | styles | bold italic underline | alignleft aligncenter alignright | bullist numlist | link removeformat',
-                        content_style: 'body { font-family: Segoe UI, Arial, sans-serif; font-size: 15px; line-height: 1.6; }',
-                        entity_encoding: 'raw',
-                        valid_elements: '*[*]',
-                        verify_html: false,
-                        convert_urls: false,
-                        setup: function (editor) {
-                            editor.on('focus', function () {
-                                markEmailComposeEditing(compose);
-                                saveBodySelection(editor);
-                            });
-                            editor.on('NodeChange keyup mouseup', function () {
-                                saveBodySelection(editor);
-                            });
-                            editor.on('change keyup SetContent Undo Redo', function () {
-                                editor.save();
-                            });
-                        },
-                        init_instance_callback: function (editor) {
-                            var jsonEl = document.getElementById('emailBodyInitialJson_' + idx);
-                            var html = '';
-                            try {
-                                if (jsonEl && jsonEl.textContent && jsonEl.textContent.trim()) {
-                                    html = JSON.parse(jsonEl.textContent);
-                                }
-                            } catch (parseErr) {
-                                if (typeof console !== 'undefined' && console.warn) {
-                                    console.warn('email template body JSON parse failed', parseErr);
-                                }
-                                html = '';
-                            }
-                            if (typeof html !== 'string') {
-                                html = '';
-                            }
-                            if (!html || !html.length) {
-                                var ta = document.getElementById(bid);
-                                if (ta && ta.value && ta.value.length) {
-                                    html = ta.value;
-                                }
-                            }
-                            editor.setContent(html && html.length ? html : '<p></p>', { format: 'html' });
-                            editor.save();
-                        }
-                    });
-                })(index, bodyId);
-
-                index++;
-            }
+            primeBodyTextareaPreviews();
         });
     })();
 </script>

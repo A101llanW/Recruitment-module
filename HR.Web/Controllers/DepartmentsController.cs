@@ -44,7 +44,7 @@ namespace HR.Web.Controllers
             return View(item);
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Create()
         {
@@ -53,7 +53,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Create(Department model)
         {
@@ -82,7 +82,7 @@ namespace HR.Web.Controllers
             return RedirectToAction("Index");
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(int id)
         {
@@ -104,7 +104,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(Department model)
         {
@@ -137,7 +137,7 @@ namespace HR.Web.Controllers
             return RedirectToAction("Index");
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Delete(int id)
         {
@@ -159,7 +159,7 @@ namespace HR.Web.Controllers
 
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult DeleteConfirmed(int id)
         {

@@ -9,7 +9,7 @@ using HR.Web.Filters;
 
 namespace HR.Web.Controllers
 {
-    [Authorize(Roles = "Admin, SuperAdmin")]
+    [TenantAuthorize(Roles = "Admin, SuperAdmin")]
     [RoleBasedAuthorization("Admin")]
     [ModuleAccess(RoleModuleCatalog.Reports)]
     public class ReportsController : Controller

@@ -76,6 +76,7 @@ namespace HR.Web.Controllers
             AssignPositionCompany(positionModel);
             ValidatePositionDepartment(positionModel);
             ValidatePositionType(positionModel);
+            ValidatePositionTitle(positionModel);
             ValidatePositionExpiryDate(positionModel);
         }
 
@@ -155,6 +156,55 @@ namespace HR.Web.Controllers
             ClearModelStateErrors("IsTechnical");
         }
 
+        private void ValidatePositionTitle(Position model)
+        {
+            if (model == null || string.IsNullOrWhiteSpace(model.Title))
+            {
+                return;
+            }
+
+            var companyId = ResolvePositionCompanyId(model);
+            if (!companyId.HasValue)
+            {
+                ModelState.AddModelError("Title", "Unable to determine the organization for this position.");
+                return;
+            }
+
+            if (PositionTitleExistsInCompany(companyId.Value, model.Title.Trim(), model.Id))
+            {
+                ModelState.AddModelError("Title", "A position with this title already exists for your organization.");
+                return;
+            }
+
+            ClearModelStateErrors("Title");
+        }
+
+        private int? ResolvePositionCompanyId(Position model)
+        {
+            if (model != null && model.CompanyId.HasValue && model.CompanyId.Value > 0)
+            {
+                return model.CompanyId.Value;
+            }
+
+            return _tenantService.GetCurrentUserCompanyId();
+        }
+
+        private bool PositionTitleExistsInCompany(int companyId, string normalizedTitle, int excludePositionId)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedTitle))
+            {
+                return false;
+            }
+
+            var lowerTitle = normalizedTitle.Trim().ToLower();
+            return _uow.Context.Set<Position>()
+                .AsNoTracking()
+                .Any(p => p.CompanyId == companyId
+                    && p.Id != excludePositionId
+                    && p.Title != null
+                    && p.Title.ToLower() == lowerTitle);
+        }
+
         private void ValidatePositionExpiryDate(Position model)
         {
             if (model == null || !model.ExpiryDate.HasValue)
@@ -232,6 +282,19 @@ namespace HR.Web.Controllers
             }
 
             var positionModel = model;
+            var companyId = ResolvePositionCompanyId(positionModel);
+            if (companyId.HasValue &&
+                PositionTitleExistsInCompany(companyId.Value, positionModel.Title, positionModel.Id))
+            {
+                ModelState.AddModelError("Title", "A position with this title already exists for your organization.");
+                return ReturnCreateSaveFailure(
+                    positionModel,
+                    selectedQuestions,
+                    questionWeights,
+                    questionStages,
+                    new InvalidOperationException("Duplicate position title."));
+            }
+
             try
             {
                 _uow.Positions.Add(positionModel);

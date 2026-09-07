@@ -9,7 +9,18 @@ $dll = Join-Path $repoRoot "HR.Web\bin\HR.Web.dll"
 Write-Host "Building Debug (HR.Web\bin\)..." -ForegroundColor Cyan
 Push-Location $repoRoot
 try {
-    dotnet build $solution -c Debug -t:Rebuild -v minimal
+    $msbuild = @(
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+    if (-not $msbuild) {
+        throw "MSBuild not found. Install Visual Studio Build Tools or run Sync-Publish.ps1 for Release."
+    }
+
+    & $msbuild $solution /t:Rebuild /p:Configuration=Debug /v:minimal
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed with exit code $LASTEXITCODE"
     }

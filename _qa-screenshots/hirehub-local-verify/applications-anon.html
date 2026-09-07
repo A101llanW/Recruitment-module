@@ -1,0 +1,294 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Access Required - NanoHireHub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/Content/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="/Content/css/font-awesome.min.css" />
+    <link rel="stylesheet" href="/Content/css/recruitment-theme.css" />
+
+    <style>
+        /* Elevation Modal Custom Styles */
+        #elevationRequestModal .modal-content {
+            border-radius: 12px;
+            overflow: hidden;
+            border: none;
+        }
+        #elevationRequestModal .modal-header {
+            border-bottom: none;
+            padding: 1.5rem;
+        }
+        #elevationRequestModal .details-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #f39c12;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        #elevationRequestModal .modal-footer {
+            border-top: none;
+            padding: 1.2rem 1.5rem;
+        }
+
+        /* Freeze Overlay Styles */
+        #performance-freeze-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(13, 44, 74, 0.95);
+            z-index: 10000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+            text-align: center;
+            padding: 20px;
+        }
+        #performance-freeze-overlay .spinner-box {
+            margin-bottom: 25px;
+        }
+        #performance-freeze-overlay h2 {
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 10px;
+        }
+        #performance-freeze-overlay p {
+            font-size: 1.1rem;
+            opacity: 0.8;
+            max-width: 500px;
+        }
+        @keyframes logoPulse {
+            0% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.9; }
+        }
+        .pulse-logo {
+            animation: logoPulse 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="recruitment-app">
+    
+    <div id="performance-freeze-overlay">
+        <div class="spinner-box">
+            <img src="/Content/images/nanosoft-logo-transparent.png" alt="Nanosoft" style="height: 120px; filter: drop-shadow(0 0 15px rgba(243, 156, 18, 0.4));" class="pulse-logo" />
+        </div>
+        <h2>System Elevating...</h2>
+        <p>A SuperAdmin is currently performing maintenance or support operations on your company context.</p>
+        
+        <div class="mt-2 text-warning font-weight-bold" style="font-size: 1.5rem;">
+            <i class="far fa-clock mr-2"></i> Session expires in: <span id="freeze-countdown">--:--</span>
+        </div>
+
+        <div class="mt-4 px-4 py-2 bg-warning text-dark font-weight-bold rounded shadow-sm">
+            <i class="fas fa-lock mr-2"></i> CONTEXT LOCKED
+        </div>
+    </div>
+
+        <nav class="navbar navbar-expand-lg app-navbar app-navbar--sticky">
+
+
+<a class="navbar-brand d-flex align-items-center app-nav-brand" href="/default">
+            <span class="app-nav-brand-mark mr-2 is-fallback">
+                <i class="fas fa-building fa-2x text-info app-nav-brand-fallback-icon" aria-hidden="true"></i>
+            </span>
+        <div class="d-flex flex-column ml-1 app-brand-divider">
+                <span class="app-brand-title">Nanosoft Corporation</span>
+                            <small class="app-brand-sub">NanoHireHub</small>
+        </div>
+</a>
+
+
+<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+</button>
+
+<div class="collapse navbar-collapse" id="navbarNav">
+    <ul class="navbar-nav app-nav-primary">
+
+
+
+                    <li class="nav-item ">
+                        <a class="nav-link app-nav-top-link" href="/default" >
+                            <i class="fas fa-sitemap d-lg-none" aria-hidden="true"></i> Positions
+                        </a>
+                    </li>
+                    <li class="nav-item active">
+                        <a class="nav-link app-nav-top-link" href="/default/Applications" aria-current="page">
+                            <i class="fas fa-file-alt d-lg-none" aria-hidden="true"></i> Applications
+                        </a>
+                    </li>
+                    <li class="nav-item ">
+                        <a class="nav-link app-nav-top-link" href="/default/Interviews" >
+                            <i class="fas fa-comments d-lg-none" aria-hidden="true"></i> Interviews
+                        </a>
+                    </li>
+    </ul>
+
+    <ul class="navbar-nav ml-auto app-nav-account">
+        <li class="nav-item d-lg-none app-nav-drawer-heading" aria-hidden="true">Account</li>
+            <li class="nav-item"><a class="nav-link app-nav-top-link" href="/default/Account/Login"><i class="fas fa-sign-in-alt d-lg-none" aria-hidden="true"></i> Login</a></li>
+            <li class="nav-item"><a class="nav-link app-nav-top-link" href="/default/Account/Register"><i class="fas fa-user-plus d-lg-none" aria-hidden="true"></i> Register</a></li>
+    </ul>
+</div>
+        </nav>
+
+    <main class="app-main">
+    <div class="container app-container">
+
+        
+        
+            <div class="app-page">
+                
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 text-center">
+            <div class="card shadow-sm border-0 p-5" style="border-radius: 15px; background: #fafdff; border: 1.2px solid #b2d7f7 !important;">
+                <div class="mb-4">
+                    <i class="fas fa-user-lock fa-4x text-info mb-3"></i>
+                    <h2 class="font-weight-bold" style="color: #0d2c4a;">Authentication Required</h2>
+                </div>
+                
+                <p class="lead mb-5 text-muted">Please sign in or create account first to view your applications.</p>
+                
+                <div class="d-flex flex-column gap-3">
+                    <a href="/default/Account/Login?returnUrl=%2Fdefault%2FApplications" class="btn btn-blue btn-lg mb-3" style="border-radius: 10px; font-weight: 600;">
+                        <i class="fas fa-sign-in-alt mr-2"></i> Log In to Your Account
+                    </a>
+                    <a href="/default/Account/Register?returnUrl=%2Fdefault%2FApplications" class="btn btn-outline-primary btn-lg" style="border-radius: 10px; font-weight: 600;">
+                        <i class="fas fa-user-plus mr-2"></i> Create a New Account
+                    </a>
+                </div>
+                
+                <div class="mt-5">
+                    <a href="/default" class="text-muted">
+                        <i class="fas fa-arrow-left mr-1"></i> Back to Job Postings
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-blue {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        border: none;
+        transition: all 0.3s;
+    }
+    .btn-blue:hover {
+        background: #3498db;
+        color: #fff;
+        transform: translateY(-2px);
+    }
+    .btn-outline-primary {
+        border-color: #6fb8dc;
+        color: #6fb8dc;
+    }
+    .btn-outline-primary:hover {
+        background: #6fb8dc;
+        color: #0d2c4a;
+        transform: translateY(-2px);
+    }
+    .gap-3 {
+        gap: 1rem;
+    }
+</style>
+
+            </div>
+    </div>
+    </main>
+
+    <footer class="app-footer">
+        <div class="app-footer__inner">
+            <div>
+                <p class="app-footer__brand mb-0">NanoHireHub</p>
+                <p class="app-footer__copy mb-0">&copy; 2026 Nanosoft Technologies</p>
+            </div>
+                <nav class="app-footer__links" aria-label="Legal and social">
+                    <a href="/default/Home/Privacy">Privacy</a>
+                    <a href="/default/Home/Terms">Terms</a>
+                    <a href="https://ntlafrica.com" target="_blank" rel="noopener noreferrer">ntlafrica.com</a>
+                    <span class="app-footer__social">
+                        <a href="https://www.instagram.com/nanosoft_kenya/" target="_blank" rel="noopener noreferrer" aria-label="Instagram @nanosoft_kenya"><i class="fab fa-instagram"></i></a>
+                    </span>
+                </nav>
+        </div>
+    </footer>
+
+    <script src="/Scripts/jquery-3.6.0.min.js"></script>
+    <script src="/Scripts/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Security logic to prevent "Back Button" after Logout
+        window.addEventListener('pageshow', function (event) {
+            if (event.persisted || (typeof window.performance != "undefined" && window.performance.navigation.type === 2)) {
+                // If the page was loaded from history/cache, force a reload to trigger auth check
+                window.location.reload();
+            }
+        });
+    </script>
+
+
+
+    
+
+    <!-- Secure Credential Download Modal -->
+
+</body>
+</html>
+
+
+
+
+

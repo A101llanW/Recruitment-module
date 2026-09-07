@@ -107,10 +107,9 @@ namespace HR.Web.Helpers
             var now = DateTime.Now;
             var staleRequests = uow.ImpersonationRequests.GetAll()
                 .Where(r => r.CompanyId == companyId &&
-                    r.ExpiryDate.HasValue &&
-                    r.ExpiryDate < now &&
                     (r.StatusValue == (int)ImpersonationRequestStatus.Active ||
-                     r.StatusValue == (int)ImpersonationRequestStatus.Approved))
+                     r.StatusValue == (int)ImpersonationRequestStatus.Approved) &&
+                    (!r.ExpiryDate.HasValue || r.ExpiryDate < now))
                 .ToList();
 
             if (!staleRequests.Any())

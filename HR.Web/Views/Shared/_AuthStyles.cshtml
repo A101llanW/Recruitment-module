@@ -554,6 +554,16 @@
         pointer-events: auto;
     }
 
+    /* Email workflow modals (Applications/Interviews) share the same stacking fix */
+    .email-workflow-modal.modal {
+        z-index: 1060;
+        pointer-events: auto;
+    }
+
+    .email-workflow-modal .modal-dialog {
+        pointer-events: auto;
+    }
+
     body.modal-open .modal-backdrop {
         z-index: 1050;
     }

@@ -38,6 +38,13 @@ namespace HR.Web
                 url: "SuperAdmin/{action}/{id}",
                 defaults: new { controller = "Companies", action = "Index", id = UrlParameter.Optional }
             );
+
+            // Fallback for URLs that do not match any route above
+            routes.MapRoute(
+                name: "NotFound",
+                url: "{*catchall}",
+                defaults: new { controller = "Error", action = "NotFound" }
+            );
         }
     }
 }

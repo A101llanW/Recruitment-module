@@ -16,7 +16,7 @@ namespace HR.Web.Controllers
     /// Admin controller for managing candidates, applications, and rankings
     /// Allows admins to view candidates ranked by position, filter, and manage applications
     /// </summary>
-    [Authorize(Roles = "Admin, SuperAdmin")]
+    [TenantAuthorize(Roles = "Admin, SuperAdmin")]
     [RoleBasedAuthorization("Admin", "SuperAdmin")]
     [ModuleAccess]
     public partial class AdminController : Controller
@@ -135,7 +135,7 @@ namespace HR.Web.Controllers
         }
 
         // Questions management (CRUD)
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         public ActionResult Questions()
         {
             // Use eager loading to get questions with their options in one query
@@ -163,11 +163,14 @@ namespace HR.Web.Controllers
                 }).ToList();
             // Ensure positions are available for consolidated AI generation modal
             ViewBag.Positions = _uow.Positions.GetAll(p => p.Department, p => p.Company).ToList();
+            ViewBag.CanManageQuestions = _rolePermissionService.CanCurrentUserAccessModule(
+                RoleModuleCatalog.Questions,
+                RoleAccessLevels.Manage);
             // Use the combined AI-enhanced questions view
             return View("QuestionsWithMCP", list);
         }
 
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         public ActionResult EditQuestion(int? id)
         {
             if (id == null)
@@ -177,6 +180,13 @@ namespace HR.Web.Controllers
             var question = _uow.Questions.GetAll(q => q.QuestionOptions).FirstOrDefault(x => x.Id == id.Value);
             if (question == null)
                 return HttpNotFound();
+
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            if (companyId.HasValue && question.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
             var vm = new QuestionAdminViewModel
             {
                 Id = question.Id,
@@ -195,15 +205,16 @@ namespace HR.Web.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         public ActionResult EditQuestion(QuestionAdminViewModel model)
         {
             return HandleEditQuestion(model);
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
         public ActionResult DeleteQuestion(int id)
         {
@@ -267,7 +278,7 @@ namespace HR.Web.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
         public ActionResult BatchDeleteQuestions(int[] questionIds)
         {
@@ -346,7 +357,7 @@ namespace HR.Web.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
         public ActionResult ExportQuestionBank()
         {
@@ -401,7 +412,7 @@ namespace HR.Web.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
         public ActionResult AddToSampleQuestions(string questionsJson)
         {
@@ -415,7 +426,7 @@ namespace HR.Web.Controllers
         /// Display all registered users with their account status and role management options
         /// Only Admin role can access this
         /// </summary>
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         public ActionResult UserManagement()
         {
             var usersQuery = _uow.Users.GetAll(u => u.RoleDefinition, u => u.Company).AsQueryable();
@@ -465,7 +476,7 @@ namespace HR.Web.Controllers
         /// <summary>
         /// Display form to create a new user (SuperAdmin globally, Admin within their company).
         /// </summary>
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         public ActionResult CreateUser()
         {
             if (!TryGetUserCreationScope(out var actorCompanyId, out var isGlobalCreator))
@@ -491,7 +502,7 @@ namespace HR.Web.Controllers
         /// Handle the creation of a new user (SuperAdmin globally, Admin within their company).
         /// </summary>
         [HttpPost]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
         public ActionResult CreateUser(CreateUserViewModel model)
         {
@@ -508,7 +519,7 @@ namespace HR.Web.Controllers
         /// Display form to update user role
         /// Only Admin role can access this
         /// </summary>
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         public ActionResult UpdateUserRole(int id)
         {
             var user = _uow.Users.GetAll(u => u.RoleDefinition).FirstOrDefault(u => u.Id == id);
@@ -562,7 +573,7 @@ namespace HR.Web.Controllers
         /// Only Admin role can access this
         /// </summary>
         [HttpPost]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
         public ActionResult UpdateUserRole(UserRoleUpdateViewModel model)
         {
@@ -573,7 +584,7 @@ namespace HR.Web.Controllers
         /// Unlock a locked user account
         /// Only Admin role can access this
         /// </summary>
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public ActionResult UnlockUserAccount(int id)
@@ -616,7 +627,7 @@ namespace HR.Web.Controllers
         /// Display security logs (login attempts and audit logs)
         /// Only Admin role can access this
         /// </summary>
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         public ActionResult SecurityLogs(LogFilter filter)
         {
             return HandleSecurityLogs(filter);

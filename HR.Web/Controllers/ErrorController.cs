@@ -3,6 +3,7 @@ using System.Net;
 
 namespace HR.Web.Controllers
 {
+    [AllowAnonymous]
     public class ErrorController : Controller
     {
         // ── Generic Error ─────────────────────────────────────────────

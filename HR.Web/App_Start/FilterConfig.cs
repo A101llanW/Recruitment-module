@@ -7,6 +7,8 @@ namespace HR.Web
         public static void RegisterGlobalFilters(GlobalFilterCollection filters)
         {
             filters.Add(new HR.Web.Filters.AntiForgeryExceptionFilterAttribute());
+            filters.Add(new HR.Web.Filters.NotFoundResultFilterAttribute());
+            filters.Add(new HR.Web.Filters.NotFoundExceptionFilterAttribute());
             filters.Add(new HandleErrorAttribute());
             
             // Fresh session handler for anonymous portal access

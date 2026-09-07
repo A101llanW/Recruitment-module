@@ -113,16 +113,18 @@ namespace HR.Web.Controllers
         [AllowAnonymous]
         public JsonResult DevSessionText()
         {
-            if (!AppConfig.IsRemoteDevelopment)
+            if (!HttpContext.IsDebuggingEnabled)
             {
                 return Json(new { success = false, message = "Not available" }, JsonRequestBehavior.AllowGet);
             }
 
-            return Json(new
+            var text = Session["CaptchaText"] as string;
+            if (string.IsNullOrEmpty(text))
             {
-                success = true,
-                text = Session["CaptchaText"] as string
-            }, JsonRequestBehavior.AllowGet);
+                return Json(new { success = false, message = "No captcha in session. Call /Captcha/Generate first." }, JsonRequestBehavior.AllowGet);
+            }
+
+            return Json(new { success = true, text = text }, JsonRequestBehavior.AllowGet);
         }
 
         [HttpGet]

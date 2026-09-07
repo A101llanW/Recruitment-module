@@ -125,8 +125,10 @@
     </div>
 </div>
 
+@section Modals {
+<!-- Loading + preview modals render outside .app-page so Bootstrap backdrop stacks correctly -->
 <!-- Loading Modal -->
-<div class="modal fade" id="loadingModal" tabindex="-1" role="dialog" aria-hidden="true">
+<div class="modal fade" id="loadingModal" tabindex="-1" role="dialog" aria-hidden="true" data-backdrop="static" data-keyboard="false">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-body text-center p-5">
@@ -196,6 +198,7 @@
         </div>
     </div>
 </div>
+}
 
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -203,6 +206,7 @@
         var allPages = [];
         var currentPage = 1;
         var totalPages = 1;
+        var REPORT_AJAX_TIMEOUT_MS = 60000;
 
         function withAntiForgeryToken(data) {
             data = data || {};
@@ -210,28 +214,51 @@
             return data;
         }
 
+        function hideLoadingModal() {
+            $('#loadingModal').modal('hide');
+            setTimeout(function() {
+                if (!$('.modal.show').length) {
+                    $('body').removeClass('modal-open').css('padding-right', '');
+                    $('.modal-backdrop').remove();
+                }
+            }, 200);
+        }
+
+        function showReportAjaxError(xhr, textStatus, defaultMessage) {
+            if (textStatus === 'timeout') {
+                alert('The request timed out. Try again or use Generate to download the report.');
+            } else if (xhr.responseJSON && xhr.responseJSON.message) {
+                alert(xhr.responseJSON.message);
+            } else {
+                alert(defaultMessage);
+            }
+        }
+
         function previewReport(reportType) {
             $('#currentReportType').val(reportType);
-            $('#loadingModal').modal('show');
             $('#paginationControls').attr('style', 'display:none !important');
+            $('#loadingModal').modal('show');
             
             $.ajax({
                 url: '@Url.Action("Preview", "ReportGenerator")',
                 type: 'POST',
                 data: withAntiForgeryToken({ reportType: reportType }),
+                dataType: 'json',
+                timeout: REPORT_AJAX_TIMEOUT_MS,
                 success: function(response) {
-                    $('#loadingModal').modal('hide');
-                    if (response.success) {
+                    if (response && response.success) {
                         $('#previewContent').html(response.html);
                         setupPagination();
                         $('#previewModal').modal('show');
                     } else {
-                        alert(response.message);
+                        alert((response && response.message) || 'Unable to load report preview.');
                     }
                 },
-                error: function() {
-                    $('#loadingModal').modal('hide');
-                    alert('Error connecting to server.');
+                error: function(xhr, textStatus) {
+                    showReportAjaxError(xhr, textStatus, 'Error connecting to server.');
+                },
+                complete: function() {
+                    hideLoadingModal();
                 }
             });
         }
@@ -297,16 +324,12 @@
                 $('#previewModal').modal('hide');
                 
                 html2pdf().set(opt).from(document.getElementById('previewContent')).save().then(function() {
-                    $('#loadingModal').modal('hide');
-                    $('body').removeClass('modal-open');
-                    $('.modal-backdrop').remove();
+                    hideLoadingModal();
                     // Restore preview to current page
                     renderPage();
                 }).catch(function(err) {
                     console.error('PDF Error:', err);
-                    $('#loadingModal').modal('hide');
-                    $('body').removeClass('modal-open');
-                    $('.modal-backdrop').remove();
+                    hideLoadingModal();
                     alert('Error creating PDF. Please try again.');
                 });
             } else {
@@ -327,24 +350,23 @@
                 url: '@Url.Action("GenerateDirect", "ReportGenerator")',
                 type: 'POST',
                 data: withAntiForgeryToken({ reportType: reportType, format: format }),
+                dataType: 'json',
+                timeout: REPORT_AJAX_TIMEOUT_MS,
                 success: function(response) {
-                    // Force hide modal immediately
-                    $('#loadingModal').modal('hide');
-                    $('body').removeClass('modal-open');
-                    $('.modal-backdrop').remove();
-                    
-                    if (response.success) {
+                    if (response && response.success) {
                         addToRecentReports(response.fileName, reportType);
                         setTimeout(function() {
                             window.location.href = '@Url.Action("Download", "ReportGenerator")?fileName=' + response.fileName;
                         }, 500);
                     } else {
-                        alert(response.message);
+                        alert((response && response.message) || 'Error generating report.');
                     }
                 },
-                error: function() {
-                    $('#loadingModal').modal('hide');
-                    alert('Error generating report.');
+                error: function(xhr, textStatus) {
+                    showReportAjaxError(xhr, textStatus, 'Error generating report.');
+                },
+                complete: function() {
+                    hideLoadingModal();
                 }
             });
         }

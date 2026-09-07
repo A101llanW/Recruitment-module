@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Web;
 using System.Web.Mvc;
+using System.Web.Routing;
 using System.Data.Entity;
 using HR.Web.Helpers;
 using HR.Web.Models;
@@ -34,6 +36,22 @@ namespace HR.Web.Controllers
             return RedirectToAction("Register", "Account", new { tenant = tenant, returnUrl = returnUrl });
         }
 
+        private ActionResult RedirectClientToApplyFlow(int? positionId)
+        {
+            if (User != null && (User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || User.IsInRole("HR")))
+            {
+                return null;
+            }
+
+            if (!positionId.HasValue || positionId.Value <= 0)
+            {
+                TempData["ErrorMessage"] = "Please select a position to apply for.";
+                return RedirectToAction("Index", "Positions");
+            }
+
+            return RedirectToAction("CoverLetter", GetApplicationFlowRouteValues(positionId.Value));
+        }
+
         private Position GetPositionWithQuestions(int positionId)
         {
             var position = _uow.Positions.Get(positionId);
@@ -42,11 +60,7 @@ namespace HR.Web.Controllers
                 return null;
             }
 
-            _uow.Context.Entry(position).Collection(p => p.PositionQuestions).Query()
-                .Include(pq => pq.Question)
-                .Include(pq => pq.Question.QuestionOptions)
-                .Load();
-
+            position.PositionQuestions = GetPositionQuestions(positionId, includeOptions: true);
             return position;
         }
 
@@ -74,7 +88,9 @@ namespace HR.Web.Controllers
                 return;
             }
 
-            var applicant = _uow.Applicants.GetAll().FirstOrDefault(a => a.Email == user.Email && a.CompanyId == companyId.Value);
+            var applicant = _uow.Context.Set<Applicant>()
+                .AsNoTracking()
+                .FirstOrDefault(a => a.Email == user.Email && a.CompanyId == companyId.Value);
             if (applicant != null)
             {
                 ViewBag.Applicant = applicant;
@@ -89,13 +105,14 @@ namespace HR.Web.Controllers
             }
 
             var lowerUsername = User.Identity.Name.ToLower();
-            var users = _uow.Users.GetAll().Where(u => u.UserName.ToLower() == lowerUsername);
+            var query = _uow.Context.Set<User>().AsNoTracking()
+                .Where(u => u.UserName.ToLower() == lowerUsername);
             if (companyId.HasValue)
             {
-                users = users.Where(u => u.CompanyId == companyId.Value);
+                query = query.Where(u => u.CompanyId == companyId.Value);
             }
 
-            return users.FirstOrDefault();
+            return query.FirstOrDefault();
         }
 
         private ActionResult ValidatePositionTenantAccess(Position position, string accessDeniedMessage)
@@ -116,14 +133,8 @@ namespace HR.Web.Controllers
 
         private List<PositionQuestion> GetPositionQuestions(int positionId, bool includeOptions, int? questionnaireStageNumber = null)
         {
-            var query = _uow.Context.Set<PositionQuestion>()
-                .Where(pq => pq.PositionId == positionId)
-                .Include(pq => pq.Question);
-
-            if (includeOptions)
-            {
-                query = query.Include(pq => pq.Question.QuestionOptions);
-            }
+            IQueryable<PositionQuestion> query = _uow.Context.Set<PositionQuestion>()
+                .Where(pq => pq.PositionId == positionId);
 
             if (questionnaireStageNumber.HasValue)
             {
@@ -131,7 +142,14 @@ namespace HR.Web.Controllers
                 query = query.Where(pq => pq.StageNumber == stage);
             }
 
+            query = query.Include(pq => pq.Question);
+            if (includeOptions)
+            {
+                query = query.Include(pq => pq.Question.QuestionOptions);
+            }
+
             return query
+                .AsNoTracking()
                 .OrderBy(pq => pq.Order)
                 .ToList();
         }
@@ -173,7 +191,7 @@ namespace HR.Web.Controllers
                 return RedirectToAction("Index", "Positions");
             }
 
-            position = GetPositionWithQuestions(positionId);
+            position = _uow.Positions.Get(positionId);
             if (position == null)
             {
                 return HttpNotFound();
@@ -500,6 +518,11 @@ namespace HR.Web.Controllers
 
         private void ScoreQuestionnaireApplication(Application application)
         {
+            if (application == null)
+            {
+                return;
+            }
+
             try
             {
                 var score = _scoringService.CalculateApplicationScore(application);
@@ -509,8 +532,18 @@ namespace HR.Web.Controllers
                 _uow.Applications.Update(application);
                 _uow.Complete();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Trace.TraceError(
+                    "ScoreQuestionnaireApplication failed for ApplicationId={0}: {1}",
+                    application.Id,
+                    ex);
+
+                application.ScoreReason = string.Format(
+                    "Scoring failed: {0}. Use Recalculate Scores on the Applications page or contact support.",
+                    ex.Message);
+                _uow.Applications.Update(application);
+                _uow.Complete();
             }
         }
 
@@ -677,20 +710,34 @@ namespace HR.Web.Controllers
             return null;
         }
 
-        private object GetApplicationFlowRouteValues(int positionId)
+        private RouteValueDictionary GetApplicationFlowRouteValues(int positionId)
         {
-            if (HttpContext?.Request?.RequestContext?.RouteData?.Values == null)
+            // Apply-flow actions bind positionId from the query string, not the route {id} segment.
+            // Clear ambient id so CoverLetter POST (/.../CoverLetter/5) does not leak into ProfileDetails redirects.
+            var routeValues = new RouteValueDictionary
             {
-                return new { positionId = positionId };
+                { "positionId", positionId },
+                { "id", UrlParameter.Optional }
+            };
+
+            var tenant = HttpContext?.Request?.RequestContext?.RouteData?.Values["tenant"] as string;
+            if (!string.IsNullOrWhiteSpace(tenant))
+            {
+                routeValues["tenant"] = tenant;
             }
 
-            var tenant = HttpContext.Request.RequestContext.RouteData.Values["tenant"] as string;
-            if (string.IsNullOrWhiteSpace(tenant))
+            return routeValues;
+        }
+
+        private ActionResult RedirectToApplicationsIndex()
+        {
+            var tenant = RouteData.Values["tenant"] as string;
+            if (!string.IsNullOrWhiteSpace(tenant))
             {
-                return new { positionId = positionId };
+                return RedirectToAction("Index", "Applications", new { tenant = tenant });
             }
 
-            return new { tenant = tenant, positionId = positionId };
+            return RedirectToAction("Index", "Applications");
         }
 
         private void NormalizePortfolioUrlField(ApplicantProfileViewModel model)
@@ -856,7 +903,7 @@ namespace HR.Web.Controllers
             }
 
             TempData["ErrorMessage"] = "Please complete your profile before taking the questionnaire.";
-            return RedirectToAction("ProfileDetails", new { positionId = position.Id });
+            return RedirectToAction("ProfileDetails", GetApplicationFlowRouteValues(position.Id));
         }
 
         private static bool IsApplicationBelowPassMark(Application application, Position position)

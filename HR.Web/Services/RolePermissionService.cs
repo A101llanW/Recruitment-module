@@ -46,6 +46,12 @@ namespace HR.Web.Services
                     return false;
                 }
 
+                if (string.Equals(requiredAccessLevel, RoleAccessLevels.Manage, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(context.BaseRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
                 return true;
             }
 

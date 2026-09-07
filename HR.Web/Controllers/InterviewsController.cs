@@ -121,7 +121,7 @@ namespace HR.Web.Controllers
         
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Admin, SuperAdmin")]
+        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult BookInterview(int applicationId, int interviewerId, DateTime scheduledAt, string mode, string returnTo = null, int? resumeEmailApplicationId = null)
         {
@@ -260,7 +260,7 @@ namespace HR.Web.Controllers
             return RedirectToAction("Index");
         }
 
-        [Authorize]
+        [TenantAuthorize]
         public ActionResult Details(int id)
         {
             var interview = _uow.Interviews.GetAll(i => i.Application.Applicant, i => i.Application.Position, i => i.Interviewer)
@@ -280,7 +280,7 @@ namespace HR.Web.Controllers
             return View(interview);
         }
 
-        [Authorize]
+        [TenantAuthorize]
         public ActionResult Create(int? applicationId)
         {
             LoadLookups();
@@ -293,7 +293,7 @@ namespace HR.Web.Controllers
             return View(interview);
         }
 
-        [Authorize]
+        [TenantAuthorize]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public ActionResult Create(Interview model)
@@ -323,7 +323,7 @@ namespace HR.Web.Controllers
             return RedirectToAction("Index");
         }
 
-        [Authorize]
+        [TenantAuthorize]
         public ActionResult Edit(int id)
         {
             var interview = _uow.Interviews.GetAll(
@@ -347,7 +347,7 @@ namespace HR.Web.Controllers
             return View(interview);
         }
 
-        [Authorize]
+        [TenantAuthorize]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public ActionResult Edit(Interview model)
@@ -383,7 +383,7 @@ namespace HR.Web.Controllers
             return RedirectToAction("Index");
         }
 
-        [Authorize]
+        [TenantAuthorize]
         public ActionResult Delete(int id)
         {
             var interview = _uow.Interviews.GetAll(
@@ -405,7 +405,7 @@ namespace HR.Web.Controllers
             return View(interview);
         }
 
-        [Authorize]
+        [TenantAuthorize]
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public ActionResult DeleteConfirmed(int id)

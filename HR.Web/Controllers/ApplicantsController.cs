@@ -11,7 +11,7 @@ using System.Data.Entity;
 
 namespace HR.Web.Controllers
 {
-    [Authorize(Roles = "Admin, SuperAdmin")]
+    [TenantAuthorize(Roles = "Admin, SuperAdmin")]
     [RoleBasedAuthorization("Admin")]
     [ModuleAccess(RoleModuleCatalog.Applicants)]
     public class ApplicantsController : Controller

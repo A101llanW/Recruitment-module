@@ -98,6 +98,15 @@ namespace HR.Web.Controllers
                 .Where(u => u.UserName.ToLower() == lowerUsername)
                 .ToList();
 
+            // Global SuperAdmin must win over a stale tenant session left from /{slug}/Account/Login.
+            var globalSuperAdmin = matches.FirstOrDefault(u =>
+                !u.CompanyId.HasValue &&
+                string.Equals(u.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
+            if (globalSuperAdmin != null)
+            {
+                return globalSuperAdmin;
+            }
+
             if (companyId.HasValue)
             {
                 var tenantUser = matches.FirstOrDefault(u => u.CompanyId == companyId.Value);
@@ -689,6 +698,23 @@ namespace HR.Web.Controllers
             }
         }
 
+        private static bool IsGlobalSuperAdminUser(User user)
+        {
+            if (user == null)
+            {
+                return false;
+            }
+
+            var role = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
+            if (string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return !user.CompanyId.HasValue &&
+                   string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
+        }
+
         private ActionResult CompleteUserLogin(User user)
         {
             var loginContext = BuildLoginContext(user);
@@ -697,20 +723,7 @@ namespace HR.Web.Controllers
 
             if (loginContext.IsSuperAdmin)
             {
-                try
-                {
-                    if (ImpersonationSessionHelper.TryRestoreAfterLogout(user.UserName, Session, _uow, AuditSvc))
-                    {
-                        TempData["SuccessMessage"] = string.Format(
-                            "Welcome back. Your impersonation session for {0} has been restored.",
-                            Session["ImpersonatedCompanyName"] ?? "the company");
-                        return RedirectToAction("Index", "Dashboard");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    AuditSvc.LogAction(user.UserName, "IMPERSONATION_RESUME_FAILED", "Account", user.Id.ToString(), ex.Message);
-                }
+                ImpersonationSessionHelper.ClearSession(Session);
             }
 
             return BuildLoginRedirect(loginContext);
@@ -719,9 +732,7 @@ namespace HR.Web.Controllers
         private LoginContextModel BuildLoginContext(User user)
         {
             var role = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role;
-            var isSuperAdmin = !user.CompanyId.HasValue &&
-                (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
+            var isSuperAdmin = IsGlobalSuperAdminUser(user);
             if (isSuperAdmin)
             {
                 role = "SuperAdmin";

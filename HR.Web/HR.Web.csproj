@@ -215,6 +215,7 @@
     <Compile Include="ViewModels\CandidateRankingsViewModel.cs" />
     <Compile Include="ViewModels\GenerateQuestionsViewModel.cs" />
     <Compile Include="ViewModels\ApplicantProfileViewModel.cs" />
+    <Compile Include="ViewModels\PositionCandidateActionViewModel.cs" />
     <Compile Include="ViewModels\PositionQuestionViewModel.cs" />
     <Compile Include="ViewModels\QuestionnaireTemplateViewModel.cs" />
     <Compile Include="ViewModels\ProfileViewModel.cs" />
@@ -267,6 +268,7 @@
     <Compile Include="Helpers\EmailTemplateTokenChipSerializer.cs" />
     <Compile Include="Helpers\LegalPolicyHelper.cs" />
     <Compile Include="Helpers\LegalConsentSession.cs" />
+    <Compile Include="Helpers\PositionCandidateActionHelper.cs" />
     <Compile Include="Helpers\QuestionStagePayloadHelper.cs" />
     <Compile Include="Helpers\AppConfig.cs" />
     <Compile Include="Helpers\UserAgentFingerprint.cs" />
@@ -479,6 +481,7 @@
     <Content Include="Scripts\jquery.validate.unobtrusive.min.js" />
     <Content Include="Scripts\Sortable.min.js" />
     <Content Include="Scripts\questionnaire-assignment.js" />
+    <Content Include="Scripts\email-workflow-modals.js" />
     <Content Include="Scripts\bootstrap@5.1.3.min.css" />
     <Content Include="Content\webfonts\fa-solid-900.woff2" />
     <Content Include="Content\webfonts\fa-solid-900.woff" />

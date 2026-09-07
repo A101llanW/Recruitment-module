@@ -2,6 +2,7 @@ using System;
 using System.Web;
 using System.Web.Mvc;
 using System.Web.Security;
+using HR.Web.Helpers;
 
 namespace HR.Web.Filters
 {
@@ -83,6 +84,44 @@ namespace HR.Web.Filters
                 Secure = httpContext.Request != null && httpContext.Request.IsSecureConnection
             };
             httpContext.Response.Cookies.Add(expiredCookie);
+        }
+    }
+
+    /// <summary>
+    /// Replaces bare HttpNotFound results with the branded 404 view.
+    /// </summary>
+    public class NotFoundResultFilterAttribute : ActionFilterAttribute
+    {
+        public override void OnResultExecuting(ResultExecutingContext filterContext)
+        {
+            SafeNotFoundHandler.ReplaceWithBrandedNotFound(filterContext);
+        }
+    }
+
+    /// <summary>
+    /// Catches 404 exceptions (e.g. unknown actions) and renders the branded page.
+    /// </summary>
+    public class NotFoundExceptionFilterAttribute : FilterAttribute, IExceptionFilter
+    {
+        public void OnException(ExceptionContext filterContext)
+        {
+            if (filterContext == null || filterContext.ExceptionHandled)
+            {
+                return;
+            }
+
+            if (!SafeNotFoundHandler.IsNotFoundException(filterContext.Exception))
+            {
+                return;
+            }
+
+            filterContext.ExceptionHandled = true;
+            filterContext.HttpContext.Response.TrySkipIisCustomErrors = true;
+            filterContext.HttpContext.Response.StatusCode = (int)System.Net.HttpStatusCode.NotFound;
+            filterContext.Result = new ViewResult
+            {
+                ViewName = "~/Views/Error/NotFound.cshtml"
+            };
         }
     }
 }

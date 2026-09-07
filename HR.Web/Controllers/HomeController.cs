@@ -17,7 +17,18 @@ namespace HR.Web.Controllers
 
         public ActionResult Index()
         {
-            return HttpNotFound();
+            var tenant = RouteData.Values["tenant"] as string;
+            if (!string.IsNullOrEmpty(tenant))
+            {
+                return RedirectToAction("Index", "Positions", new { tenant = tenant });
+            }
+
+            if (User != null && User.Identity != null && User.Identity.IsAuthenticated && User.IsInRole("SuperAdmin"))
+            {
+                return RedirectToAction("Index", "Companies");
+            }
+
+            return RedirectToAction("Index", "Positions");
         }
 
         public ActionResult Debug()

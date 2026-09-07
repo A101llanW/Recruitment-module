@@ -174,6 +174,12 @@ namespace HR.Web.Controllers
                     return HttpNotFound();
                 }
 
+                var companyId = _tenantService.GetCurrentUserCompanyId();
+                if (companyId.HasValue && question.CompanyId != companyId.Value && !_tenantService.IsSuperAdmin())
+                {
+                    return new HttpStatusCodeResult(403, "Access Denied");
+                }
+
                 oldValues = new { Text = question.Text, Type = question.Type, IsActive = question.IsActive, AllowMultipleChoices = question.AllowMultipleChoices };
                 question.Text = questionModel.Text;
                 question.Type = questionModel.Type;

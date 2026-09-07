@@ -4,6 +4,7 @@ using System.Configuration;
 using System.Linq;
 using System.Net;
 using System.Net.Mail;
+using System.Net.Mime;
 using System.Threading.Tasks;
 using HR.Web.Helpers;
 
@@ -14,6 +15,11 @@ namespace HR.Web.Services
         Task SendAsync(string to, string subject, string body);
 
         Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients);
+
+        /// <summary>
+        /// Sends email and propagates SMTP failures (for flows that must surface delivery errors to the caller).
+        /// </summary>
+        Task SendCriticalAsync(string to, string subject, string body);
         Task SendPasswordResetEmailAsync(string to, string resetLink);
         Task SendMfaCodeEmailAsync(string to, string code);
         Task SendEmailVerificationOtpAsync(string to, string code);
@@ -53,14 +59,26 @@ namespace HR.Web.Services
 
         private string ResolveSetting(string key, string fallback)
         {
-            var configured = _settingsService.GetSetting(key);
-            if (!string.IsNullOrWhiteSpace(configured))
+            var dbValue = _settingsService.GetSetting(key);
+            if (!string.IsNullOrWhiteSpace(dbValue))
             {
-                return configured.Trim();
+                return dbValue.Trim();
             }
 
-            configured = ConfigurationManager.AppSettings[key];
-            return string.IsNullOrWhiteSpace(configured) ? fallback : configured.Trim();
+            var configValue = ConfigurationManager.AppSettings[key];
+            return string.IsNullOrWhiteSpace(configValue) ? fallback : configValue.Trim();
+        }
+
+        private string DescribeSmtpConfig()
+        {
+            return string.Format(
+                "host={0}; port={1}; ssl={2}; user={3}; password={4}; from={5}",
+                _smtpHost ?? "(null)",
+                _smtpPort,
+                _enableSsl,
+                string.IsNullOrWhiteSpace(_smtpUser) ? "MISSING" : "set",
+                string.IsNullOrWhiteSpace(_smtpPass) ? "MISSING" : "set",
+                _fromEmail ?? "(null)");
         }
 
         public async Task SendAsync(string to, string subject, string body)
@@ -85,7 +103,35 @@ namespace HR.Web.Services
             }
         }
 
-        private async Task SendMailCoreAsync(string to, string subject, string body, IEnumerable<string> ccRecipients)
+        private void LogEmailFailure(string to, Exception ex)
+        {
+            var recipient = to ?? string.Empty;
+            var smtpConfig = DescribeSmtpConfig();
+            if (ex == null)
+            {
+                System.Diagnostics.Debug.WriteLine("Email sending failed to " + recipient + ": unknown error. SMTP: " + smtpConfig);
+                System.Diagnostics.Trace.WriteLine("Email sending failed to " + recipient + ": unknown error. SMTP: " + smtpConfig);
+                return;
+            }
+
+            var error = ex;
+            try
+            {
+                string logPath = AppDomain.CurrentDomain.BaseDirectory + "email_errors.txt";
+                string logMessage = string.Format("[{0}] ERROR sending to {1}: {2}{3}SMTP: {4}{3}Stack: {5}{3}",
+                    DateTime.Now, recipient, error.Message, Environment.NewLine, smtpConfig, error.StackTrace);
+                System.IO.File.AppendAllText(logPath, logMessage);
+            }
+            catch (Exception)
+            {
+                // Best-effort local log write only; email failure is already traced below.
+            }
+
+            System.Diagnostics.Debug.WriteLine("Email sending failed: " + error.Message + " SMTP: " + smtpConfig);
+            System.Diagnostics.Trace.WriteLine("Email sending failed: " + error.Message + " SMTP: " + smtpConfig);
+        }
+
+        private async Task SendMailCoreAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, string plainTextBody = null)
         {
             if (string.IsNullOrWhiteSpace(to))
             {
@@ -112,10 +158,23 @@ namespace HR.Web.Services
                 var mailMessage = new MailMessage
                 {
                     From = new MailAddress(_fromEmail, _fromName),
-                    Subject = messageSubject,
-                    Body = messageBody,
-                    IsBodyHtml = true
+                    Subject = messageSubject
                 };
+
+                if (!string.IsNullOrWhiteSpace(plainTextBody))
+                {
+                    // Explicit multipart/alternative parts — mixing Body + AlternateViews can render HTML as raw text in some clients.
+                    mailMessage.AlternateViews.Add(
+                        AlternateView.CreateAlternateViewFromString(plainTextBody, null, MediaTypeNames.Text.Plain));
+                    mailMessage.AlternateViews.Add(
+                        AlternateView.CreateAlternateViewFromString(messageBody, null, MediaTypeNames.Text.Html));
+                }
+                else
+                {
+                    mailMessage.Body = messageBody;
+                    mailMessage.IsBodyHtml = true;
+                }
+
                 mailMessage.To.Add(recipient);
 
                 if (ccRecipients != null)
@@ -131,11 +190,16 @@ namespace HR.Web.Services
             }
         }
 
-        private async Task SendCriticalAsync(string to, string subject, string body)
+        public async Task SendCriticalAsync(string to, string subject, string body)
+        {
+            await SendCriticalAsync(to, subject, body, null).ConfigureAwait(false);
+        }
+
+        private async Task SendCriticalAsync(string to, string subject, string body, string plainTextBody)
         {
             try
             {
-                await SendMailCoreAsync(to, subject, body, null).ConfigureAwait(false);
+                await SendMailCoreAsync(to, subject, body, null, plainTextBody).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -157,33 +221,6 @@ namespace HR.Web.Services
             {
                 // Best-effort local log write only.
             }
-        }
-
-        private static void LogEmailFailure(string to, Exception ex)
-        {
-            var recipient = to ?? string.Empty;
-            if (ex == null)
-            {
-                System.Diagnostics.Debug.WriteLine("Email sending failed to " + recipient + ": unknown error");
-                System.Diagnostics.Trace.WriteLine("Email sending failed to " + recipient + ": unknown error");
-                return;
-            }
-
-            var error = ex;
-            try
-            {
-                string logPath = AppDomain.CurrentDomain.BaseDirectory + "email_errors.txt";
-                string logMessage = string.Format("[{0}] ERROR sending to {1}: {2}{3}Stack: {4}{3}",
-                    DateTime.Now, recipient, error.Message, Environment.NewLine, error.StackTrace);
-                System.IO.File.AppendAllText(logPath, logMessage);
-            }
-            catch (Exception)
-            {
-                // Best-effort local log write only; email failure is already traced below.
-            }
-
-            System.Diagnostics.Debug.WriteLine("Email sending failed: " + error.Message);
-            System.Diagnostics.Trace.WriteLine("Email sending failed: " + error.Message);
         }
 
         public async Task SendPasswordResetEmailAsync(string to, string resetLink)
@@ -252,7 +289,12 @@ namespace HR.Web.Services
             }
 
             var verificationCode = code ?? string.Empty;
-            var subject = "Your Verification Code - " + AppConfig.ProductName;
+            var subject = "Sign-in verification - " + AppConfig.ProductName;
+            var plainTextBody = string.Format(
+                "Your {0} sign-in verification code is: {1}{2}{2}This code expires in 10 minutes.{2}{2}If you did not attempt to sign in, please ignore this email.",
+                AppConfig.ProductName,
+                verificationCode,
+                Environment.NewLine);
             var body = string.Format(@"
 <!DOCTYPE html>
 <html>
@@ -291,9 +333,7 @@ namespace HR.Web.Services
 </body>
 </html>", verificationCode, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
-            await SendCriticalAsync(to, subject, body).ConfigureAwait(false);
-
-            LogSensitiveCodeForDevelopment("MFA CODE", to, verificationCode, "mfa_codes.txt");
+            await SendCriticalAsync(to, subject, body, plainTextBody).ConfigureAwait(false);
         }
 
         public async Task SendEmailVerificationOtpAsync(string to, string code)

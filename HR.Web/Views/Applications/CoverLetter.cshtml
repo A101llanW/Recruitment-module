@@ -2,6 +2,7 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Cover Letter";
+    var tenantToken = ViewContext.RouteData.Values["tenant"] as string;
 }
 
 <div class="container mt-4">
@@ -21,11 +22,12 @@
                 Write a cover letter specific to <strong>@Model.PositionTitle</strong>. You will need a new cover letter for each position you apply for.
             </div>
 
-            @using (Html.BeginForm("CoverLetter", "Applications", FormMethod.Post))
+            @using (Html.BeginForm("CoverLetter", "Applications", new { tenant = tenantToken }, FormMethod.Post))
             {
                 @Html.AntiForgeryToken()
                 @Html.HiddenFor(m => m.PositionId)
                 @Html.HiddenFor(m => m.PositionTitle)
+                @Html.ValidationSummary(false, "", new { @class = "text-danger" })
 
                 <div class="form-group">
                     @Html.LabelFor(m => m.CoverLetter, new { @class = "font-weight-bold" })
@@ -49,4 +51,8 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    @{ Html.RenderPartial("_ValidationScriptsPartial"); }
+}
 

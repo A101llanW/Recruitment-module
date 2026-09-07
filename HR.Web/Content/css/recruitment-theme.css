@@ -16,7 +16,6 @@
     --app-radius: 14px;
     --app-shadow: 0 14px 42px rgba(13, 44, 74, 0.09);
     --app-nav-height: 64px;
-    --app-footer-height: 88px;
     --font-display: "Fraunces", Georgia, serif;
     --font-ui: "Instrument Sans", "Segoe UI", sans-serif;
 }
@@ -26,6 +25,8 @@ body.recruitment-app {
     color: var(--app-ink);
     background: var(--app-paper);
     min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 body.recruitment-app.auth-layout {
@@ -364,9 +365,13 @@ body.recruitment-app.auth-layout {
 }
 
 /* —— Main content shell —— */
+.app-main {
+    flex: 1 0 auto;
+}
+
 .app-main .app-container {
     padding-top: 1.5rem;
-    padding-bottom: calc(var(--app-footer-height) + 2rem);
+    padding-bottom: 2rem;
     max-width: 1320px;
 }
 
@@ -736,20 +741,16 @@ body.recruitment-app.auth-layout {
     color: #fff;
 }
 
-/* Modals */
-.app-page .modal-content {
+/* Modals — render outside .app-page (see _Layout Modals section) so backdrop is not trapped */
+.modal-content {
     border-radius: calc(var(--app-radius) + 2px);
     border: 1px solid var(--app-border);
     overflow: hidden;
 }
 
-/* Footer */
+/* Footer — in document flow; body flex column keeps it at viewport bottom on short pages */
 .app-footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 1030;
+    flex-shrink: 0;
     background: linear-gradient(180deg, #0a2439 0%, #0d2c4a 100%);
     border-top: 1px solid rgba(111, 184, 220, 0.2);
     color: rgba(255, 255, 255, 0.88);
@@ -829,6 +830,20 @@ body.recruitment-app.auth-layout {
 
 .auth-layout .mfa-header {
     background: linear-gradient(135deg, rgba(111, 184, 220, 0.12) 0%, rgba(13, 44, 74, 0.04) 100%);
+    color: var(--mfa-text-main);
+}
+
+.auth-layout .mfa-header h3 {
+    color: var(--mfa-text-main);
+}
+
+.auth-layout .mfa-header p {
+    color: var(--mfa-text-muted);
+}
+
+.auth-layout .mfa-header .auth-eyebrow {
+    color: var(--mfa-text-muted);
+    opacity: 1;
 }
 
 .auth-layout .login-icon-wrap {
