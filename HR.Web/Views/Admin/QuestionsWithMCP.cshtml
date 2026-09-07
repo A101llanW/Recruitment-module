@@ -195,6 +195,7 @@
                     $.ajax({
                         url: '@Url.Action("BatchDeleteQuestions", "Admin")',
                         type: 'POST',
+                        traditional: true,
                         data: { 
                             questionIds: ids,
                             __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
