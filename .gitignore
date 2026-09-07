@@ -23,10 +23,14 @@ Publish/
 *.tmp
 /tmp/
 
-# UI/Identity
-secrets.config
-app.config
-Web.config
+# Local secrets and environment-specific config (never commit)
+HR.Web/Web.config
+HR.Web/secrets.config
+HR.Web/app.config
+Publish/Web.config
+Publish/secrets.config
+.env
+.env.*
 
 # AI / Editor
 .cursor/

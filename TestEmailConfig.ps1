@@ -4,8 +4,8 @@ param(
     [switch]$Status
 )
 
-# Load configuration
-$configPath = "C:\Users\allan\Documents\Examples\Recruitment\HR.Web\secrets.config"
+# Load configuration from HR.Web\secrets.config (gitignored — never commit)
+$configPath = Join-Path $PSScriptRoot "HR.Web\secrets.config"
 if (Test-Path $configPath) {
     [xml]$config = Get-Content $configPath
     $smtpHost = ($config.appSettings.add | Where-Object { $_.key -eq "SmtpHost" }).value

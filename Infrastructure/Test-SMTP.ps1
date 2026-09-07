@@ -1,4 +1,5 @@
-$configPath = "c:\Users\allan\Documents\Examples\HR\HR.Web\secrets.config"
+$repoRoot = Split-Path $PSScriptRoot -Parent
+$configPath = Join-Path $repoRoot "HR.Web\secrets.config"
 [xml]$secrets = Get-Content $configPath
 
 $smtpHost = $secrets.appSettings.add | Where-Object { $_.key -eq "SmtpHost" } | Select-Object -ExpandProperty value

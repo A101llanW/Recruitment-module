@@ -2,6 +2,17 @@
 
 These scripts live under `tools/dev/` and are **not** part of the IIS / publish output.
 
+## Local configuration (not in Git)
+
+`HR.Web\Web.config` and `HR.Web\secrets.config` are **gitignored**. Copy the examples after clone:
+
+```powershell
+copy HR.Web\Web.config.example HR.Web\Web.config
+copy HR.Web\secrets.config.example HR.Web\secrets.config
+```
+
+Edit `Web.config` for your SQL connection string and `secrets.config` for SMTP / API keys. Never commit real credentials.
+
 ## Verify SuperAdmin login
 
 Confirms a global user's password hash matches input (same logic as the web app). Does not call `/Account/Login` (CAPTCHA/MFA still apply in the browser).
