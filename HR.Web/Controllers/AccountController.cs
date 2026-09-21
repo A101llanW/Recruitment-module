@@ -231,7 +231,7 @@ namespace HR.Web.Controllers
 
             try
             {
-                await EmailSvc.SendEmailVerificationOtpAsync(user.Email, otp);
+                await EmailSvc.SendEmailVerificationOtpAsync(user.Email, otp, user.CompanyId);
                 DevDiagnostics.LogOneTimeCode("EMAIL VERIFICATION OTP", user.Email, otp);
                 
                 TempData["SuccessMessage"] = "Verification code sent to your email.";
@@ -275,7 +275,7 @@ namespace HR.Web.Controllers
 
             try
             {
-                await EmailSvc.SendEmailVerificationOtpAsync(user.Email, otp);
+                await EmailSvc.SendEmailVerificationOtpAsync(user.Email, otp, user.CompanyId);
                 DevDiagnostics.LogOneTimeCode("EMAIL VERIFICATION OTP", user.Email, otp);
                 
                 return Json(new { success = true, message = "Verification code sent to your email." });
@@ -699,11 +699,11 @@ namespace HR.Web.Controllers
             var recipientEmail = mfaUser.Email;
             DevDiagnostics.LogOneTimeCode("MFA CODE", recipientEmail, code);
 
-            QueueMfaEmailSend(recipientEmail.Trim(), code, mfaUser.UserName, mfaUser.Id.ToString());
+            QueueMfaEmailSend(recipientEmail.Trim(), code, mfaUser.UserName, mfaUser.Id.ToString(), mfaUser.CompanyId);
             return true;
         }
 
-        private void QueueMfaEmailSend(string recipientEmail, string code, string username, string userId)
+        private void QueueMfaEmailSend(string recipientEmail, string code, string username, string userId, int? companyId)
         {
             if (string.IsNullOrWhiteSpace(recipientEmail))
             {
@@ -715,7 +715,7 @@ namespace HR.Web.Controllers
                 try
                 {
                     var emailService = new EmailService();
-                    emailService.SendMfaCodeEmailAsync(recipientEmail, code).GetAwaiter().GetResult();
+                    emailService.SendMfaCodeEmailAsync(recipientEmail, code, companyId).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {

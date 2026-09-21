@@ -452,7 +452,7 @@ namespace HR.Web.Controllers
                 return RedirectWithEmailError("No CC recipients could be resolved. Check selected addresses.");
             }
 
-            await _email.SendAsync(recipientEmail.Trim(), emailContent.Subject, emailContent.BodyHtml, ccRecipients);
+            await _email.SendAsync(recipientEmail.Trim(), emailContent.Subject, emailContent.BodyHtml, ccRecipients, app.CompanyId);
 
             app.FailedCandidateEmailSentAt = DateTime.UtcNow;
             _uow.Applications.Update(app);
@@ -610,7 +610,7 @@ namespace HR.Web.Controllers
                     selectedHrCcIds,
                     requireRecipientsWhenToggled: false);
 
-                return _email.SendAsync(recipientEmail, emailContent.Subject, emailContent.BodyHtml, ccRecipients);
+                return _email.SendAsync(recipientEmail, emailContent.Subject, emailContent.BodyHtml, ccRecipients, r.CompanyId ?? position.CompanyId);
             }).ToList();
 
             foreach (var emailTask in emailTasks)

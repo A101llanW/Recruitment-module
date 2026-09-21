@@ -149,7 +149,8 @@ namespace HR.Web.Controllers
                 await _email.SendAsync(
                     recipientEmail.Trim(),
                     emailContent.Subject ?? "Questionnaire invitation",
-                    WrapCandidateEmailDocument(emailContent.BodyHtml ?? string.Empty));
+                    WrapCandidateEmailDocument(emailContent.BodyHtml ?? string.Empty),
+                    application.CompanyId);
             }
             catch (Exception ex)
             {

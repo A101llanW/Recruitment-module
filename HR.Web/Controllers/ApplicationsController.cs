@@ -497,7 +497,7 @@ namespace HR.Web.Controllers
             _uow.Applications.Add(applicationModel);
             _uow.Complete();
             var applicantEmail = applicationModel.Applicant != null ? applicationModel.Applicant.Email : null;
-            _email.SendAsync(applicantEmail, "Application received", "We received your application.");
+            _email.SendAsync(applicantEmail, "Application received", "We received your application.", applicationModel.CompanyId);
             return RedirectToAction("Index");
         }
 

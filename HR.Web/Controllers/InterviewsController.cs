@@ -180,7 +180,7 @@ namespace HR.Web.Controllers
             var interviewer = _uow.Users.Get(interviewerId);
             if (interviewer != null)
             {
-                _email.SendAsync(interviewer.Email, "Interview scheduled", "You have a new interview scheduled.");
+                _email.SendAsync(interviewer.Email, "Interview scheduled", "You have a new interview scheduled.", interviewer.CompanyId);
             }
         }
 
@@ -319,7 +319,7 @@ namespace HR.Web.Controllers
             _uow.Interviews.Add(interviewModel);
             _uow.Complete();
             var interviewerEmail = interviewModel.Interviewer != null ? interviewModel.Interviewer.Email : null;
-            _email.SendAsync(interviewerEmail, "Interview scheduled", "Please attend.");
+            _email.SendAsync(interviewerEmail, "Interview scheduled", "Please attend.", interviewModel.CompanyId);
             return RedirectToAction("Index");
         }
 
