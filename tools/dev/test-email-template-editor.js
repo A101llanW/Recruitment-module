@@ -11,8 +11,13 @@ try {
 }
 
 var repoRoot = path.resolve(__dirname, '../..');
-var scriptPath = path.join(repoRoot, 'HR.Web/Scripts/email-template-editor.js');
-var editorJs = fs.readFileSync(scriptPath, 'utf8');
+var viewPath = path.join(repoRoot, 'HR.Web/Views/Admin/EmailTemplates.cshtml');
+var view = fs.readFileSync(viewPath, 'utf8');
+var scriptMatch = view.match(/<script>\s*(\(function \(\) \{[\s\S]*?\}\)\(\);)\s*<\/script>/);
+if (!scriptMatch) {
+    console.error('Could not extract the Email Templates editor script from the view.');
+    process.exit(1);
+}
 
 var html = '<!DOCTYPE html><html><body>' +
     '<form id="emailTemplatesForm">' +
@@ -30,7 +35,7 @@ var html = '<!DOCTYPE html><html><body>' +
     '<div id="bodyCompose_0" class="email-body-compose" contenteditable="true"></div>' +
     '<button type="submit">Save</button>' +
     '</div></form>' +
-    '<script>' + editorJs + '</script>' +
+    '<script>' + scriptMatch[1] + '</script>' +
     '</body></html>';
 
 var dom = new JSDOM(html, {
@@ -42,9 +47,6 @@ if (dom.window.document.readyState === 'loading') {
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded', { bubbles: true }));
 }
 
-runChecks();
-
-function runChecks() {
 var document = dom.window.document;
 var failures = [];
 
@@ -82,4 +84,3 @@ if (failures.length) {
 }
 
 console.log('PASS Email template editor hydrates and syncs subject/body without TinyMCE.');
-}

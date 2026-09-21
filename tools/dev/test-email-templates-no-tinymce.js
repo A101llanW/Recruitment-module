@@ -5,14 +5,13 @@ var path = require('path');
 
 var repoRoot = path.resolve(__dirname, '../..');
 var viewPath = path.join(repoRoot, 'HR.Web/Views/Admin/EmailTemplates.cshtml');
-var scriptPath = path.join(repoRoot, 'HR.Web/Scripts/email-template-editor.js');
 var viewModelPath = path.join(repoRoot, 'HR.Web/ViewModels/EmailTemplateManagementViewModel.cs');
 var controllerPath = path.join(repoRoot, 'HR.Web/Controllers/AdminController.EmailTemplates.cs');
+var standaloneScriptPath = path.join(repoRoot, 'HR.Web/Scripts/email-template-editor.js');
 
 var failures = [];
 
-function read(relPath) {
-    var full = path.isAbsolute(relPath) ? relPath : path.join(repoRoot, relPath);
+function read(full) {
     if (!fs.existsSync(full)) {
         failures.push('Missing file: ' + path.relative(repoRoot, full));
         return '';
@@ -34,20 +33,18 @@ function assertNoTinyMce(filePath, contents) {
 }
 
 var view = read(viewPath);
-var script = read(scriptPath);
 var viewModel = read(viewModelPath);
 var controller = read(controllerPath);
 
 assert(view.length > 0, 'EmailTemplates.cshtml is empty');
-assert(script.length > 0, 'email-template-editor.js is empty or missing');
+assert(!fs.existsSync(standaloneScriptPath), 'Standalone email-template-editor.js should not exist (Codacy treats it as an SSR/TS module)');
 assertNoTinyMce('HR.Web/Views/Admin/EmailTemplates.cshtml', view);
-assertNoTinyMce('HR.Web/Scripts/email-template-editor.js', script);
 
 assert(/SaveEmailTemplates/.test(view), 'View must post to SaveEmailTemplates');
 assert(/AntiForgeryToken/.test(view), 'View must include an anti-forgery token');
 assert(/email-subject-compose/.test(view) && /contenteditable/.test(view), 'Subject editor must remain contenteditable');
 assert(/email-body-compose/.test(view), 'Body editor must use a contenteditable compose surface (email-body-compose)');
-assert(/email-template-editor\.js/.test(view), 'View must include the lightweight editor script');
+assert(/function writeComposeHtml/.test(view), 'View must include the lightweight editor script');
 assert(/DefaultBodyTemplate/.test(view) && /DefaultSubjectTemplate/.test(view), 'View must bind subject and body template fields');
 assert(/email-template-format-btn/.test(view), 'View must include the lightweight formatting toolbar');
 assert(!/tox-tinymce/.test(view), 'View must not include TinyMCE chrome CSS');
