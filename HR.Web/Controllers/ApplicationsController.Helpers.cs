@@ -1034,15 +1034,21 @@ namespace HR.Web.Controllers
                 return RedirectToAction("Index", "Positions");
             }
 
-            SendApplicationReceivedNotification(application, applicant, position);
+            var emailResult = SendApplicationReceivedNotification(application, applicant, position);
+            if (emailResult.Attempted && !emailResult.Success)
+            {
+                TempData["QuestionnaireEmailWarning"] =
+                    "Your application was submitted, but we could not send the confirmation email. Our team has your submission.";
+            }
+
             return null;
         }
 
-        private void SendApplicationReceivedNotification(Application application, Applicant applicant, Position position)
+        private EmailSendResult SendApplicationReceivedNotification(Application application, Applicant applicant, Position position)
         {
             if (application == null || applicant == null || string.IsNullOrWhiteSpace(applicant.Email))
             {
-                return;
+                return EmailSendResult.Skipped();
             }
 
             try
@@ -1069,18 +1075,23 @@ namespace HR.Web.Controllers
                     EmailTemplateCatalog.ApplicationReceivedStandard,
                     new Dictionary<string, string>
                     {
-                        { "CandidateName", HttpUtility.HtmlEncode(candidateName) },
-                        { "PositionTitle", HttpUtility.HtmlEncode(positionTitle) },
-                        { "CompanyName", HttpUtility.HtmlEncode(companyName) },
+                        { "CandidateName", candidateName },
+                        { "PositionTitle", positionTitle },
+                        { "CompanyName", companyName },
                         { "CustomMessageBlock", string.Empty }
                     },
                     company != null ? (int?)company.Id : application.CompanyId);
 
-                _email.SendAsync(applicant.Email.Trim(), rendered.Subject, rendered.BodyHtml).GetAwaiter().GetResult();
+                return _email.TrySendAsync(
+                    applicant.Email.Trim(),
+                    rendered.Subject,
+                    rendered.BodyHtml,
+                    application.CompanyId).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Trace.WriteLine("[APPLICATION_RECEIVED_EMAIL] Failed: " + ex.Message);
+                return EmailSendResult.Failed(ex.Message);
             }
         }
 

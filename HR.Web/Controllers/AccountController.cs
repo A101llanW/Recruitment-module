@@ -231,7 +231,7 @@ namespace HR.Web.Controllers
 
             try
             {
-                await EmailSvc.SendEmailVerificationOtpAsync(user.Email, otp);
+                await EmailSvc.SendEmailVerificationOtpAsync(user.Email, otp, user.CompanyId);
                 DevDiagnostics.LogOneTimeCode("EMAIL VERIFICATION OTP", user.Email, otp);
                 
                 TempData["SuccessMessage"] = "Verification code sent to your email.";
@@ -275,7 +275,7 @@ namespace HR.Web.Controllers
 
             try
             {
-                await EmailSvc.SendEmailVerificationOtpAsync(user.Email, otp);
+                await EmailSvc.SendEmailVerificationOtpAsync(user.Email, otp, user.CompanyId);
                 DevDiagnostics.LogOneTimeCode("EMAIL VERIFICATION OTP", user.Email, otp);
                 
                 return Json(new { success = true, message = "Verification code sent to your email." });
@@ -724,7 +724,7 @@ namespace HR.Web.Controllers
 
             try
             {
-                EmailSvc.SendMfaCodeEmailAsync(recipientEmail, code).GetAwaiter().GetResult();
+                EmailSvc.SendMfaCodeEmailAsync(recipientEmail, code, mfaUser.CompanyId).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {

@@ -137,8 +137,8 @@ namespace HR.Web.Controllers
                 }
 
                 var interview = CreateScheduledInterview(applicationId, interviewerId, scheduledAt, mode);
-                NotifyInterviewerOfBooking(interviewerId, interview.Id, applicationId, scheduledAt, mode);
-                return GetBookInterviewSuccessRedirect(returnTo, resumeEmailApplicationId, applicationId);
+                var notifyResult = NotifyInterviewerOfBooking(interviewerId, interview.Id, applicationId, scheduledAt, mode);
+                return GetBookInterviewSuccessRedirect(returnTo, resumeEmailApplicationId, applicationId, notifyResult);
             }
             catch (Exception ex)
             {
@@ -175,17 +175,29 @@ namespace HR.Web.Controllers
             return interview;
         }
 
-        private void NotifyInterviewerOfBooking(int interviewerId, int interviewId, int applicationId, DateTime scheduledAt, string mode)
+        private EmailSendResult NotifyInterviewerOfBooking(int interviewerId, int interviewId, int applicationId, DateTime scheduledAt, string mode)
         {
             var interviewer = _uow.Users.Get(interviewerId);
-            if (interviewer != null)
+            if (interviewer == null || string.IsNullOrWhiteSpace(interviewer.Email))
             {
-                _email.SendAsync(interviewer.Email, "Interview scheduled", "You have a new interview scheduled.");
+                return EmailSendResult.Skipped();
             }
+
+            return _email.TrySendAsync(
+                interviewer.Email,
+                "Interview scheduled",
+                "You have a new interview scheduled.",
+                interviewer.CompanyId).GetAwaiter().GetResult();
         }
 
-        private ActionResult GetBookInterviewSuccessRedirect(string returnTo, int? resumeEmailApplicationId, int applicationId)
+        private ActionResult GetBookInterviewSuccessRedirect(string returnTo, int? resumeEmailApplicationId, int applicationId, EmailSendResult interviewerNotifyResult)
         {
+            if (interviewerNotifyResult != null && interviewerNotifyResult.Attempted && !interviewerNotifyResult.Success)
+            {
+                TempData["InterviewEmailWarning"] =
+                    "Interview booked, but the interviewer notification email could not be sent. Check SMTP settings.";
+            }
+
             if (!string.Equals(returnTo, "interviews", StringComparison.OrdinalIgnoreCase))
             {
                 return RedirectToAction("Index");
@@ -319,7 +331,17 @@ namespace HR.Web.Controllers
             _uow.Interviews.Add(interviewModel);
             _uow.Complete();
             var interviewerEmail = interviewModel.Interviewer != null ? interviewModel.Interviewer.Email : null;
-            _email.SendAsync(interviewerEmail, "Interview scheduled", "Please attend.");
+            var notifyResult = _email.TrySendAsync(
+                interviewerEmail,
+                "Interview scheduled",
+                "Please attend.",
+                interviewModel.CompanyId).GetAwaiter().GetResult();
+            if (notifyResult.Attempted && !notifyResult.Success)
+            {
+                TempData["InterviewEmailWarning"] =
+                    "Interview saved, but the interviewer notification email could not be sent. Check SMTP settings.";
+            }
+
             return RedirectToAction("Index");
         }
 

@@ -503,7 +503,12 @@ namespace HR.Web.Controllers
                 _uow.Applicants.Get(applicationModel.ApplicantId);
             var savedPosition = applicationModel.Position ??
                 _uow.Positions.Get(applicationModel.PositionId);
-            SendApplicationReceivedNotification(applicationModel, savedApplicant, savedPosition);
+            var emailResult = SendApplicationReceivedNotification(applicationModel, savedApplicant, savedPosition);
+            if (emailResult.Attempted && !emailResult.Success)
+            {
+                TempData["ApplicationEmailWarning"] =
+                    "Application saved, but the confirmation email could not be sent. Check SMTP settings.";
+            }
 
             return RedirectToAction("Index");
         }

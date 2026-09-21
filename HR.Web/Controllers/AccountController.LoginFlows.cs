@@ -739,7 +739,7 @@ namespace HR.Web.Controllers
 
             AuditSvc.LogAction(username, "LOGIN_REDIRECT_EMAIL_VERIFY", "Account", user.Id.ToString(), true, "Redirecting to email verification");
             var otpCode = GenerateAndStoreEmailVerificationCode(user);
-            QueueEmailVerificationDelivery(user.Email, otpCode);
+            QueueEmailVerificationDelivery(user.Email, otpCode, user.CompanyId);
             return RedirectToAction("VerifyEmail", "Account", new { tenant = tenantSlug });
         }
 
@@ -753,11 +753,11 @@ namespace HR.Web.Controllers
             return otpCode;
         }
 
-        private void QueueEmailVerificationDelivery(string userEmail, string securityToken)
+        private void QueueEmailVerificationDelivery(string userEmail, string securityToken, int? companyId)
         {
             try
             {
-                EmailSvc.SendEmailVerificationOtpAsync(userEmail, securityToken).GetAwaiter().GetResult();
+                EmailSvc.SendEmailVerificationOtpAsync(userEmail, securityToken, companyId).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {

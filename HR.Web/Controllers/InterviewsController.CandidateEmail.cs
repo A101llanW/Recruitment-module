@@ -209,11 +209,11 @@ namespace HR.Web.Controllers
                 key,
                 new Dictionary<string, string>
                 {
-                    { "CandidateName", HttpUtility.HtmlEncode(candidateNameSafe) },
-                    { "PositionTitle", HttpUtility.HtmlEncode(positionDisplay) },
-                    { "InterviewDateTime", HttpUtility.HtmlEncode(scheduledAt.ToString("f")) },
-                    { "InterviewMode", HttpUtility.HtmlEncode(modeDisplay) },
-                    { "CompanyName", HttpUtility.HtmlEncode(companyName) },
+                    { "CandidateName", candidateNameSafe },
+                    { "PositionTitle", positionDisplay },
+                    { "InterviewDateTime", scheduledAt.ToString("f") },
+                    { "InterviewMode", modeDisplay },
+                    { "CompanyName", companyName },
                     { "CustomMessageBlock", customBlock }
                 },
                 company != null ? (int?)company.Id : null);
@@ -487,7 +487,17 @@ namespace HR.Web.Controllers
                 return RedirectWithInterviewEmailError("No CC recipients could be resolved. Check selected addresses.");
             }
 
-            await _email.SendAsync(recipientEmail.Trim(), emailContent.Subject, emailContent.BodyHtml, ccRecipients);
+            var sendResult = await _email.TrySendAsync(
+                recipientEmail.Trim(),
+                emailContent.Subject,
+                emailContent.BodyHtml,
+                ccRecipients,
+                application.CompanyId);
+            if (!sendResult.Success)
+            {
+                return RedirectWithInterviewEmailError(
+                    "Email could not be sent: " + (sendResult.ErrorMessage ?? "Check SMTP settings and try again."));
+            }
 
             Session.Remove(GetPendingInterviewEmailSessionKey(applicationId));
             TempData["InterviewEmailSuccess"] = string.Format(
@@ -554,7 +564,8 @@ namespace HR.Web.Controllers
                 return RedirectWithInterviewEmailError(ccValidation);
             }
 
-            var emailTasks = interviewRecipients.Select(interview =>
+            var sendFailures = 0;
+            foreach (var interview in interviewRecipients)
             {
                 var application = interview.Application;
                 var applicant = application.Applicant;
@@ -581,12 +592,24 @@ namespace HR.Web.Controllers
                     selectedHrCcIds,
                     requireRecipientsWhenToggled: false);
 
-                return _email.SendAsync(recipientEmail, emailContent.Subject, emailContent.BodyHtml, ccRecipients);
-            }).ToList();
+                var sendResult = await _email.TrySendAsync(
+                    recipientEmail,
+                    emailContent.Subject,
+                    emailContent.BodyHtml,
+                    ccRecipients,
+                    application.CompanyId);
+                if (sendResult.Attempted && !sendResult.Success)
+                {
+                    sendFailures++;
+                }
+            }
 
-            foreach (var emailTask in emailTasks)
+            if (sendFailures > 0)
             {
-                await emailTask;
+                TempData["InterviewEmailWarning"] = string.Format(
+                    "Batch email completed with {0} failure(s). Check SMTP settings and retry for affected candidates.",
+                    sendFailures);
+                return RedirectToAction("Index");
             }
 
             TempData["InterviewEmailSuccess"] = string.Format(

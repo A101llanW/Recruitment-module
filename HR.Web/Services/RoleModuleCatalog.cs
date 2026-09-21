@@ -64,6 +64,8 @@ namespace HR.Web.Services
             "ResetEmailTemplatesToDefaults",
             "AddHrCcEmail",
             "DeleteHrCcEmail",
+            "SaveCompanySmtpSettings",
+            "SendCompanySmtpTestEmail",
             "Delete",
             "DeleteConfirmed",
             "DeleteQuestion",
@@ -130,6 +132,9 @@ namespace HR.Web.Services
                     case "HrCcEmails":
                     case "AddHrCcEmail":
                     case "DeleteHrCcEmail":
+                    case "CompanySmtpSettings":
+                    case "SaveCompanySmtpSettings":
+                    case "SendCompanySmtpTestEmail":
                         return UserManagement;
 
                     case "Questions":

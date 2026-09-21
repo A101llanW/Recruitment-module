@@ -113,7 +113,7 @@ namespace HR.Web.Controllers
 
             if (EmailSvc != null)
             {
-                await EmailSvc.SendPasswordResetEmailAsync(user.Email, resetUrl);
+                await EmailSvc.SendPasswordResetEmailAsync(user.Email, resetUrl, user.CompanyId);
             }
 
             AuditSvc.LogAction(
