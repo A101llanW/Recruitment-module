@@ -44,6 +44,8 @@ namespace HR.Web.Data
         public DbSet<TemporaryCredential> TemporaryCredentials { get; set; }
         public DbSet<CompanyHrCcEmail> CompanyHrCcEmails { get; set; }
         public DbSet<CompanySmtpSettings> CompanySmtpSettings { get; set; }
+        public DbSet<CompanyApplicationNotifyRecipient> CompanyApplicationNotifyRecipients { get; set; }
+        public DbSet<ApplicationNotificationAccessToken> ApplicationNotificationAccessTokens { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
@@ -179,6 +181,24 @@ namespace HR.Web.Data
                 .WithOptional(c => c.SmtpSettings)
                 .HasForeignKey(s => s.CompanyId)
                 .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<CompanyApplicationNotifyRecipient>()
+                .HasRequired(r => r.Company)
+                .WithMany(c => c.ApplicationNotifyRecipients)
+                .HasForeignKey(r => r.CompanyId)
+                .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<ApplicationNotificationAccessToken>()
+                .HasRequired(t => t.Application)
+                .WithMany()
+                .HasForeignKey(t => t.ApplicationId)
+                .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<ApplicationNotificationAccessToken>()
+                .HasRequired(t => t.Recipient)
+                .WithMany()
+                .HasForeignKey(t => t.RecipientId)
+                .WillCascadeOnDelete(false);
         }
 
         private static string ResolveConnectionNameOrString()

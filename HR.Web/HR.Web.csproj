@@ -196,6 +196,8 @@
     <None Include="Migrations\202605290000000_DropResumePathFromApplications.sql" />
     <None Include="Migrations\202609210000016_AddCompanySmtpSettings.cs" />
     <None Include="Migrations\202609210000016_AddCompanySmtpSettings.sql" />
+    <None Include="Migrations\202609210000017_AddApplicationNotifyRecipients.cs" />
+    <None Include="Migrations\202609210000017_AddApplicationNotifyRecipients.sql" />
     <None Include="Migrations\AddPasswordResetTable.cs" />
     <None Include="Migrations\Configuration.cs" />
     <Compile Include="Models\Application.cs" />
@@ -208,6 +210,8 @@
     <Compile Include="Models\RolePermission.cs" />
     <Compile Include="Models\CompanyHrCcEmail.cs" />
     <Compile Include="Models\CompanySmtpSettings.cs" />
+    <Compile Include="Models\CompanyApplicationNotifyRecipient.cs" />
+    <Compile Include="Models\ApplicationNotificationAccessToken.cs" />
     <Compile Include="Models\PositionQuestion.cs" />
     <Compile Include="Models\PositionQuestionOption.cs" />
     <Compile Include="Models\QuestionnaireTemplate.cs" />
@@ -230,6 +234,7 @@
     <Compile Include="ViewModels\EmailTemplateManagementViewModel.cs" />
     <Compile Include="ViewModels\HrCcEmailsPageViewModel.cs" />
     <Compile Include="ViewModels\CompanySmtpSettingsPageViewModel.cs" />
+    <Compile Include="ViewModels\ApplicationNotifyRecipientsPageViewModel.cs" />
     <Compile Include="Data\DbSetExtensions.cs" />
     <Compile Include="Data\HrContext.cs" />
     <Compile Include="Data\Repository.cs" />
@@ -257,6 +262,8 @@
     <Compile Include="Services\LinkedInProfileImportService.cs" />
     <Compile Include="Services\ApplicantCvProfileResolution.cs" />
     <Compile Include="Services\CandidateEmailCcHelper.cs" />
+    <Compile Include="Services\ApplicationRankHelper.cs" />
+    <Compile Include="Services\ApplicationNotificationService.cs" />
     <Compile Include="Services\EmailTemplateCatalog.cs" />
     <Compile Include="Services\EmailTemplateService.cs" />
     <Compile Include="Services\PanelistRoleTemplateSeeder.cs" />
@@ -302,6 +309,7 @@
     <Compile Include="Controllers\AdminController.EmailTemplates.cs" />
     <Compile Include="Controllers\AdminController.HrCcEmails.cs" />
     <Compile Include="Controllers\AdminController.CompanySmtpSettings.cs" />
+    <Compile Include="Controllers\AdminController.ApplicationNotifyRecipients.cs" />
     <Compile Include="Controllers\CompaniesController.cs" />
     <Compile Include="Controllers\CompaniesController.CredentialContent.cs" />
     <Compile Include="Controllers\CompaniesController.Operations.cs" />
@@ -317,6 +325,7 @@
     <Compile Include="Controllers\ApplicationsController.FailedCandidateEmail.cs" />
     <Compile Include="Controllers\ApplicationsController.Helpers.cs" />
     <Compile Include="Controllers\ApplicationsController.QuestionnaireInvite.cs" />
+    <Compile Include="Controllers\ApplicationsController.Notifications.cs" />
     <Compile Include="Controllers\ApplicationsController.LinkedInImport.cs" />
     <Compile Include="Controllers\InterviewsController.cs" />
     <Compile Include="Controllers\InterviewsController.CandidateEmail.cs" />
@@ -445,6 +454,8 @@
     <Content Include="Views\Admin\EmailTemplates.cshtml" />
     <Content Include="Views\Admin\HrCcEmails.cshtml" />
     <Content Include="Views\Admin\CompanySmtpSettings.cshtml" />
+    <Content Include="Views\Admin\ApplicationNotifyRecipients.cshtml" />
+    <Content Include="Views\Applications\NotificationSummary.cshtml" />
     <Content Include="Views\Admin\AddPanelist.cshtml" />
     <Content Include="Views\Applications\CoverLetter.cshtml" />
     <Content Include="Views\Applications\ProfileDetails.cshtml" />

@@ -1188,6 +1188,7 @@ namespace HR.Web.Controllers
             ClearPendingCoverLetter();
             ScoreQuestionnaireApplication(application);
             TrySendApplicationReceivedEmailForApplication(application, applicant, position);
+            NotifyCompanyOfNewApplication(application.Id);
             return null;
         }
 
