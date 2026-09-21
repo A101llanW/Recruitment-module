@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Email template editor fixture</title>
+</head>
+<body>
+    <form id="emailTemplatesForm">
+        <div class="email-template-compose"
+             data-subject-compose-id="subjectCompose_0"
+             data-subject-storage-id="defaultSubjectTemplate_0"
+             data-body-compose-id="bodyCompose_0"
+             data-body-storage-id="defaultBodyTemplate_0"
+             data-body-id="defaultBodyTemplate_0">
+            <textarea id="defaultSubjectTemplate_0" class="email-subject-storage email-template-storage">Hello span-token</textarea>
+            <div id="subjectCompose_0" class="email-subject-compose" contenteditable="true"></div>
+            <button type="button" class="email-template-token-subj" data-token-name="CandidateName">Insert subject token</button>
+            <template class="hr-email-chip-source" data-token-name="CandidateName">
+                <span class="hr-email-token" data-hr-token="CandidateName">Candidate name</span>
+            </template>
+            <textarea id="defaultBodyTemplate_0" class="email-template-body-html email-template-storage">&lt;p&gt;Stored body&lt;/p&gt;</textarea>
+            <div id="bodyCompose_0" class="email-body-compose" contenteditable="true"></div>
+            <button type="button" class="email-template-token-body" data-token-name="CandidateName">Insert body token</button>
+            <button type="submit" id="saveBtn">Save</button>
+        </div>
+    </form>
+    <script src="../../HR.Web/Scripts/email-template-editor.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var failures = [];
+            var subject = document.getElementById('subjectCompose_0');
+            var body = document.getElementById('bodyCompose_0');
+            var subjectTa = document.getElementById('defaultSubjectTemplate_0');
+            var bodyTa = document.getElementById('defaultBodyTemplate_0');
+
+            if (!subject || subject.textContent.indexOf('Hello span-token') === -1) {
+                failures.push('subject-hydrate');
+            }
+            if (!body || body.innerHTML.indexOf('Stored body') === -1) {
+                failures.push('body-hydrate');
+            }
+            if (typeof tinymce !== 'undefined') {
+                failures.push('tinymce-present');
+            }
+
+            body.innerHTML = '<p>Updated body copy</p>';
+            body.dispatchEvent(new Event('input', { bubbles: true }));
+            document.getElementById('emailTemplatesForm').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            if (!bodyTa || bodyTa.value.indexOf('Updated body copy') === -1) {
+                failures.push('body-sync');
+            }
+
+            subject.innerHTML = 'Changed subject';
+            subject.dispatchEvent(new Event('input', { bubbles: true }));
+            document.getElementById('emailTemplatesForm').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            if (!subjectTa || subjectTa.value.indexOf('Changed subject') === -1) {
+                failures.push('subject-sync');
+            }
+
+            document.body.setAttribute('data-editor-test', failures.length ? 'FAIL:' + failures.join(',') : 'PASS');
+            document.title = failures.length ? 'FAIL' : 'PASS';
+        });
+    </script>
+</body>
+</html>
