@@ -224,21 +224,21 @@ namespace HR.Web.Controllers
         [AllowAnonymous]
         public ActionResult Error()
         {
-            Response.StatusCode = 500;
+            SafeNotFoundHandler.ApplyBrandedErrorStatus(HttpContext, 500);
             return View("~/Views/Error/Index.cshtml");
         }
 
         [AllowAnonymous]
         public ActionResult NotFound()
         {
-            Response.StatusCode = 404;
+            SafeNotFoundHandler.ApplyBrandedErrorStatus(HttpContext, 404);
             return View("~/Views/Error/NotFound.cshtml");
         }
 
         [AllowAnonymous]
         public ActionResult Forbidden()
         {
-            Response.StatusCode = 403;
+            SafeNotFoundHandler.ApplyBrandedErrorStatus(HttpContext, 403);
             return View("~/Views/Error/Forbidden.cshtml");
         }
     }

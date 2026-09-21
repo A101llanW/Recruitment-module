@@ -537,8 +537,11 @@ namespace HR.Web.Services
             {
                 adminItems.Add(CreateItem(context.Url, context.TenantToken, "Role Templates", "Admin", "RoleManagement", "fas fa-user-tag",
                     IsAdminActionActive(context.CurrentController, context.CurrentAction, "RoleManagement")));
-                adminItems.Add(CreateItem(context.Url, context.TenantToken, "Email Templates", "Admin", "EmailTemplates", "fas fa-envelope-open-text",
-                    IsAdminActionActive(context.CurrentController, context.CurrentAction, "EmailTemplates")));
+                if (AdminFeatureFlags.EmailTemplatesAdminUiEnabled)
+                {
+                    adminItems.Add(CreateItem(context.Url, context.TenantToken, "Email Templates", "Admin", "EmailTemplates", "fas fa-envelope-open-text",
+                        IsAdminActionActive(context.CurrentController, context.CurrentAction, "EmailTemplates")));
+                }
             }
 
             if (!context.IsSuperAdminUser || context.IsImpersonating)

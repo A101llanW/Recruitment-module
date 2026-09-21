@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using HR.Web.Helpers;
 
 namespace HR.Web.Services
 {
@@ -63,13 +64,13 @@ namespace HR.Web.Services
             var globalKey = isSubjectPart
                 ? GetGlobalSubjectKey(normalizedTemplateKey)
                 : GetGlobalBodyKey(normalizedTemplateKey);
-            var globalValue = _settingsService.GetSetting(globalKey);
-            if (!string.IsNullOrWhiteSpace(globalValue))
+            var rawValue = _settingsService.GetSetting(globalKey);
+            if (string.IsNullOrWhiteSpace(rawValue))
             {
-                return globalValue;
+                rawValue = fallbackValue ?? string.Empty;
             }
 
-            return fallbackValue ?? string.Empty;
+            return EmailTemplateTokenChipSerializer.EditorHtmlToStorage(rawValue);
         }
 
         private static string BuildGlobalTemplateKey(string templateKey, string fieldName)

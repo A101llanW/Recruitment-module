@@ -135,6 +135,103 @@
         color: var(--app-accent-deep, #3d8fad) !important;
         opacity: 0.9;
     }
+    .position-item--applied {
+        background: linear-gradient(105deg, rgba(46, 125, 96, 0.07) 0%, #fafdff 38%);
+        border-left: 4px solid #2e7d60;
+        position: relative;
+    }
+    .position-item--applied::after {
+        content: "\f00c";
+        font-family: "Font Awesome 5 Free";
+        font-weight: 900;
+        position: absolute;
+        right: 1rem;
+        bottom: 0.85rem;
+        font-size: 2.5rem;
+        color: rgba(46, 125, 96, 0.08);
+        pointer-events: none;
+    }
+    .position-item--applied:hover {
+        background: linear-gradient(105deg, rgba(46, 125, 96, 0.12) 0%, #eaf4fb 38%);
+    }
+    .position-item--applied.active {
+        background: linear-gradient(105deg, rgba(46, 125, 96, 0.14) 0%, rgba(111, 184, 220, 0.12) 100%);
+        border-left-color: #2e7d60;
+        box-shadow: 0 0 8px 2px rgba(46, 125, 96, 0.2), 0 0 0 2px #fff inset;
+    }
+    .position-item--action {
+        border-left-color: #c47a17;
+        background: linear-gradient(105deg, rgba(196, 122, 23, 0.09) 0%, #fafdff 38%);
+    }
+    .position-applied-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+        margin-left: 0.35rem;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    .position-applied-badge--applied {
+        background: rgba(46, 125, 96, 0.14);
+        color: #1f5c45;
+        border: 1px solid rgba(46, 125, 96, 0.28);
+    }
+    .position-applied-badge--review {
+        background: rgba(61, 143, 173, 0.14);
+        color: #2a6f87;
+        border: 1px solid rgba(61, 143, 173, 0.28);
+    }
+    .position-applied-badge--action {
+        background: rgba(196, 122, 23, 0.16);
+        color: #8a5310;
+        border: 1px solid rgba(196, 122, 23, 0.35);
+        animation: applied-badge-pulse 2.4s ease-in-out infinite;
+    }
+    .position-applied-badge--offer {
+        background: rgba(111, 66, 193, 0.14);
+        color: #5b2f9e;
+        border: 1px solid rgba(111, 66, 193, 0.28);
+    }
+    .position-applied-badge--hired {
+        background: rgba(40, 167, 69, 0.16);
+        color: #1d6b32;
+        border: 1px solid rgba(40, 167, 69, 0.32);
+    }
+    .position-applied-badge--closed {
+        background: rgba(108, 117, 125, 0.12);
+        color: #5a6268;
+        border: 1px solid rgba(108, 117, 125, 0.25);
+    }
+    .position-applied-meta {
+        font-size: 0.78rem;
+        color: #2e7d60;
+        font-weight: 500;
+        margin-top: 0.35rem;
+    }
+    .position-applied-meta i {
+        opacity: 0.85;
+    }
+    #posAppliedStatus {
+        display: none;
+        margin-bottom: 0.85rem;
+        padding: 0.55rem 0.75rem;
+        border-radius: 0.4rem;
+        font-size: 0.88rem;
+        font-weight: 500;
+    }
+    #posAppliedStatus.is-visible {
+        display: block;
+    }
+    @@keyframes applied-badge-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(196, 122, 23, 0.35); }
+        50% { box-shadow: 0 0 0 4px rgba(196, 122, 23, 0); }
+    }
     .text-truncate { 
         white-space: nowrap; 
         overflow: hidden; 
@@ -283,8 +380,6 @@ else if (!Request.IsAuthenticated)
     </div>
 }
 
-
-
 @if (!displayPositions.Any())
 {
     <div class="alert alert-info">
@@ -303,8 +398,18 @@ else
                     {
                         candidateAction = PositionCandidateActionHelper.Resolve(Request.IsAuthenticated, null, p, Url);
                     }
-                    <a class="list-group-item list-group-item-action position-item"
+                    var itemClasses = "list-group-item list-group-item-action position-item";
+                    if (candidateAction != null && candidateAction.HasApplied)
+                    {
+                        itemClasses += " position-item--applied";
+                        if (candidateAction.BadgeCssClass == "position-applied-badge--action")
+                        {
+                            itemClasses += " position-item--action";
+                        }
+                    }
+                    <a class="@itemClasses"
                        href="#"
+                       data-position-id="@p.Id"
                        data-title="@p.Title"
                        data-desc="@(p.Description ?? "")"
                        data-responsibilities="@getResponsibilities(p)"
@@ -321,11 +426,31 @@ else
                        data-candidate-action-url="@candidateAction.Url"
                        data-candidate-action-label="@candidateAction.Label"
                        data-candidate-action-icon="@candidateAction.IconClass"
+                       data-has-applied="@(candidateAction.HasApplied ? "true" : "false")"
+                       data-applied-badge-label="@(candidateAction.BadgeLabel ?? "")"
+                       data-applied-badge-class="@(candidateAction.BadgeCssClass ?? "")"
+                       data-applied-on="@(candidateAction.AppliedOn.HasValue ? candidateAction.AppliedOn.Value.ToString("MMM d, yyyy") : "")"
                        data-url-applications="@Url.Action("Index", "Applications", new { positionId = p.Id })#appsCards-@p.Id">
                         <div class="d-flex w-100 justify-content-between align-items-start mb-2">
                             <div class="flex-grow-1">
-                                <h5 class="mb-1">@p.Title</h5>
+                                <h5 class="mb-1">
+                                    @p.Title
+                                    @if (candidateAction.HasApplied && !string.IsNullOrEmpty(candidateAction.BadgeLabel))
+                                    {
+                                        <span class="position-applied-badge @(candidateAction.BadgeCssClass)">
+                                            <i class="fas fa-check-circle" aria-hidden="true"></i>
+                                            @candidateAction.BadgeLabel
+                                        </span>
+                                    }
+                                </h5>
                                 <small class="text-muted d-block">@(p.Department != null ? p.Department.Name : "No Department")</small>
+                                @if (candidateAction.HasApplied && candidateAction.AppliedOn.HasValue)
+                                {
+                                    <div class="position-applied-meta">
+                                        <i class="fas fa-paper-plane mr-1" aria-hidden="true"></i>
+                                        Submitted @candidateAction.AppliedOn.Value.ToString("MMM d, yyyy")
+                                    </div>
+                                }
                                 @if (!Request.IsAuthenticated || (ViewBag.IsSuperAdmin == true && ViewBag.SelectedCompanyId == null))
                                 {
                                     <small class="text-info d-block" style="font-size: 0.85em; margin-top: 2px;">
@@ -352,6 +477,7 @@ else
         </div>
         <div class="col-md-4">
             <div id="positionDetail" class="pos-detail-card" style="display:none;">
+                <div id="posAppliedStatus" role="status" aria-live="polite"></div>
                 <h4 id="posTitle" class="mb-3"></h4>
                 <p class="text-muted mb-2" id="posDept"></p>
                 <p class="mb-2"><strong>Posted:</strong> <span id="posPosted"></span></p>
@@ -466,11 +592,60 @@ else if (ViewBag.IsReadOnly != true)
                 var linkApply = document.getElementById('posApply');
                 var linkViewApplications = document.getElementById('posViewApplications');
                 var linkQuestionWeights = document.getElementById('posQuestionWeights');
+                var appliedStatus = document.getElementById('posAppliedStatus');
 
                 // Check if required elements exist
                 if (!title || !dept || !posted || !range || !detail) {
                     console.error('Required DOM elements not found');
                     return;
+                }
+
+                function updateAppliedStatus(el) {
+                    if (!appliedStatus) return;
+                    var hasApplied = el && el.getAttribute('data-has-applied') === 'true';
+                    if (!hasApplied) {
+                        appliedStatus.classList.remove('is-visible');
+                        appliedStatus.innerHTML = '';
+                        return;
+                    }
+
+                    var badgeLabel = el.getAttribute('data-applied-badge-label') || 'Applied';
+                    var badgeClass = el.getAttribute('data-applied-badge-class') || 'position-applied-badge--applied';
+                    var appliedOn = el.getAttribute('data-applied-on') || '';
+                    var appliedMeta = appliedOn ? ' &middot; Submitted ' + appliedOn : '';
+
+                    appliedStatus.className = 'is-visible';
+                    appliedStatus.style.background = '';
+                    appliedStatus.style.color = '';
+                    appliedStatus.style.border = '';
+
+                    if (badgeClass.indexOf('--action') !== -1) {
+                        appliedStatus.style.background = 'rgba(196, 122, 23, 0.12)';
+                        appliedStatus.style.color = '#8a5310';
+                        appliedStatus.style.border = '1px solid rgba(196, 122, 23, 0.28)';
+                    } else if (badgeClass.indexOf('--hired') !== -1) {
+                        appliedStatus.style.background = 'rgba(40, 167, 69, 0.12)';
+                        appliedStatus.style.color = '#1d6b32';
+                        appliedStatus.style.border = '1px solid rgba(40, 167, 69, 0.28)';
+                    } else if (badgeClass.indexOf('--offer') !== -1) {
+                        appliedStatus.style.background = 'rgba(111, 66, 193, 0.12)';
+                        appliedStatus.style.color = '#5b2f9e';
+                        appliedStatus.style.border = '1px solid rgba(111, 66, 193, 0.28)';
+                    } else if (badgeClass.indexOf('--closed') !== -1) {
+                        appliedStatus.style.background = 'rgba(108, 117, 125, 0.1)';
+                        appliedStatus.style.color = '#5a6268';
+                        appliedStatus.style.border = '1px solid rgba(108, 117, 125, 0.22)';
+                    } else if (badgeClass.indexOf('--review') !== -1) {
+                        appliedStatus.style.background = 'rgba(61, 143, 173, 0.12)';
+                        appliedStatus.style.color = '#2a6f87';
+                        appliedStatus.style.border = '1px solid rgba(61, 143, 173, 0.28)';
+                    } else {
+                        appliedStatus.style.background = 'rgba(46, 125, 96, 0.12)';
+                        appliedStatus.style.color = '#1f5c45';
+                        appliedStatus.style.border = '1px solid rgba(46, 125, 96, 0.28)';
+                    }
+
+                    appliedStatus.innerHTML = '<i class="fas fa-check-circle mr-1"></i> You applied here' + appliedMeta + ' &mdash; <strong>' + badgeLabel + '</strong>';
                 }
 
                 function updateCandidateActionLink(linkEl, el) {
@@ -498,6 +673,7 @@ else if (ViewBag.IsReadOnly != true)
                     if (linkApply) { updateCandidateActionLink(linkApply, el); }
                     if (linkViewApplications) { linkViewApplications.href = el.getAttribute('data-url-applications') || '#'; }
                     if (linkQuestionWeights) { linkQuestionWeights.href = el.getAttribute('data-url-question-weights') || '#'; }
+                    updateAppliedStatus(el);
                     if (detail) detail.style.display = '';
                 }
 

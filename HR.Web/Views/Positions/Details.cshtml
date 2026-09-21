@@ -183,6 +183,18 @@
             {
                 candidateAction = HR.Web.Helpers.PositionCandidateActionHelper.Resolve(Request.IsAuthenticated, null, Model, Url);
             }
+            if (candidateAction.HasApplied && !string.IsNullOrEmpty(candidateAction.BadgeLabel))
+            {
+                <div class="alert py-2 px-3 mb-3" style="border-radius: 0.4rem; background: rgba(46, 125, 96, 0.1); border: 1px solid rgba(46, 125, 96, 0.25); color: #1f5c45;">
+                    <i class="fas fa-check-circle mr-1"></i>
+                    You have already applied for this role
+                    @if (candidateAction.AppliedOn.HasValue)
+                    {
+                        <span class="text-muted">(submitted @candidateAction.AppliedOn.Value.ToString("MMM d, yyyy"))</span>
+                    }
+                    &mdash; <strong>@candidateAction.BadgeLabel</strong>
+                </div>
+            }
             <a href="@candidateAction.Url" class="btn btn-blue">
                 <i class="@candidateAction.IconClass mr-1"></i> @candidateAction.Label
             </a>

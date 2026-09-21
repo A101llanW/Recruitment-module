@@ -16,22 +16,30 @@ namespace HR.Web.Controllers
         public ActionResult QuestionnaireTemplates()
         {
             var templates = _questionnaireTemplateService.GetActiveTemplatesForCurrentTenant();
+            SetQuestionBankViewPermissions();
             return View(templates);
         }
 
         public ActionResult EditQuestionnaireTemplate(int? id)
         {
+            if (id == null && !_rolePermissionService.CanCurrentUserManageQuestionBank())
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
             var model = _questionnaireTemplateService.BuildEditViewModel(id);
             if (model == null && id.HasValue && id.Value > 0)
             {
                 return HttpNotFound();
             }
 
+            SetQuestionBankViewPermissions();
             return View(model ?? new QuestionnaireTemplateEditViewModel());
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         public ActionResult EditQuestionnaireTemplate(
             QuestionnaireTemplateEditViewModel model,
             int[] selectedQuestions,

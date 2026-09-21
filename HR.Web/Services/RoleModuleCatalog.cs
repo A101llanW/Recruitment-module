@@ -51,6 +51,12 @@ namespace HR.Web.Services
             "FinishQuestionnaire"
         };
 
+        // Question bank edits are allowed at View access; creating/deleting still requires Manage.
+        private static readonly HashSet<string> ViewLevelPostActions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "EditQuestion"
+        };
+
         private static readonly HashSet<string> ManageActions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "AddGeneratedQuestionsToBank",
@@ -71,7 +77,6 @@ namespace HR.Web.Services
             "DeleteQuestion",
             "DeleteQuestionnaireTemplate",
             "Edit",
-            "EditQuestion",
             "EditQuestionnaireTemplate",
             "GenerateQuestions",
             "GetDepartments",
@@ -218,7 +223,8 @@ namespace HR.Web.Services
 
             if (!string.Equals(httpMethod, "GET", StringComparison.OrdinalIgnoreCase))
             {
-                if (CandidateSelfServiceActions.Contains(normalizedActionName))
+                if (CandidateSelfServiceActions.Contains(normalizedActionName) ||
+                    ViewLevelPostActions.Contains(normalizedActionName))
                 {
                     return RoleAccessLevels.View;
                 }

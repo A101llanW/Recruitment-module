@@ -116,8 +116,7 @@ namespace HR.Web.Filters
             }
 
             filterContext.ExceptionHandled = true;
-            filterContext.HttpContext.Response.TrySkipIisCustomErrors = true;
-            filterContext.HttpContext.Response.StatusCode = (int)System.Net.HttpStatusCode.NotFound;
+            SafeNotFoundHandler.ApplyBrandedErrorStatus(filterContext.HttpContext, (int)System.Net.HttpStatusCode.NotFound);
             filterContext.Result = new ViewResult
             {
                 ViewName = "~/Views/Error/NotFound.cshtml"

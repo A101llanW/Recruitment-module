@@ -493,17 +493,18 @@ namespace HR.Web.Controllers
 
         private ActionResult ValidateUserPassword(LoginRequestModel request, User user)
         {
-            if (IsPasswordValid(user, request.Password))
+            var freshUser = _uow.Users.Get(user.Id) ?? user;
+            if (IsPasswordValid(freshUser, request.Password))
             {
                 return null;
             }
 
-            var remainingAttempts = SecuritySvc.GetRemainingAttempts(request.Username, user.CompanyId);
+            var remainingAttempts = SecuritySvc.GetRemainingAttempts(request.Username, freshUser.CompanyId);
             var warningMessage = BuildInvalidPasswordMessage(remainingAttempts);
 
             if (!request.IsGlobalSuperAdmin)
             {
-                SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, user.CompanyId, "Invalid password");
+                SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, freshUser.CompanyId, "Invalid password");
             }
 
             ModelState.AddModelError("", warningMessage);
@@ -770,11 +771,26 @@ namespace HR.Web.Controllers
             if (!user.IsTwoFactorEnabled)
             {
                 Session["ForcedMfaSetup"] = user.UserName;
+                TempData["InfoMessage"] = "Your password was accepted. Complete two-factor setup to finish signing in.";
                 return RedirectToAction("SetupMFA", "Account", new { tenant = tenantSlug });
+            }
+
+            if (UsesEmailMfa(user))
+            {
+                if (!SendMfaCode(user))
+                {
+                    TempData["MfaSendError"] =
+                        "Your password was accepted, but we could not send a verification email. Use Resend on the next screen or check SMTP settings.";
+                }
+                else
+                {
+                    TempData["InfoMessage"] = "Your password was accepted. Enter the verification code sent to your email.";
+                }
             }
 
             AuditSvc.LogAction(username, "LOGIN_REDIRECT_MFA", "Account", user.Id.ToString(), true, "Redirecting to MFA challenge");
             Session["PendingMfaUsername"] = user.UserName;
+            Session["PendingMfaUserId"] = user.Id;
             Session.Remove(LegalConsentSession.PendingCompanyIdSession);
             if (user.CompanyId.HasValue)
             {

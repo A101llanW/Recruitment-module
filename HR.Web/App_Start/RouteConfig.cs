@@ -17,6 +17,14 @@ namespace HR.Web
             routes.IgnoreRoute("Content/{*pathInfo}");
             routes.IgnoreRoute("Scripts/{*pathInfo}");
 
+            // Orphan URL alias: /{tenant}/CandidateRankings → Admin/CandidateRankings
+            routes.MapRoute(
+                name: "TenantCandidateRankingsAlias",
+                url: "{tenant}/CandidateRankings",
+                defaults: new { controller = "Admin", action = "CandidateRankings" },
+                constraints: new { tenant = new TenantRouteConstraint() }
+            );
+
             // Tenant-specific branded routes (e.g., /T8k-R2m/positions)
             routes.MapRoute(
                 name: "Tenant",

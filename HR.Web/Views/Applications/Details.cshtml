@@ -5,6 +5,8 @@
     var questionnaireStageCount = ViewBag.QuestionnaireStageCountForDetails as int? ?? 1;
     var canOpenNextQuestionnaireStage = ViewBag.CanOpenNextQuestionnaireStage as bool? ?? false;
     var showQuestionnaireHiringPanel = ViewBag.ShowQuestionnaireHiringPanel as bool? ?? false;
+    var canManageApplicationDetails = ViewBag.CanManageApplicationDetails as bool? ?? false;
+    var canViewApplicationScores = ViewBag.CanViewApplicationScores as bool? ?? false;
 }
 <h3>Application</h3>
 <dl class="row">
@@ -12,12 +14,12 @@
     <dt class="col-sm-3">Position</dt><dd class="col-sm-9">@Model.Position?.Title</dd>
     <dt class="col-sm-3">Status</dt><dd class="col-sm-9">@Model.Status</dd>
     <dt class="col-sm-3">Applied</dt><dd class="col-sm-9">@Model.AppliedOn</dd>
-    @if (Model.Score.HasValue)
+    @if (canViewApplicationScores && Model.Score.HasValue)
     {
         <dt class="col-sm-3">Score</dt>
         <dd class="col-sm-9">@Model.Score.Value.ToString("F1")</dd>
     }
-    else if (!string.IsNullOrEmpty(Model.ScoreReason) && Model.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase))
+    else if (canViewApplicationScores && !string.IsNullOrEmpty(Model.ScoreReason) && Model.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase))
     {
         <dt class="col-sm-3">Score</dt>
         <dd class="col-sm-9">
@@ -49,23 +51,35 @@
         }
     </div>
 }
-@using (Html.BeginForm("UpdateStatus","Applications", FormMethod.Post)) {
-    @Html.AntiForgeryToken()
-    @Html.Hidden("id", Model.Id)
-    <div class="form-row align-items-center">
-        <div class="col-auto">
-            <input name="status" class="form-control" placeholder="New Status" />
+@if (canManageApplicationDetails)
+{
+    @using (Html.BeginForm("UpdateStatus", "Applications", FormMethod.Post))
+    {
+        @Html.AntiForgeryToken()
+        @Html.Hidden("id", Model.Id)
+        <div class="form-row align-items-center">
+            <div class="col-auto">
+                <input name="status" class="form-control" placeholder="New Status" />
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-sm btn-primary" type="submit">Update Status</button>
+            </div>
         </div>
-        <div class="col-auto">
-            <button class="btn btn-sm btn-primary" type="submit">Update Status</button>
-        </div>
-    </div>
+    }
 }
 <div class="mt-3">
-    @Html.ActionLink("Back","Index", null, new { @class = "btn btn-secondary btn-sm" })
-    @using (Html.BeginForm("DeleteConfirmed", "Applications", new { id = Model.Id }, FormMethod.Post, new { @class = "d-inline-block", onsubmit = "return confirm('Delete this application?');" })) {
-        @Html.AntiForgeryToken()
-        <button type="submit" class="btn btn-danger btn-sm ml-2">Delete</button>
+    @Html.ActionLink("Back", "Index", null, new { @class = "btn btn-secondary btn-sm" })
+    @if (Model.PendingQuestionnaireStage.HasValue)
+    {
+        @Html.ActionLink("Continue questionnaire", "Questionnaire", "Applications", new { positionId = Model.PositionId, tenant = tenantToken }, new { @class = "btn btn-primary btn-sm ml-2" })
+    }
+    @if (canManageApplicationDetails)
+    {
+        using (Html.BeginForm("DeleteConfirmed", "Applications", new { id = Model.Id }, FormMethod.Post, new { @class = "d-inline-block", onsubmit = "return confirm('Delete this application?');" }))
+        {
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-danger btn-sm ml-2">Delete</button>
+        }
     }
 </div>
 

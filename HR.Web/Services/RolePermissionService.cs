@@ -38,6 +38,13 @@ namespace HR.Web.Services
                 return true;
             }
 
+            // Any company-scoped admin can fully manage the question bank.
+            if (IsCompanyScopedAdmin(context) &&
+                string.Equals(moduleKey, RoleModuleCatalog.Questions, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
             if (!string.Equals(context.BaseRole, "Admin", StringComparison.OrdinalIgnoreCase))
             {
                 if (string.Equals(context.BaseRole, "Client", StringComparison.OrdinalIgnoreCase) &&
@@ -152,6 +159,24 @@ namespace HR.Web.Services
                    string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) &&
                    user.CompanyId.HasValue &&
                    !user.RoleDefinitionId.HasValue;
+        }
+
+        public bool CanCurrentUserManageQuestionBank()
+        {
+            return CanCurrentUserAccessModule(RoleModuleCatalog.Questions, RoleAccessLevels.Manage);
+        }
+
+        public bool CanCurrentUserEditQuestions()
+        {
+            return CanCurrentUserAccessModule(RoleModuleCatalog.Questions, RoleAccessLevels.View);
+        }
+
+        private static bool IsCompanyScopedAdmin(CurrentUserAccessContext context)
+        {
+            return context != null &&
+                   context.IsAuthenticated &&
+                   string.Equals(context.BaseRole, "Admin", StringComparison.OrdinalIgnoreCase) &&
+                   context.CompanyId.HasValue;
         }
 
         private static bool MeetsAccessRequirement(string grantedAccessLevel, string requiredAccessLevel)

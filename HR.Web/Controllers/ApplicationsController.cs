@@ -52,6 +52,7 @@ namespace HR.Web.Controllers
     [HttpPost]
     [TenantAuthorize]
     [ValidateAntiForgeryToken]
+    [ValidateInput(false)]
     public ActionResult TestQuestionnaire(int positionId, FormCollection form)
     {
         // Get position questions
@@ -152,6 +153,7 @@ namespace HR.Web.Controllers
     [HttpPost]
     [TenantAuthorize]
     [ValidateAntiForgeryToken]
+    [ValidateInput(false)]
     public ActionResult Questionnaire(int positionId, FormCollection form)
     {
         if (positionId <= 0)
@@ -196,6 +198,7 @@ namespace HR.Web.Controllers
     [HttpPost]
     [TenantAuthorize]
     [ValidateAntiForgeryToken]
+    [ValidateInput(false)]
     public ActionResult FinishQuestionnaire(ApplicationReviewViewModel model, FormCollection form)
     {
         if (model == null || model.PositionId <= 0)
@@ -299,6 +302,8 @@ namespace HR.Web.Controllers
         var profile = GetApplicantProfile(applicant.Id);
         var model = BuildApplicantProfileViewModel(position, applicant, profile);
 
+        ViewBag.ApplicationFlowTenant = ResolveApplicationFlowTenantSlug(positionId);
+
         return View("ProfileDetails", model);
     }
 
@@ -397,6 +402,30 @@ namespace HR.Web.Controllers
 
             ViewBag.CanInviteQuestionnaireSecondaryStage = false;
             return View(GetApplicantApplications(user));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [TenantAuthorize]
+        public ActionResult RepairApplicationScores()
+        {
+            var rolePermissionService = new RolePermissionService();
+            var user = GetCurrentUser();
+            if (user == null || !IsManagementUser(user))
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            if (!rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Applications, RoleAccessLevels.Manage))
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            var repairedCount = RepairBrokenApplicationScoresForCurrentTenant();
+            TempData["ApplicationEmailSuccess"] = repairedCount > 0
+                ? string.Format("Recalculated scores for {0} application(s).", repairedCount)
+                : "No applications needed score repair.";
+            return RedirectToAction("Index");
         }
 
         [TenantAuthorize]
@@ -512,8 +541,22 @@ namespace HR.Web.Controllers
 
             _uow.Applications.Add(applicationModel);
             _uow.Complete();
-            var applicantEmail = applicationModel.Applicant != null ? applicationModel.Applicant.Email : null;
-            _email.SendAsync(applicantEmail, "Application received", "We received your application.");
+
+            var applicant = applicationModel.ApplicantId > 0
+                ? _uow.Applicants.Get(applicationModel.ApplicantId)
+                : applicationModel.Applicant;
+            var position = applicationModel.PositionId > 0
+                ? _uow.Positions.Get(applicationModel.PositionId)
+                : applicationModel.Position;
+            var company = applicationModel.CompanyId.HasValue
+                ? _uow.Companies.Get(applicationModel.CompanyId.Value)
+                : null;
+            TrySendApplicationReceivedEmail(
+                applicant != null ? applicant.Email : null,
+                company,
+                applicant != null ? applicant.FullName : null,
+                position != null ? position.Title : null);
+
             return RedirectToAction("Index");
         }
 
@@ -561,41 +604,6 @@ namespace HR.Web.Controllers
             _uow.Applications.Update(applicationModel);
             _uow.Complete();
             return RedirectToAction("Index");
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
-        [RoleBasedAuthorization("Admin")]
-        public ActionResult UpdatePositionPassMark(int positionId, decimal passMark)
-        {
-            if (positionId <= 0)
-            {
-                return Json(new { success = false, message = "Invalid position selected." });
-            }
-
-            var position = _uow.Positions.Get(positionId);
-            if (position == null)
-            {
-                return Json(new { success = false, message = "Position not found." });
-            }
-
-            var tenantValidationResult = ValidatePositionTenantAccess(position, "Access Denied");
-            if (tenantValidationResult != null)
-            {
-                return new HttpStatusCodeResult(403, "Access Denied");
-            }
-
-            var normalizedPassMark = Math.Max(0m, Math.Min(100m, Math.Round(passMark, 0, MidpointRounding.AwayFromZero)));
-            position.PassMark = normalizedPassMark;
-            _uow.Positions.Update(position);
-            _uow.Complete();
-
-            return Json(new
-            {
-                success = true,
-                passMark = normalizedPassMark
-            });
         }
 
         [HttpPost]

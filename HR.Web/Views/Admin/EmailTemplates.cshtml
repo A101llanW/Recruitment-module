@@ -8,16 +8,8 @@
     ViewBag.SuppressPageHero = true;
 }
 <style>
-    /* Keep footer above editor chrome on this full-page editor screen. */
-    .tox-tinymce { z-index: 10 !important; }
-    .tox-silver-sink, .tox-tinymce-aux { z-index: 950 !important; }
-    .tox .tox-dialog-wrap {
-        inset: 0 0 88px 0 !important;
-    }
-    .tox .tox-dialog {
-        max-height: calc(100vh - 120px) !important;
-    }
-    .email-subject-compose { cursor: text; -webkit-user-modify: read-write; }
+    .email-subject-compose,
+    .email-body-compose { cursor: text; -webkit-user-modify: read-write; }
 
     .email-template-compose {
         transition: box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
@@ -33,6 +25,31 @@
     }
     .email-template-compose.email-template-editing .email-template-editing-banner {
         display: block;
+    }
+    .email-body-compose {
+        min-height: 280px;
+        overflow-y: auto;
+        line-height: 1.6;
+    }
+    .email-body-compose.email-body-compose-idle {
+        background-color: #f8f9fa;
+        cursor: pointer;
+    }
+    .email-body-compose.email-body-compose-idle:empty::before {
+        content: attr(data-placeholder);
+        color: #6c757d;
+        pointer-events: none;
+    }
+    .email-body-toolbar {
+        display: none;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    .email-template-compose.email-template-editing .email-body-toolbar {
+        display: flex;
+    }
+    .email-body-compose .hr-email-token {
+        user-select: none;
     }
 </style>
 
@@ -227,12 +244,10 @@
             <li>Use the <strong>round icon buttons</strong> to drop a field into the subject line or the message (hover for a short explanation).</li>
             <li>Fields look like <strong>pills</strong> in the editor - do not delete the pill if you still want that information in the sent email.</li>
             <li><strong>CC</strong> is chosen when someone sends the email, not in this screen.</li>
-            <li>Use <strong>Edit</strong> to load the rich message editor for a template; <strong>Save</strong> stores all templates on this page.</li>
+            <li>Use <strong>Edit</strong> to compose the message for a template; a formatting toolbar appears while you work. <strong>Save</strong> stores all templates on this page.</li>
             <li>While you work, the template shows a blue <strong>Edit mode</strong> banner and border so you always know which one is active.</li>
         </ul>
     </div>
-
-    <div id="emailTemplatesEditorStatus" class="alert alert-warning d-none mb-4" role="alert"></div>
 
     @using (Html.BeginForm("SaveEmailTemplates", "Admin", new { tenant = ViewContext.RouteData.Values["tenant"] }, FormMethod.Post, new { id = "emailTemplatesForm" }))
     {
@@ -242,8 +257,8 @@
         {
             var defaultSubjectId = "defaultSubjectTemplate_" + i;
             var defaultBodyId = "defaultBodyTemplate_" + i;
-            var bodyPreviewFrameId = "defaultBodyTemplatePreview_" + i;
             var subjectComposeId = "subjectCompose_" + i;
+            var bodyComposeId = "bodyCompose_" + i;
 
             <div class="card mb-4 shadow-sm">
                 <div class="card-header bg-light">
@@ -265,7 +280,8 @@
                          data-template-index="@i"
                          data-subject-compose-id="@subjectComposeId"
                          data-subject-storage-id="@defaultSubjectId"
-                         data-body-id="@defaultBodyId">
+                         data-body-storage-id="@defaultBodyId"
+                         data-body-compose-id="@bodyComposeId">
 
                         <div class="email-template-editing-banner alert alert-primary mb-3 py-2 px-3" role="status" aria-live="polite">
                             <strong><i class="fas fa-pen mr-2" aria-hidden="true"></i>Edit mode</strong>
@@ -360,9 +376,8 @@
                                 <div class="d-flex flex-shrink-0 align-items-center" style="gap:8px;">
                                     <button type="button"
                                             class="btn btn-outline-primary btn-sm email-template-edit-btn"
-                                            data-body-id="@defaultBodyId"
-                                            data-template-index="@i"
-                                            title="Load the rich message editor for this template">
+                                            data-body-compose-id="@bodyComposeId"
+                                            title="Edit the message for this template">
                                         <i class="fas fa-edit mr-1" aria-hidden="true"></i>Edit
                                     </button>
                                     <button type="submit"
@@ -373,13 +388,32 @@
                                     </button>
                                 </div>
                             </div>
-                            <textarea name="@Html.NameFor(m => m.Templates[i].DefaultBodyTemplate)"
-                                      id="@defaultBodyId"
-                                      class="email-template-body-html"
-                                      data-template-index="@i"
-                                      autocomplete="off"
-                                      style="width:100%;min-height:280px;resize:vertical;"
-                                      maxlength="200000"></textarea>
+                            @Html.TextAreaFor(
+                                m => m.Templates[i].DefaultBodyTemplate,
+                                new { id = defaultBodyId, @class = "email-body-storage", rows = 8, style = "position:absolute;left:-9999px;width:1px;height:1px;opacity:0;overflow:hidden;", autocomplete = "off", maxlength = 200000 })
+                            <div class="email-body-toolbar btn-toolbar" role="toolbar" aria-label="Message formatting">
+                                <div class="btn-group btn-group-sm mr-1" role="group" aria-label="Text style">
+                                    <button type="button" class="btn btn-outline-secondary email-body-toolbar-btn" data-cmd="bold" title="Bold" aria-label="Bold"><i class="fas fa-bold" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-body-toolbar-btn" data-cmd="italic" title="Italic" aria-label="Italic"><i class="fas fa-italic" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-body-toolbar-btn" data-cmd="underline" title="Underline" aria-label="Underline"><i class="fas fa-underline" aria-hidden="true"></i></button>
+                                </div>
+                                <div class="btn-group btn-group-sm mr-1" role="group" aria-label="Lists">
+                                    <button type="button" class="btn btn-outline-secondary email-body-toolbar-btn" data-cmd="insertUnorderedList" title="Bullet list" aria-label="Bullet list"><i class="fas fa-list-ul" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-body-toolbar-btn" data-cmd="insertOrderedList" title="Numbered list" aria-label="Numbered list"><i class="fas fa-list-ol" aria-hidden="true"></i></button>
+                                </div>
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Link and clear">
+                                    <button type="button" class="btn btn-outline-secondary email-body-toolbar-btn" data-cmd="link" title="Insert link" aria-label="Insert link"><i class="fas fa-link" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-body-toolbar-btn" data-cmd="removeFormat" title="Clear formatting" aria-label="Clear formatting"><i class="fas fa-eraser" aria-hidden="true"></i></button>
+                                </div>
+                            </div>
+                            <div id="@bodyComposeId"
+                                 class="email-body-compose form-control email-body-compose-idle"
+                                 contenteditable="false"
+                                 role="textbox"
+                                 aria-multiline="true"
+                                 data-body-storage-id="@defaultBodyId"
+                                 data-placeholder="Click Edit to compose the message for this template."
+                                 tabindex="0"></div>
                             <script type="application/json" id="emailBodyInitialJson_@i">@Html.Raw(JsonForInlineScript(Model.Templates[i].DefaultBodyTemplate))</script>
                         </div>
                     </div>
@@ -397,65 +431,11 @@
 
 <script>
     (function () {
-        var editorInitState = {};
-        var editorInitWaiters = {};
-        var tinymceScriptPromise = null;
-        var tinymceCdnUrl = 'https://cdn.jsdelivr.net/npm/tinymce@6.8.3/tinymce.min.js';
+        var activeBodyComposeId = null;
+        var subjectSelectionRanges = {};
+        var bodySelectionRanges = {};
 
-        function showEditorUnavailable(message) {
-            var status = document.getElementById('emailTemplatesEditorStatus');
-            if (!status) {
-                return;
-            }
-            status.textContent = message || 'The rich text editor could not be loaded. Check your network connection or try again later. Subject lines can still be edited.';
-            status.classList.remove('d-none');
-        }
-
-        function loadTinyMceScript() {
-            if (typeof tinymce !== 'undefined') {
-                return Promise.resolve();
-            }
-            if (tinymceScriptPromise) {
-                return tinymceScriptPromise;
-            }
-
-            tinymceScriptPromise = new Promise(function (resolve, reject) {
-                var script = document.createElement('script');
-                script.src = tinymceCdnUrl;
-                script.referrerPolicy = 'origin';
-                script.async = true;
-                script.onload = function () {
-                    if (typeof tinymce !== 'undefined') {
-                        resolve();
-                    } else {
-                        reject(new Error('tinymce unavailable after load'));
-                    }
-                };
-                script.onerror = function () {
-                    reject(new Error('tinymce script failed to load'));
-                };
-                document.head.appendChild(script);
-            });
-
-            return tinymceScriptPromise;
-        }
-
-        function whenTinyMceReady(callback) {
-            if (typeof tinymce !== 'undefined') {
-                callback();
-                return;
-            }
-
-            loadTinyMceScript()
-                .then(function () {
-                    callback();
-                })
-                .catch(function () {
-                    showEditorUnavailable('The rich text editor script failed to load. Subject lines can still be edited.');
-                });
-        }
-
-        function readInitialBodyHtml(idx, bid) {
+        function readInitialBodyHtml(idx, storageId) {
             var jsonEl = document.getElementById('emailBodyInitialJson_' + idx);
             var html = '';
             try {
@@ -472,7 +452,7 @@
                 html = '';
             }
             if (!html || !html.length) {
-                var ta = document.getElementById(bid);
+                var ta = document.getElementById(storageId);
                 if (ta && ta.value && ta.value.length) {
                     html = ta.value;
                 }
@@ -480,217 +460,10 @@
             return html && html.length ? html : '<p></p>';
         }
 
-        function queueEditorWaiter(bid, callback) {
-            if (!editorInitWaiters[bid]) {
-                editorInitWaiters[bid] = [];
-            }
-            if (callback) {
-                editorInitWaiters[bid].push(callback);
-            }
-        }
-
-        function flushEditorWaiters(bid, editor) {
-            var waiters = editorInitWaiters[bid] || [];
-            editorInitWaiters[bid] = [];
-            waiters.forEach(function (cb) {
-                try {
-                    cb(editor);
-                } catch (err) { /* ignore */ }
-            });
-        }
-
-        function ensureEmailTemplateTinyMce(idx, bid, compose, done) {
-            if (!bid) {
-                if (done) done(null);
-                return;
-            }
-
-            var existing = getTinyMceEditorForTextareaId(bid);
-            if (existing) {
-                if (done) done(existing);
-                return;
-            }
-
-            if (editorInitState[bid] === 'initializing') {
-                queueEditorWaiter(bid, done);
-                return;
-            }
-
-            whenTinyMceReady(function () {
-                existing = getTinyMceEditorForTextareaId(bid);
-                if (existing) {
-                    if (done) done(existing);
-                    return;
-                }
-
-                editorInitState[bid] = 'initializing';
-                queueEditorWaiter(bid, done);
-
-                tinymce.init({
-                    selector: '#' + bid,
-                    height: 340,
-                    menubar: false,
-                    branding: false,
-                    plugins: 'link lists autoresize noneditable',
-                    noneditable_class: 'mceNonEditable',
-                    toolbar: 'undo redo | styles | bold italic underline | alignleft aligncenter alignright | bullist numlist | link removeformat',
-                    content_style: 'body { font-family: Segoe UI, Arial, sans-serif; font-size: 15px; line-height: 1.6; }',
-                    entity_encoding: 'raw',
-                    valid_elements: '*[*]',
-                    verify_html: false,
-                    convert_urls: false,
-                    setup: function (editor) {
-                        editor.on('focus', function () {
-                            markEmailComposeEditing(compose);
-                            saveBodySelection(editor);
-                        });
-                        editor.on('NodeChange keyup mouseup', function () {
-                            saveBodySelection(editor);
-                        });
-                        editor.on('change keyup SetContent Undo Redo', function () {
-                            editor.save();
-                        });
-                    },
-                    init_instance_callback: function (editor) {
-                        editor.setContent(readInitialBodyHtml(idx, bid), { format: 'html' });
-                        editor.save();
-                        editorInitState[bid] = 'ready';
-                        flushEditorWaiters(bid, editor);
-                    }
-                }).catch(function () {
-                    editorInitState[bid] = 'failed';
-                    showEditorUnavailable();
-                    flushEditorWaiters(bid, null);
-                });
-            });
-        }
-
-        function markEmailComposeEditing(compose) {
-            if (!compose) {
-                return;
-            }
-            document.querySelectorAll('.email-template-compose').forEach(function (c) {
-                c.classList.toggle('email-template-editing', c === compose);
-            });
-        }
-
-        function clearEmailComposeEditing() {
-            document.querySelectorAll('.email-template-compose.email-template-editing').forEach(function (c) {
-                c.classList.remove('email-template-editing');
-            });
-        }
-
-        var subjectSelectionRanges = {};
-        var bodySelectionBookmarks = {};
-
-        function saveSubjectSelection(div) {
-            if (!div || !div.id) {
-                return;
-            }
-            var sel = window.getSelection ? window.getSelection() : null;
-            if (!sel || sel.rangeCount === 0) {
-                return;
-            }
-            var range = sel.getRangeAt(0);
-            if (!range) {
-                return;
-            }
-            var container = range.commonAncestorContainer;
-            if (container && container.nodeType === 3) {
-                container = container.parentNode;
-            }
-            if (!container || !div.contains(container)) {
-                return;
-            }
-            subjectSelectionRanges[div.id] = range.cloneRange();
-        }
-
-        function restoreSubjectSelection(div) {
-            if (!div || !div.id) {
-                return false;
-            }
-            var range = subjectSelectionRanges[div.id];
-            var sel = window.getSelection ? window.getSelection() : null;
-            if (!range || !sel) {
-                return false;
-            }
-            try {
-                sel.removeAllRanges();
-                sel.addRange(range);
-                return true;
-            } catch (err) {
-                return false;
-            }
-        }
-
-        function saveBodySelection(editor) {
-            if (!editor || !editor.id || !editor.selection) {
-                return;
-            }
-            try {
-                bodySelectionBookmarks[editor.id] = editor.selection.getBookmark(2, true);
-            } catch (err) { /* ignore */ }
-        }
-
-        document.addEventListener('focusin', function (ev) {
-            var t = ev.target;
-            if (!t || !t.closest) {
-                return;
-            }
-            var compose = t.closest('.email-template-compose');
-            if (compose) {
-                markEmailComposeEditing(compose);
-            }
-        }, true);
-
-        document.addEventListener('mousedown', function (ev) {
-            var t = ev.target;
-            if (!t || !t.closest) {
-                return;
-            }
-            if (t.closest('.email-template-compose') ||
-                t.closest('.tox-tinymce-aux') ||
-                t.closest('.tox-dialog-wrap') ||
-                t.closest('.tox-collection')) {
-                return;
-            }
-            clearEmailComposeEditing();
-        }, true);
-
         function clearElement(el) {
             while (el && el.firstChild) {
                 el.removeChild(el.firstChild);
             }
-        }
-
-        function cloneChipNodeFromButton(btn) {
-            if (!btn) {
-                return null;
-            }
-            var tpl = btn.nextElementSibling;
-            if (!tpl || !tpl.tagName || tpl.tagName.toUpperCase() !== 'TEMPLATE') {
-                return null;
-            }
-            if (!tpl.content || !tpl.content.firstElementChild) {
-                return null;
-            }
-            return tpl.content.firstElementChild.cloneNode(true);
-        }
-
-        function readComposeHtml(div) {
-            if (!div) {
-                return '';
-            }
-            var html = '';
-            for (var i = 0; i < div.childNodes.length; i++) {
-                var node = div.childNodes[i];
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    html += node.outerHTML;
-                } else if (node.nodeType === Node.TEXT_NODE) {
-                    html += node.textContent;
-                }
-            }
-            return html;
         }
 
         function writeComposeHtml(div, html) {
@@ -709,39 +482,185 @@
             }
         }
 
+        function readComposeHtml(div) {
+            if (!div) {
+                return '';
+            }
+            var html = '';
+            for (var i = 0; i < div.childNodes.length; i++) {
+                var node = div.childNodes[i];
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    html += node.outerHTML;
+                } else if (node.nodeType === Node.TEXT_NODE) {
+                    html += node.textContent;
+                }
+            }
+            return html;
+        }
+
+        function saveSelection(div, store) {
+            if (!div || !div.id) {
+                return;
+            }
+            var sel = window.getSelection ? window.getSelection() : null;
+            if (!sel || sel.rangeCount === 0) {
+                return;
+            }
+            var range = sel.getRangeAt(0);
+            if (!range) {
+                return;
+            }
+            var container = range.commonAncestorContainer;
+            if (container && container.nodeType === 3) {
+                container = container.parentNode;
+            }
+            if (!container || !div.contains(container)) {
+                return;
+            }
+            store[div.id] = range.cloneRange();
+        }
+
+        function restoreSelection(div, store) {
+            if (!div || !div.id) {
+                return false;
+            }
+            var range = store[div.id];
+            var sel = window.getSelection ? window.getSelection() : null;
+            if (!range || !sel) {
+                return false;
+            }
+            try {
+                sel.removeAllRanges();
+                sel.addRange(range);
+                return true;
+            } catch (err) {
+                return false;
+            }
+        }
+
+        function saveSubjectSelection(div) {
+            saveSelection(div, subjectSelectionRanges);
+        }
+
+        function restoreSubjectSelection(div) {
+            return restoreSelection(div, subjectSelectionRanges);
+        }
+
+        function saveBodySelection(div) {
+            saveSelection(div, bodySelectionRanges);
+        }
+
+        function restoreBodySelection(div) {
+            return restoreSelection(div, bodySelectionRanges);
+        }
+
+        function getBodyComposeDiv(compose) {
+            if (!compose) {
+                return null;
+            }
+            var composeId = compose.getAttribute('data-body-compose-id');
+            return composeId ? document.getElementById(composeId) : null;
+        }
+
+        function hydrateBodyCompose(compose) {
+            var div = getBodyComposeDiv(compose);
+            if (!div || div.dataset.hydrated === '1') {
+                return div;
+            }
+            var idx = compose.getAttribute('data-template-index');
+            var storageId = compose.getAttribute('data-body-storage-id');
+            writeComposeHtml(div, readInitialBodyHtml(idx, storageId));
+            div.dataset.hydrated = '1';
+            return div;
+        }
+
+        function syncBodyStorage(compose) {
+            if (!compose) {
+                return;
+            }
+            var storageId = compose.getAttribute('data-body-storage-id');
+            var div = getBodyComposeDiv(compose);
+            var ta = storageId ? document.getElementById(storageId) : null;
+            if (ta && div && div.dataset.hydrated === '1') {
+                ta.value = readComposeHtml(div);
+            }
+        }
+
+        function markEmailComposeEditing(compose) {
+            if (!compose) {
+                return;
+            }
+            document.querySelectorAll('.email-template-compose').forEach(function (c) {
+                c.classList.toggle('email-template-editing', c === compose);
+            });
+        }
+
+        function clearEmailComposeEditing() {
+            document.querySelectorAll('.email-template-compose.email-template-editing').forEach(function (c) {
+                c.classList.remove('email-template-editing');
+            });
+        }
+
+        function activateBodyEdit(compose) {
+            if (!compose) {
+                return null;
+            }
+            var div = hydrateBodyCompose(compose);
+            if (!div) {
+                return null;
+            }
+            if (activeBodyComposeId && activeBodyComposeId !== div.id) {
+                var activeCompose = document.querySelector('.email-template-compose[data-body-compose-id="' + activeBodyComposeId + '"]');
+                if (activeCompose) {
+                    deactivateBodyEdit(activeCompose);
+                }
+            }
+            div.contentEditable = 'true';
+            div.classList.remove('email-body-compose-idle');
+            activeBodyComposeId = div.id;
+            markEmailComposeEditing(compose);
+            return div;
+        }
+
+        function deactivateBodyEdit(compose) {
+            if (!compose) {
+                return;
+            }
+            syncBodyStorage(compose);
+            var div = getBodyComposeDiv(compose);
+            if (div) {
+                div.contentEditable = 'false';
+                div.classList.add('email-body-compose-idle');
+                if (activeBodyComposeId === div.id) {
+                    activeBodyComposeId = null;
+                }
+            }
+        }
+
+        function deactivateAllBodyEdits() {
+            document.querySelectorAll('.email-template-compose').forEach(function (compose) {
+                deactivateBodyEdit(compose);
+            });
+            clearEmailComposeEditing();
+        }
+
+        function cloneChipNodeFromButton(btn) {
+            if (!btn) {
+                return null;
+            }
+            var tpl = btn.nextElementSibling;
+            if (!tpl || !tpl.tagName || tpl.tagName.toUpperCase() !== 'TEMPLATE') {
+                return null;
+            }
+            if (!tpl.content || !tpl.content.firstElementChild) {
+                return null;
+            }
+            return tpl.content.firstElementChild.cloneNode(true);
+        }
+
         function getChipHtmlFromButton(btn) {
             var chipNode = cloneChipNodeFromButton(btn);
             return chipNode ? chipNode.outerHTML : '';
-        }
-
-        function getTinyMceEditorForTextareaId(textareaId) {
-            if (typeof tinymce === 'undefined' || !textareaId) {
-                return null;
-            }
-            var ed = tinymce.get(textareaId);
-            if (ed) {
-                return ed;
-            }
-            var list = tinymce.editors;
-            if (!list || !list.length) {
-                return null;
-            }
-            for (var i = 0; i < list.length; i++) {
-                var cand = list[i];
-                if (cand && cand.id === textareaId) {
-                    return cand;
-                }
-            }
-            for (var j = 0; j < list.length; j++) {
-                var c2 = list[j];
-                try {
-                    var el = c2.getElement && c2.getElement();
-                    if (el && el.id === textareaId) {
-                        return c2;
-                    }
-                } catch (ex) { /* ignore */ }
-            }
-            return null;
         }
 
         function insertChipIntoSubject(compose, btn) {
@@ -778,58 +697,98 @@
             saveSubjectSelection(div);
         }
 
-        function insertChipIntoBody(compose, chipHtml, textareaId) {
-            if (!chipHtml || !textareaId || !compose) {
+        function insertChipIntoBody(compose, chipHtml) {
+            if (!chipHtml || !compose) {
                 return;
             }
-            function runInsert(ed) {
-                if (!ed || !ed.getBody) {
-                    return;
-                }
-                ed.focus();
-                var bookmark = bodySelectionBookmarks[ed.id];
-                if (bookmark && ed.selection) {
-                    try {
-                        ed.selection.moveToBookmark(bookmark);
-                    } catch (bmErr) { /* ignore */ }
-                }
-                var body = ed.getBody();
-                if (!body) {
-                    return;
-                }
-                if (!body.hasChildNodes()) {
-                    ed.setContent('<p>' + chipHtml + '</p>', { format: 'html' });
-                    ed.save();
-                    return;
-                }
-                try {
-                    ed.insertContent(chipHtml, { format: 'html' });
-                } catch (insEx) {
-                    try {
-                        ed.execCommand('mceInsertContent', false, chipHtml);
-                    } catch (cmdEx) {
-                        ed.selection.setContent(chipHtml, { format: 'html' });
+            var div = activateBodyEdit(compose);
+            if (!div) {
+                return;
+            }
+            div.focus();
+            restoreBodySelection(div);
+            try {
+                document.execCommand('insertHTML', false, chipHtml);
+            } catch (e) {
+                var sel = window.getSelection ? window.getSelection() : null;
+                if (sel && sel.rangeCount > 0) {
+                    var range = sel.getRangeAt(0);
+                    range.deleteContents();
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(chipHtml, 'text/html');
+                    var chip = doc.body.firstChild;
+                    if (chip) {
+                        range.insertNode(document.importNode(chip, true));
+                    }
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                } else {
+                    var wrapper = document.createElement('p');
+                    wrapper.innerHTML = chipHtml;
+                    while (wrapper.firstChild) {
+                        div.appendChild(wrapper.firstChild);
                     }
                 }
-                ed.save();
-                saveBodySelection(ed);
             }
+            syncBodyStorage(compose);
+            saveBodySelection(div);
+        }
 
-            var idx = compose.getAttribute('data-template-index');
-            var editor = getTinyMceEditorForTextareaId(textareaId);
-            if (editor) {
-                runInsert(editor);
+        function runBodyToolbarCommand(compose, cmd) {
+            var div = activateBodyEdit(compose);
+            if (!div) {
+                return;
+            }
+            div.focus();
+            restoreBodySelection(div);
+            if (cmd === 'link') {
+                var url = window.prompt('Enter link URL:', 'https://');
+                if (url && url.trim()) {
+                    document.execCommand('createLink', false, url.trim());
+                }
+            } else if (cmd) {
+                document.execCommand(cmd, false, null);
+            }
+            syncBodyStorage(compose);
+            saveBodySelection(div);
+        }
+
+        document.addEventListener('focusin', function (ev) {
+            var t = ev.target;
+            if (!t || !t.closest) {
+                return;
+            }
+            var compose = t.closest('.email-template-compose');
+            if (compose) {
+                markEmailComposeEditing(compose);
+            }
+        }, true);
+
+        document.addEventListener('mousedown', function (ev) {
+            var t = ev.target;
+            if (!t || !t.closest) {
+                return;
+            }
+            if (t.closest('.email-template-compose') ||
+                t.closest('.email-body-toolbar')) {
+                return;
+            }
+            deactivateAllBodyEdits();
+        }, true);
+
+        document.addEventListener('click', function (ev) {
+            var tbBtn = ev.target.closest('.email-body-toolbar-btn');
+            if (tbBtn) {
+                ev.preventDefault();
+                var compose = tbBtn.closest('.email-template-compose');
+                if (!compose) {
+                    return;
+                }
+                runBodyToolbarCommand(compose, tbBtn.getAttribute('data-cmd'));
                 return;
             }
 
-            ensureEmailTemplateTinyMce(idx, textareaId, compose, function (ed) {
-                if (ed) {
-                    runInsert(ed);
-                }
-            });
-        }
-
-        document.addEventListener('click', function (ev) {
             var subBtn = ev.target.closest('.email-template-token-subj');
             if (subBtn) {
                 ev.preventDefault();
@@ -850,9 +809,8 @@
                     return;
                 }
                 var html = getChipHtmlFromButton(bodyBtn);
-                var bid = composeB.getAttribute('data-body-id');
-                if (html && bid) {
-                    insertChipIntoBody(composeB, html, bid);
+                if (html) {
+                    insertChipIntoBody(composeB, html);
                 }
             }
         });
@@ -875,29 +833,8 @@
         }
 
         function syncAllBodyStorages() {
-            document.querySelectorAll('#emailTemplatesForm textarea.email-template-body-html').forEach(function (ta) {
-                if (!ta || !ta.id) {
-                    return;
-                }
-                var ed = getTinyMceEditorForTextareaId(ta.id);
-                if (ed) {
-                    ed.save();
-                    return;
-                }
-                var idx = ta.getAttribute('data-template-index');
-                if (idx === null || idx === '') {
-                    return;
-                }
-                ta.value = readInitialBodyHtml(idx, ta.id);
-            });
-        }
-
-        function primeBodyTextareaPreviews() {
-            document.querySelectorAll('#emailTemplatesForm textarea.email-template-body-html').forEach(function (ta) {
-                if (!ta) {
-                    return;
-                }
-                ta.placeholder = 'Click Edit to load the rich message editor for this template.';
+            document.querySelectorAll('.email-template-compose').forEach(function (compose) {
+                syncBodyStorage(compose);
             });
         }
 
@@ -913,13 +850,12 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
-            /* Layout may disable POST textareas for module read-only before this runs; editors need enabled targets. */
-            document.querySelectorAll('#emailTemplatesForm textarea.email-template-body-html, #emailTemplatesForm textarea.email-subject-storage').forEach(function (ta) {
+            document.querySelectorAll('#emailTemplatesForm textarea.email-body-storage, #emailTemplatesForm textarea.email-subject-storage').forEach(function (ta) {
                 ta.removeAttribute('disabled');
-                ta.readOnly = false;
                 ta.classList.remove('readonly-module-disabled');
                 ta.style.pointerEvents = '';
                 ta.style.opacity = '';
+                ta.readOnly = false;
             });
 
             scheduleIdleWork(function () {
@@ -940,31 +876,45 @@
                     div.addEventListener('focus', function () { saveSubjectSelection(div); });
                     div.addEventListener('blur', function () { saveSubjectSelection(div); });
                 });
+
+                document.querySelectorAll('.email-body-compose').forEach(function (div) {
+                    div.addEventListener('input', function () {
+                        var compose = div.closest('.email-template-compose');
+                        syncBodyStorage(compose);
+                        saveBodySelection(div);
+                    });
+                    div.addEventListener('keyup', function () { saveBodySelection(div); });
+                    div.addEventListener('mouseup', function () { saveBodySelection(div); });
+                    div.addEventListener('focus', function () { saveBodySelection(div); });
+                    div.addEventListener('blur', function () { saveBodySelection(div); });
+                });
             });
 
             document.querySelectorAll('.email-template-edit-btn').forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     var composeEl = btn.closest('.email-template-compose');
-                    if (composeEl) {
-                        markEmailComposeEditing(composeEl);
-                    }
-                    var bid = btn.getAttribute('data-body-id');
-                    var idx = btn.getAttribute('data-template-index');
-                    if (!bid || idx === null || idx === '') {
+                    if (!composeEl) {
                         return;
                     }
-                    btn.disabled = true;
-                    ensureEmailTemplateTinyMce(idx, bid, composeEl, function (ed) {
-                        btn.disabled = false;
-                        if (!ed) {
-                            return;
-                        }
-                        ed.focus();
-                        var host = ed.getContainer();
-                        if (host && host.scrollIntoView) {
-                            host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                        }
-                    });
+                    var div = activateBodyEdit(composeEl);
+                    if (!div) {
+                        return;
+                    }
+                    div.focus();
+                    if (div.scrollIntoView) {
+                        div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                });
+            });
+
+            document.querySelectorAll('.email-body-compose.email-body-compose-idle').forEach(function (div) {
+                div.addEventListener('click', function () {
+                    var composeEl = div.closest('.email-template-compose');
+                    if (!composeEl || div.contentEditable === 'true') {
+                        return;
+                    }
+                    activateBodyEdit(composeEl);
+                    div.focus();
                 });
             });
 
@@ -973,13 +923,8 @@
                 form.addEventListener('submit', function () {
                     syncSubjectStorages();
                     syncAllBodyStorages();
-                    if (typeof tinymce !== 'undefined') {
-                        tinymce.triggerSave();
-                    }
                 });
             }
-
-            primeBodyTextareaPreviews();
         });
     })();
 </script>

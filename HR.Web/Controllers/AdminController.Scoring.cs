@@ -153,13 +153,28 @@ namespace HR.Web.Controllers
                 var updatedCount = 0;
                 foreach (var application in applications)
                 {
-                    var newScore = _scoringService.CalculateApplicationScore(application);
-                    if (application.Score != newScore)
+                    try
                     {
+                        var newScore = _scoringService.CalculateApplicationScore(application);
+                        var needsUpdate = application.Score != newScore
+                            || string.IsNullOrEmpty(application.ScoreReason)
+                            || application.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase);
+                        if (!needsUpdate)
+                        {
+                            continue;
+                        }
+
                         application.Score = newScore;
                         application.ScoreReason = "Questionnaire score recalculated.";
                         _uow.Applications.Update(application);
                         updatedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        application.ScoreReason = string.Format(
+                            "Scoring failed: {0}. Use Repair Scoring Errors on the Applications page or contact support.",
+                            ex.Message);
+                        _uow.Applications.Update(application);
                     }
                 }
 
@@ -226,6 +241,7 @@ namespace HR.Web.Controllers
                 var scopedApplication = application;
                 var newScore = _scoringService.CalculateApplicationScore(scopedApplication);
                 scopedApplication.Score = newScore;
+                scopedApplication.ScoreReason = "Questionnaire score recalculated.";
                 _uow.Applications.Update(scopedApplication);
                 _uow.Complete();
 
@@ -269,12 +285,28 @@ namespace HR.Web.Controllers
 
                 foreach (var application in allApplications)
                 {
-                    var newScore = _scoringService.CalculateApplicationScore(application);
-                    if (application.Score != newScore)
+                    try
                     {
+                        var newScore = _scoringService.CalculateApplicationScore(application);
+                        var needsUpdate = application.Score != newScore
+                            || string.IsNullOrEmpty(application.ScoreReason)
+                            || application.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase);
+                        if (!needsUpdate)
+                        {
+                            continue;
+                        }
+
                         application.Score = newScore;
+                        application.ScoreReason = "Questionnaire score recalculated.";
                         _uow.Applications.Update(application);
                         updatedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        application.ScoreReason = string.Format(
+                            "Scoring failed: {0}. Use Repair Scoring Errors on the Applications page or contact support.",
+                            ex.Message);
+                        _uow.Applications.Update(application);
                     }
                 }
 

@@ -118,9 +118,7 @@ namespace HR.Web.Controllers
             var positionTitle = string.IsNullOrWhiteSpace(position.Title) ? "this position" : position.Title.Trim();
 
             var questionnairePath = BuildQuestionnaireInvitationPath(company, position.Id);
-            var baseUrl = ExternalUrlHelper.GetBaseUri(Request);
-            var baseUri = EnsureQuestionnaireInviteBaseUrl(baseUrl);
-            var stageLink = new Uri(baseUri, questionnairePath.TrimStart('/')).ToString();
+            var stageLink = ExternalUrlHelper.ToAbsoluteUrl(Request, questionnairePath);
 
             try
             {
@@ -143,11 +141,13 @@ namespace HR.Web.Controllers
                     return RedirectToApplicationsIndex();
                 }
 
-                var emailContent = rendered;
+                var bodyHtml = EmailTemplateCatalog.EnsureQuestionnaireStageLinkInBody(
+                    rendered.BodyHtml ?? string.Empty,
+                    encodedLink);
                 await _email.SendCriticalAsync(
                     recipientEmail.Trim(),
-                    emailContent.Subject ?? "Questionnaire invitation",
-                    WrapCandidateEmailDocument(emailContent.BodyHtml ?? string.Empty));
+                    rendered.Subject ?? "Questionnaire invitation",
+                    WrapCandidateEmailDocument(bodyHtml));
 
                 TempData["SuccessMessage"] = openedMsg + " Invitation email sent.";
             }
@@ -174,17 +174,6 @@ namespace HR.Web.Controllers
             }
 
             return Url.Action("Questionnaire", "Applications", new { positionId = positionId }) ?? string.Empty;
-        }
-
-        private static Uri EnsureQuestionnaireInviteBaseUrl(Uri value)
-        {
-            if (value == null)
-            {
-                return new Uri("http://localhost/", UriKind.Absolute);
-            }
-
-            var text = value.ToString();
-            return new Uri(text.EndsWith("/", StringComparison.Ordinal) ? text : text + "/", UriKind.Absolute);
         }
     }
 }

@@ -174,7 +174,10 @@
         else
         {
             <li class="nav-item"><a class="nav-link app-nav-top-link" href="@Model.LoginUrl"><i class="fas fa-sign-in-alt d-lg-none" aria-hidden="true"></i> Login</a></li>
-            <li class="nav-item"><a class="nav-link app-nav-top-link" href="@Model.RegisterUrl"><i class="fas fa-user-plus d-lg-none" aria-hidden="true"></i> Register</a></li>
+            if (!string.IsNullOrEmpty(Model.TenantToken))
+            {
+                <li class="nav-item"><a class="nav-link app-nav-top-link" href="@Model.RegisterUrl"><i class="fas fa-user-plus d-lg-none" aria-hidden="true"></i> Register</a></li>
+            }
         }
     </ul>
 </div>

@@ -159,9 +159,9 @@
             <label for="positionFilter" class="mr-2">Select Position:</label>
             <select name="positionId" id="positionFilter" class="position-select mr-2">
                 <option value="">-- All Positions --</option>
-                @if (Model?.Positions != null)
+                @if (Model != null && Model.Positions != null)
                 {
-                    @foreach (var pos in Model.Positions)
+                    foreach (var pos in Model.Positions)
                     {
                         <option value="@pos.Id" @(ViewBag.SelectedPositionId == pos.Id ? "selected" : "")>
                             @pos.Title
@@ -174,7 +174,7 @@
     </div>
 
     <!-- Candidates by Position -->
-    @if (Model?.CandidatesByPosition != null && Model.CandidatesByPosition.Count > 0)
+    @if (Model != null && Model.CandidatesByPosition != null && Model.CandidatesByPosition.Count > 0)
     {
         foreach (var positionGroup in Model.CandidatesByPosition)
         {
@@ -182,7 +182,7 @@
                 <div class="position-header" onclick="togglePositionCandidates(this)">
                     <div>
                         <h4>@positionGroup.Key.Title</h4>
-                        <small style="color: #666;">@positionGroup.Key.Department?.Name</small>
+                        <small style="color: #666;">@(positionGroup.Key.Department != null ? positionGroup.Key.Department.Name : "")</small>
                     </div>
                     <div style="display: flex; align-items: center; gap: 1rem;">
                         <span class="position-badge">@positionGroup.Value.Count applicant@(positionGroup.Value.Count != 1 ? "s" : "")</span>

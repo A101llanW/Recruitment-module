@@ -2,7 +2,8 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Profile Details";
-    var tenantToken = ViewContext.RouteData.Values["tenant"] as string;
+    var tenantToken = ViewBag.ApplicationFlowTenant as string
+        ?? ViewContext.RouteData.Values["tenant"] as string;
     var employmentTypeOptions = new[]
     {
         "Full-time",
@@ -90,6 +91,8 @@
 
     Func<string, string> textOrDash = value => string.IsNullOrWhiteSpace(value) ? "-" : value;
     Func<DateTime?, string> dateOrDash = value => value.HasValue ? value.Value.ToString("yyyy-MM-dd") : "-";
+    Func<decimal?, string> experienceInputValue = value =>
+        value.HasValue ? value.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
 }
 
 <style>
@@ -204,14 +207,26 @@
                 <div class="form-row">
                     <div class="form-group col-md-6">
                         @Html.LabelFor(m => m.TotalYearsExperience, new { @class = "required-field" })
-                        @Html.TextBoxFor(m => m.TotalYearsExperience, new { @class = "form-control", type = "number", step = "0.5", min = "0" })
+                        <input type="number"
+                               class="form-control"
+                               step="0.5"
+                               min="0"
+                               id="@Html.IdFor(m => m.TotalYearsExperience)"
+                               name="@Html.NameFor(m => m.TotalYearsExperience)"
+                               value="@experienceInputValue(Model.TotalYearsExperience)" />
                         @Html.ValidationMessageFor(m => m.TotalYearsExperience, "", new { @class = "text-danger" })
                     </div>
                     @if (Model.IsTechnical)
                     {
                         <div class="form-group col-md-6">
                             @Html.LabelFor(m => m.RelevantYearsExperience, new { @class = "required-field" })
-                            @Html.TextBoxFor(m => m.RelevantYearsExperience, new { @class = "form-control", type = "number", step = "0.5", min = "0" })
+                            <input type="number"
+                                   class="form-control"
+                                   step="0.5"
+                                   min="0"
+                                   id="@Html.IdFor(m => m.RelevantYearsExperience)"
+                                   name="@Html.NameFor(m => m.RelevantYearsExperience)"
+                                   value="@experienceInputValue(Model.RelevantYearsExperience)" />
                             @Html.ValidationMessageFor(m => m.RelevantYearsExperience, "", new { @class = "text-danger" })
                         </div>
                     }

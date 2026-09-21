@@ -1,0 +1,8 @@
+﻿2026-09-09T08:38:00.1124196+03:00 ELEVATED_START (PID 2900)
+2026-09-09T08:38:00.1443374+03:00 Running as admin: True
+2026-09-09T08:38:06.2694746+03:00 Stopped app pool Hirehub_Pool
+2026-09-09T08:38:06.3283858+03:00 Set customErrors mode=Off and compilation debug=true
+2026-09-09T08:38:06.3345717+03:00 Set httpErrors existingResponse=PassThrough errorMode=Detailed
+2026-09-09T08:38:06.4033141+03:00 Saved C:\inetpub\wwwroot\Hirehub\Web.config
+2026-09-09T08:38:08.4617706+03:00 Started and recycled app pool Hirehub_Pool
+2026-09-09T08:38:08.4696136+03:00 DETAILED_ERRORS_OK

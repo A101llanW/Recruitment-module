@@ -222,6 +222,7 @@
     <Compile Include="ViewModels\UserManagementViewModel.cs" />
     <Compile Include="ViewModels\SecurityLogsViewModel.cs" />
     <Compile Include="ViewModels\CandidateEmailCcFieldsModel.cs" />
+    <Compile Include="ViewModels\CandidateEmailSendForm.cs" />
     <Compile Include="ViewModels\CoverLetterViewModel.cs" />
     <Compile Include="ViewModels\EmailTemplateManagementViewModel.cs" />
     <Compile Include="ViewModels\HrCcEmailsPageViewModel.cs" />
@@ -233,6 +234,7 @@
     <Compile Include="Services\RoleModuleCatalog.cs" />
     <Compile Include="Services\RolePermissionService.cs" />
     <Compile Include="Services\NavMenuBuilder.cs" />
+    <Compile Include="Services\AdminFeatureFlags.cs" />
     <Compile Include="Services\QuestionnaireTemplateService.cs" />
     <Compile Include="Services\EmailService.cs" />
     <Compile Include="Services\CandidateEvaluationService.cs" />
@@ -267,6 +269,7 @@
     <Compile Include="Helpers\EmailBodyHtmlSanitizer.cs" />
     <Compile Include="Helpers\EmailTemplateTokenChipSerializer.cs" />
     <Compile Include="Helpers\LegalPolicyHelper.cs" />
+    <Compile Include="Helpers\SecurityLogTranslator.cs" />
     <Compile Include="Helpers\LegalConsentSession.cs" />
     <Compile Include="Helpers\PositionCandidateActionHelper.cs" />
     <Compile Include="Helpers\QuestionStagePayloadHelper.cs" />
@@ -303,12 +306,14 @@
     <Compile Include="Controllers\PositionsController.Operations.cs" />
     <Compile Include="Controllers\ApplicationsController.cs" />
     <Compile Include="Controllers\ApplicationsController.CoverLetter.cs" />
+    <Compile Include="Controllers\ApplicationsController.ApplicationReceivedEmail.cs" />
     <Compile Include="Controllers\ApplicationsController.FailedCandidateEmail.cs" />
     <Compile Include="Controllers\ApplicationsController.Helpers.cs" />
     <Compile Include="Controllers\ApplicationsController.QuestionnaireInvite.cs" />
     <Compile Include="Controllers\ApplicationsController.LinkedInImport.cs" />
     <Compile Include="Controllers\InterviewsController.cs" />
     <Compile Include="Controllers\InterviewsController.CandidateEmail.cs" />
+    <Compile Include="Controllers\InterviewsController.InterviewerNotification.cs" />
     <Compile Include="Controllers\OnboardingsController.cs" />
     <Compile Include="Controllers\ApplicantsController.cs" />
     <Compile Include="Controllers\DepartmentsController.cs" />
@@ -482,6 +487,7 @@
     <Content Include="Scripts\Sortable.min.js" />
     <Content Include="Scripts\questionnaire-assignment.js" />
     <Content Include="Scripts\email-workflow-modals.js" />
+    <Content Include="Scripts\tinymce-loader.js" />
     <Content Include="Scripts\bootstrap@5.1.3.min.css" />
     <Content Include="Content\webfonts\fa-solid-900.woff2" />
     <Content Include="Content\webfonts\fa-solid-900.woff" />

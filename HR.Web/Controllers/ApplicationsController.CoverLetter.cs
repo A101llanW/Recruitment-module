@@ -12,6 +12,7 @@ namespace HR.Web.Controllers
 
         // Step 1 of the candidate application flow:
         // CoverLetter -> ProfileDetails -> Questionnaire
+        [TenantAuthorize]
         public ActionResult CoverLetter(int positionId)
         {
             if (!IsCurrentUserAuthenticated())
@@ -35,13 +36,13 @@ namespace HR.Web.Controllers
             if (applicant == null)
             {
                 TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
-                return RedirectToAction("Index", "Positions");
+                return RedirectToPositionsIndex(position.Id);
             }
 
             if (HasExistingApplication(applicant.Id, positionId))
             {
                 TempData["ErrorMessage"] = "You have already applied for this position.";
-                return RedirectToAction("Index", "Positions");
+                return RedirectToPositionsIndex(position.Id);
             }
 
             var model = new CoverLetterViewModel
@@ -51,17 +52,22 @@ namespace HR.Web.Controllers
                 CoverLetter = GetPendingCoverLetter(position.Id)
             };
 
+            ViewBag.ApplicationFlowTenant = ResolveApplicationFlowTenantSlug(position.Id);
+
             return View(model);
         }
 
         [HttpPost]
         [TenantAuthorize]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         public ActionResult CoverLetter(CoverLetterViewModel model)
         {
             if (model == null || model.PositionId <= 0)
             {
-                return RedirectToAction("Index", "Positions");
+                return model != null && model.PositionId > 0
+                    ? RedirectToPositionsIndex(model.PositionId)
+                    : RedirectToAction("Index", "Positions");
             }
 
             var position = _uow.Positions.Get(model.PositionId);
@@ -80,13 +86,13 @@ namespace HR.Web.Controllers
             if (applicant == null)
             {
                 TempData["ErrorMessage"] = "Please complete your applicant profile before continuing.";
-                return RedirectToAction("Index", "Positions");
+                return RedirectToPositionsIndex(position.Id);
             }
 
             if (HasExistingApplication(applicant.Id, model.PositionId))
             {
                 TempData["ErrorMessage"] = "You have already applied for this position.";
-                return RedirectToAction("Index", "Positions");
+                return RedirectToPositionsIndex(position.Id);
             }
 
             model.PositionTitle = position.Title;

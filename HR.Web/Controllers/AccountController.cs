@@ -583,14 +583,15 @@ namespace HR.Web.Controllers
             try 
             {
                 var identity = User?.Identity;
+                var pendingUserId = ReadPendingMfaUserId();
                 string username = Session["PendingMfaUsername"] as string
                     ?? (identity != null && identity.IsAuthenticated ? identity.Name : null);
-                if (string.IsNullOrEmpty(username))
+                if (string.IsNullOrEmpty(username) && !pendingUserId.HasValue)
                 {
                     return RedirectToAction("Login");
                 }
 
-                var user = FindPendingMfaUser(username);
+                var user = ResolvePendingMfaUser(username, pendingUserId);
                 if (user == null)
                 {
                     return RedirectToAction("Login");
@@ -625,12 +626,13 @@ namespace HR.Web.Controllers
         public JsonResult ResendCode()
         {
             string username = Session["PendingMfaUsername"] as string;
-            if (string.IsNullOrEmpty(username))
+            var pendingUserId = ReadPendingMfaUserId();
+            if (string.IsNullOrEmpty(username) && !pendingUserId.HasValue)
             {
                 return Json(new { success = false, message = "Session expired" });
             }
 
-            var user = FindPendingMfaUser(username);
+            var user = ResolvePendingMfaUser(username, pendingUserId);
             if (user == null)
             {
                 return Json(new { success = false, message = "User not found" });
@@ -696,7 +698,13 @@ namespace HR.Web.Controllers
             }
 
             var mfaUser = user;
-            return string.Equals(mfaUser.MfaMethod, "Email", StringComparison.OrdinalIgnoreCase);
+            if (!mfaUser.IsTwoFactorEnabled)
+            {
+                return false;
+            }
+
+            return string.IsNullOrWhiteSpace(mfaUser.MfaMethod) ||
+                   string.Equals(mfaUser.MfaMethod, "Email", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool HasActiveMfaCode(User user)

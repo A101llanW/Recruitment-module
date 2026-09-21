@@ -160,6 +160,10 @@ body.recruitment-app.auth-layout {
     margin-top: 0.35rem;
 }
 
+.app-navbar .dropdown-menu.show {
+    display: block;
+}
+
 .app-navbar .dropdown-item {
     color: rgba(255, 255, 255, 0.92) !important;
     border-radius: 8px;

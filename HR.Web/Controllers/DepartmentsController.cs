@@ -18,11 +18,7 @@ namespace HR.Web.Controllers
             var itemsQuery = _uow.Departments.GetAll(d => d.Positions).AsQueryable();
             itemsQuery = _tenantService.ApplyTenantFilter(itemsQuery);
             var items = itemsQuery.ToList();
-            var permissionService = new RolePermissionService();
-            ViewBag.CanManageDepartments = Request.IsAuthenticated &&
-                permissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Departments, RoleAccessLevels.Manage);
-            ViewBag.CanViewDepartments = Request.IsAuthenticated &&
-                permissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Departments, RoleAccessLevels.View);
+            SetDepartmentViewPermissions();
             return View(items);
         }
 
@@ -41,7 +37,19 @@ namespace HR.Web.Controllers
                 return new HttpStatusCodeResult(403, "Access Denied");
             }
 
+            SetDepartmentViewPermissions();
             return View(item);
+        }
+
+        private void SetDepartmentViewPermissions()
+        {
+            var permissionService = new RolePermissionService();
+            bool isManageCapableUser = Request.IsAuthenticated && User != null &&
+                (User.IsInRole("Admin") || _tenantService.IsSuperAdmin());
+            ViewBag.CanManageDepartments = isManageCapableUser &&
+                permissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Departments, RoleAccessLevels.Manage);
+            ViewBag.CanViewDepartments = Request.IsAuthenticated &&
+                permissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Departments, RoleAccessLevels.View);
         }
 
         [TenantAuthorize(Roles = "Admin, SuperAdmin")]

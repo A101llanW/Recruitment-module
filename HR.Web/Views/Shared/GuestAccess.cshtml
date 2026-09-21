@@ -2,6 +2,7 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Access Required";
     ViewBag.SuppressPageHero = true;
+    var tenantToken = ViewContext.RouteData.Values["tenant"] as string;
 }
 
 <div class="container py-5">
@@ -16,16 +17,19 @@
                 <p class="lead mb-5 text-muted">@ViewBag.Message</p>
                 
                 <div class="d-flex flex-column gap-3">
-                    <a href="@Url.Action("Login", "Account", new { returnUrl = Request.RawUrl })" class="btn btn-blue btn-lg mb-3" style="border-radius: 10px; font-weight: 600;">
+                    <a href="@Url.Action("Login", "Account", new { tenant = tenantToken, returnUrl = Request.RawUrl })" class="btn btn-blue btn-lg mb-3" style="border-radius: 10px; font-weight: 600;">
                         <i class="fas fa-sign-in-alt mr-2"></i> Log In to Your Account
                     </a>
-                    <a href="@Url.Action("Register", "Account", new { returnUrl = Request.RawUrl })" class="btn btn-outline-primary btn-lg" style="border-radius: 10px; font-weight: 600;">
-                        <i class="fas fa-user-plus mr-2"></i> Create a New Account
-                    </a>
+                    @if (!string.IsNullOrEmpty(tenantToken))
+                    {
+                        <a href="@Url.Action("Register", "Account", new { tenant = tenantToken, returnUrl = Request.RawUrl })" class="btn btn-outline-primary btn-lg" style="border-radius: 10px; font-weight: 600;">
+                            <i class="fas fa-user-plus mr-2"></i> Create a New Account
+                        </a>
+                    }
                 </div>
                 
                 <div class="mt-5">
-                    <a href="@Url.Action("Index", "Positions")" class="text-muted">
+                    <a href="@Url.Action("Index", "Positions", new { tenant = tenantToken })" class="text-muted">
                         <i class="fas fa-arrow-left mr-1"></i> Back to Job Postings
                     </a>
                 </div>

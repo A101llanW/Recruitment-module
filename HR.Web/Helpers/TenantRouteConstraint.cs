@@ -112,6 +112,37 @@ namespace HR.Web.Helpers
             return true;
         }
 
+        public static void ApplyBrandedErrorStatus(HttpContextBase context, int statusCode)
+        {
+            if (context == null || context.Response == null)
+            {
+                return;
+            }
+
+            context.Response.TrySkipIisCustomErrors = true;
+            // When customErrors is already serving this request as the configured error
+            // page, setting the status code again retriggers customErrors → redirect loop.
+            if (!context.IsCustomErrorEnabled)
+            {
+                context.Response.StatusCode = statusCode;
+            }
+        }
+
+        public static void ApplyBrandedErrorStatus(HttpResponse response, int statusCode)
+        {
+            if (response == null)
+            {
+                return;
+            }
+
+            response.TrySkipIisCustomErrors = true;
+            var context = HttpContext.Current;
+            if (context == null || !context.IsCustomErrorEnabled)
+            {
+                response.StatusCode = statusCode;
+            }
+        }
+
         public static void ExecuteBrandedNotFound(HttpContext context)
         {
             if (context == null || !ShouldHandleRequest(context))
@@ -121,8 +152,7 @@ namespace HR.Web.Helpers
 
             context.Server.ClearError();
             context.Response.Clear();
-            context.Response.StatusCode = (int)HttpStatusCode.NotFound;
-            context.Response.TrySkipIisCustomErrors = true;
+            ApplyBrandedErrorStatus(context.Response, (int)HttpStatusCode.NotFound);
 
             var routeData = new RouteData();
             routeData.Values["controller"] = "Error";
@@ -147,8 +177,7 @@ namespace HR.Web.Helpers
                 return;
             }
 
-            filterContext.HttpContext.Response.TrySkipIisCustomErrors = true;
-            filterContext.HttpContext.Response.StatusCode = (int)HttpStatusCode.NotFound;
+            ApplyBrandedErrorStatus(filterContext.HttpContext, (int)HttpStatusCode.NotFound);
             filterContext.Result = new ViewResult
             {
                 ViewName = "~/Views/Error/NotFound.cshtml",

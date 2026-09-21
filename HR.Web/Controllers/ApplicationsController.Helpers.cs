@@ -33,6 +33,15 @@ namespace HR.Web.Controllers
             TempData["ReturnUrl"] = returnUrl;
             TempData["ApplicationMessage"] = "Please register or login to apply for this position.";
             var tenant = RouteData.Values["tenant"] as string;
+            if (string.IsNullOrWhiteSpace(tenant) && safeReturnUri != null)
+            {
+                var positionId = LocalReturnUrlHelper.ExtractPositionId(safeReturnUri);
+                if (positionId.HasValue)
+                {
+                    tenant = ResolveApplicationFlowTenantSlug(positionId.Value);
+                }
+            }
+
             return RedirectToAction("Register", "Account", new { tenant = tenant, returnUrl = returnUrl });
         }
 
@@ -516,6 +525,78 @@ namespace HR.Web.Controllers
             _uow.Complete();
         }
 
+        private static bool IsScoringFailureReason(string scoreReason)
+        {
+            return !string.IsNullOrEmpty(scoreReason)
+                && scoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool NeedsApplicationScoreRepair(Application application)
+        {
+            return application != null
+                && (!application.Score.HasValue || IsScoringFailureReason(application.ScoreReason));
+        }
+
+        private bool TryRecalculateAndPersistApplicationScore(Application application)
+        {
+            if (application == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                application.Score = _scoringService.CalculateApplicationScore(application);
+                application.ScoreReason = "Questionnaire score calculated from responses.";
+                _uow.Applications.Update(application);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError(
+                    "TryRecalculateAndPersistApplicationScore failed for ApplicationId={0}: {1}",
+                    application.Id,
+                    ex);
+
+                application.ScoreReason = string.Format(
+                    "Scoring failed: {0}. Use Repair Scoring Errors on the Applications page or contact support.",
+                    ex.Message);
+                _uow.Applications.Update(application);
+                return false;
+            }
+        }
+
+        private int RepairBrokenApplicationScores(IList<Application> applications)
+        {
+            if (applications == null || applications.Count == 0)
+            {
+                return 0;
+            }
+
+            var repaired = 0;
+            foreach (var application in applications.Where(NeedsApplicationScoreRepair))
+            {
+                if (TryRecalculateAndPersistApplicationScore(application))
+                {
+                    repaired++;
+                }
+            }
+
+            if (repaired > 0)
+            {
+                _uow.Complete();
+            }
+
+            return repaired;
+        }
+
+        private int RepairBrokenApplicationScoresForCurrentTenant()
+        {
+            var appsQuery = _uow.Context.Applications.AsQueryable();
+            appsQuery = _tenantService.ApplyTenantFilter(appsQuery);
+            return RepairBrokenApplicationScores(appsQuery.ToList());
+        }
+
         private void ScoreQuestionnaireApplication(Application application)
         {
             if (application == null)
@@ -523,28 +604,8 @@ namespace HR.Web.Controllers
                 return;
             }
 
-            try
-            {
-                var score = _scoringService.CalculateApplicationScore(application);
-
-                application.Score = score;
-                application.ScoreReason = "Questionnaire score calculated from responses.";
-                _uow.Applications.Update(application);
-                _uow.Complete();
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceError(
-                    "ScoreQuestionnaireApplication failed for ApplicationId={0}: {1}",
-                    application.Id,
-                    ex);
-
-                application.ScoreReason = string.Format(
-                    "Scoring failed: {0}. Use Recalculate Scores on the Applications page or contact support.",
-                    ex.Message);
-                _uow.Applications.Update(application);
-                _uow.Complete();
-            }
+            TryRecalculateAndPersistApplicationScore(application);
+            _uow.Complete();
         }
 
         private void ClearQuestionnaireSession()
@@ -568,6 +629,38 @@ namespace HR.Web.Controllers
             return IsManagementUser(user);
         }
 
+        private void HydrateMissingApplicationScores(IList<Application> applications)
+        {
+            if (applications == null || applications.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var application in applications)
+            {
+                if (application == null || application.Score.HasValue)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    application.Score = _scoringService.CalculateApplicationScore(application);
+                    if (IsScoringFailureReason(application.ScoreReason))
+                    {
+                        application.ScoreReason = "Questionnaire score calculated from responses.";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning(
+                        "HydrateMissingApplicationScores failed for ApplicationId={0}: {1}",
+                        application.Id,
+                        ex.Message);
+                }
+            }
+        }
+
         private List<Application> BuildManagementApplicationsView()
         {
             var appsQuery = _uow.Context.Applications
@@ -580,6 +673,9 @@ namespace HR.Web.Controllers
                 .OrderByDescending(a => a.Score ?? 0)
                 .ThenByDescending(a => a.AppliedOn)
                 .ToList();
+
+            RepairBrokenApplicationScores(apps);
+            HydrateMissingApplicationScores(apps);
 
             var interviewersQuery = _uow.Context.Users.Where(u => u.Role == "Admin").AsQueryable();
             interviewersQuery = _tenantService.ApplyTenantFilter(interviewersQuery);
@@ -710,6 +806,22 @@ namespace HR.Web.Controllers
             return null;
         }
 
+        private string ResolveApplicationFlowTenantSlug(int positionId)
+        {
+            var position = _uow.Positions.Get(positionId);
+            if (position?.CompanyId != null)
+            {
+                var company = position.Company ?? _uow.Companies.Get(position.CompanyId.Value);
+                if (company != null && !string.IsNullOrWhiteSpace(company.Slug))
+                {
+                    return company.Slug.Trim();
+                }
+            }
+
+            var routeTenant = RouteData.Values["tenant"] as string;
+            return string.IsNullOrWhiteSpace(routeTenant) ? null : routeTenant.Trim();
+        }
+
         private RouteValueDictionary GetApplicationFlowRouteValues(int positionId)
         {
             // Apply-flow actions bind positionId from the query string, not the route {id} segment.
@@ -720,13 +832,24 @@ namespace HR.Web.Controllers
                 { "id", UrlParameter.Optional }
             };
 
-            var tenant = HttpContext?.Request?.RequestContext?.RouteData?.Values["tenant"] as string;
+            var tenant = ResolveApplicationFlowTenantSlug(positionId);
             if (!string.IsNullOrWhiteSpace(tenant))
             {
                 routeValues["tenant"] = tenant;
             }
 
             return routeValues;
+        }
+
+        private ActionResult RedirectToPositionsIndex(int positionId)
+        {
+            var tenant = ResolveApplicationFlowTenantSlug(positionId);
+            if (!string.IsNullOrWhiteSpace(tenant))
+            {
+                return RedirectToAction("Index", "Positions", new { tenant = tenant });
+            }
+
+            return RedirectToAction("Index", "Positions");
         }
 
         private ActionResult RedirectToApplicationsIndex()
@@ -1064,6 +1187,7 @@ namespace HR.Web.Controllers
             _uow.Complete();
             ClearPendingCoverLetter();
             ScoreQuestionnaireApplication(application);
+            TrySendApplicationReceivedEmailForApplication(application, applicant, position);
             return null;
         }
 
@@ -1110,6 +1234,8 @@ namespace HR.Web.Controllers
             ViewBag.CanOpenNextQuestionnaireStage = canInviteNext;
             ViewBag.QuestionnaireStageCountForDetails = maxQ;
             ViewBag.ShowQuestionnaireHiringPanel = isMgmt && canManageApps && maxQ > 1;
+            ViewBag.CanManageApplicationDetails = isMgmt && canManageApps;
+            ViewBag.CanViewApplicationScores = isMgmt;
         }
     }
 }

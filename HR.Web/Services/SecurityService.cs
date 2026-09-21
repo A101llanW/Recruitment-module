@@ -104,6 +104,27 @@ namespace HR.Web.Services
             _uow.LoginAttempts.Add(attempt);
             _uow.Complete();
         }
+
+        public void RecordVisitorActivity(int companyId, string ipAddress, string summary)
+        {
+            if (companyId <= 0 || string.IsNullOrWhiteSpace(summary))
+            {
+                return;
+            }
+
+            var attempt = new LoginAttempt
+            {
+                Username = "Visitor",
+                IPAddress = ipAddress ?? "Unknown",
+                AttemptTime = DateTime.Now,
+                WasSuccessful = true,
+                CompanyId = companyId,
+                FailureReason = summary.Trim()
+            };
+
+            _uow.LoginAttempts.Add(attempt);
+            _uow.Complete();
+        }
         
         public int GetRemainingAttempts(string username, int? companyId = null)
         {
@@ -298,6 +319,12 @@ namespace HR.Web.Services
                 return false;
             }
 
+            var normalizedCode = code.Trim();
+            if (string.IsNullOrEmpty(normalizedCode))
+            {
+                return false;
+            }
+
             if (string.IsNullOrEmpty(user.TwoFactorCode))
             {
                 return false;
@@ -307,8 +334,51 @@ namespace HR.Web.Services
             {
                 return false;
             }
-            
-            return user.TwoFactorCode == code;
+
+            return string.Equals(user.TwoFactorCode.Trim(), normalizedCode, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Validates MFA against a fresh database read so stale EF tracked entities cannot reject a valid code.
+        /// </summary>
+        public bool ValidateTemporaryCodeForUserId(int userId, string code)
+        {
+            if (userId <= 0 || string.IsNullOrWhiteSpace(code))
+            {
+                return false;
+            }
+
+            var normalizedCode = code.Trim();
+            if (string.IsNullOrEmpty(normalizedCode))
+            {
+                return false;
+            }
+
+            using (var freshUow = new UnitOfWork())
+            {
+                var snapshot = freshUow.Context.Database.SqlQuery<MfaCodeSnapshot>(
+                        "SELECT TwoFactorCode, TwoFactorExpiry FROM dbo.Users WHERE Id = @p0",
+                        userId)
+                    .FirstOrDefault();
+
+                if (snapshot == null || string.IsNullOrEmpty(snapshot.TwoFactorCode))
+                {
+                    return false;
+                }
+
+                if (!snapshot.TwoFactorExpiry.HasValue || snapshot.TwoFactorExpiry.Value < DateTime.Now)
+                {
+                    return false;
+                }
+
+                return string.Equals(snapshot.TwoFactorCode.Trim(), normalizedCode, StringComparison.Ordinal);
+            }
+        }
+
+        private sealed class MfaCodeSnapshot
+        {
+            public string TwoFactorCode { get; set; }
+            public DateTime? TwoFactorExpiry { get; set; }
         }
     }
 }

@@ -155,6 +155,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Create(Position model, int[] selectedQuestions, string questionWeightValues, string questionStagesPayload)
@@ -210,6 +211,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(Position model, int[] selectedQuestions, string questionWeightValues, string questionStagesPayload)
@@ -586,6 +588,7 @@ namespace HR.Web.Controllers
         {
             return HandleDeletePosition(id);
         }
+
         [HttpPost]
         [TenantAuthorize]
         [ValidateAntiForgeryToken]

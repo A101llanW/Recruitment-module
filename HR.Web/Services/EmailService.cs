@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Mail;
 using System.Net.Mime;
+using System.Text;
 using System.Threading.Tasks;
 using HR.Web.Helpers;
 
@@ -158,16 +159,18 @@ namespace HR.Web.Services
                 var mailMessage = new MailMessage
                 {
                     From = new MailAddress(_fromEmail, _fromName),
-                    Subject = messageSubject
+                    Subject = messageSubject,
+                    SubjectEncoding = Encoding.UTF8,
+                    BodyEncoding = Encoding.UTF8
                 };
 
                 if (!string.IsNullOrWhiteSpace(plainTextBody))
                 {
                     // Explicit multipart/alternative parts — mixing Body + AlternateViews can render HTML as raw text in some clients.
                     mailMessage.AlternateViews.Add(
-                        AlternateView.CreateAlternateViewFromString(plainTextBody, null, MediaTypeNames.Text.Plain));
+                        AlternateView.CreateAlternateViewFromString(plainTextBody, Encoding.UTF8, MediaTypeNames.Text.Plain));
                     mailMessage.AlternateViews.Add(
-                        AlternateView.CreateAlternateViewFromString(messageBody, null, MediaTypeNames.Text.Html));
+                        AlternateView.CreateAlternateViewFromString(messageBody, Encoding.UTF8, MediaTypeNames.Text.Html));
                 }
                 else
                 {

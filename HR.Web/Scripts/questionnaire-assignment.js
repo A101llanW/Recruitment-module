@@ -133,6 +133,55 @@ function findWeightRow(container, questionId) {
     return match;
 }
 
+function readTemplateField(item, camelKey, pascalKey) {
+    if (!item) {
+        return undefined;
+    }
+    if (item[camelKey] !== undefined && item[camelKey] !== null) {
+        return item[camelKey];
+    }
+    return item[pascalKey];
+}
+
+function normalizeTemplatePayload(template) {
+    if (!template) {
+        return { stageCount: 1, questions: [] };
+    }
+
+    var rawQuestions = template.questions || template.Questions || [];
+    if (!Array.isArray(rawQuestions)) {
+        rawQuestions = [];
+    }
+
+    var questions = [];
+    rawQuestions.forEach((item) => {
+        var questionId = readTemplateField(item, 'questionId', 'QuestionId');
+        if (questionId === undefined || questionId === null || questionId === '') {
+            return;
+        }
+
+        questions.push({
+            questionId: questionId,
+            weight: readTemplateField(item, 'weight', 'Weight'),
+            stageNumber: readTemplateField(item, 'stageNumber', 'StageNumber')
+        });
+    });
+
+    var stageCount = readTemplateField(template, 'stageCount', 'StageCount');
+    return {
+        stageCount: stageCount,
+        questions: questions
+    };
+}
+
+function buildQuestionCheckboxLookup(checkboxes) {
+    var lookup = new Map();
+    checkboxes.forEach((cb) => {
+        lookup.set(String(cb.value), cb);
+    });
+    return lookup;
+}
+
 function initQuestionnaireAssignmentEditor(options) {
     options = options || {};
         var formIdOption = options.formId;
@@ -159,6 +208,7 @@ function initQuestionnaireAssignmentEditor(options) {
         var weightRows = document.getElementById('questionWeightRows');
         var weightEmpty = document.getElementById('questionWeightEmpty');
         var questionCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.question-checkbox'));
+        var questionCheckboxById = buildQuestionCheckboxLookup(questionCheckboxes);
         var selectedQuestionsHiddenContainer = document.getElementById('selectedQuestionsHiddenContainer');
         var questionWeights = new Map();
         var questionLocks = new Map();
@@ -892,10 +942,12 @@ function initQuestionnaireAssignmentEditor(options) {
         renderRows();
 
     function applyTemplateItems(template) {
-        if (!template || !template.questions || !template.questions.length) {
-            return;
+        var payload = normalizeTemplatePayload(template);
+        if (!payload.questions.length) {
+            return { appliedCount: 0, missingCount: 0 };
         }
-        var desiredStageCount = parseInt(template.stageCount, 10);
+
+        var desiredStageCount = parseInt(payload.stageCount, 10);
         if (!Number.isNaN(desiredStageCount) && desiredStageCount > getQuestionnaireStageCount()) {
             if (secondaryStageToggleEl) {
                 secondaryStageToggleEl.checked = desiredStageCount > 1;
@@ -906,16 +958,37 @@ function initQuestionnaireAssignmentEditor(options) {
             updateStageCountSectionVisibility();
             clampActiveEditorStage(getQuestionnaireStageCount());
         }
-        template.questions.forEach((item) => {
+
+        var maxStage = getQuestionnaireStageCount();
+        var appliedIds = new Set();
+        var missingCount = 0;
+
+        payload.questions.forEach((item) => {
             var qid = String(item.questionId);
+            if (!questionCheckboxById.has(qid)) {
+                missingCount += 1;
+                return;
+            }
+
+            appliedIds.add(qid);
             var weight = parseFloat(item.weight);
             mapSet(questionWeights, qid, clamp(Number.isNaN(weight) ? 0 : Math.round(weight), 0, 100));
             var stage = parseInt(item.stageNumber, 10);
-            assignQuestionToStage(questionStages, qid, Number.isNaN(stage) || stage < 1 ? 1 : stage);
+            if (Number.isNaN(stage) || stage < 1) {
+                stage = 1;
+            }
+            assignQuestionToStage(questionStages, qid, Math.min(maxStage, stage));
         });
+
         syncAllCheckboxVisuals();
         syncGroupSelectHeaders();
         renderRows();
+        rebuildSelectedQuestionsHiddenInputs();
+
+        return {
+            appliedCount: appliedIds.size,
+            missingCount: missingCount
+        };
     }
 
     var api = { applyTemplateItems: applyTemplateItems };

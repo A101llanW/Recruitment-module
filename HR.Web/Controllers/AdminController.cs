@@ -32,6 +32,12 @@ namespace HR.Web.Controllers
             return User?.Identity?.Name ?? "System";
         }
 
+        private void SetQuestionBankViewPermissions()
+        {
+            ViewBag.CanManageQuestions = _rolePermissionService.CanCurrentUserManageQuestionBank();
+            ViewBag.CanEditQuestions = _rolePermissionService.CanCurrentUserEditQuestions();
+        }
+
         // GET: Admin/Index - Default admin dashboard
         public ActionResult Index()
         {
@@ -163,9 +169,7 @@ namespace HR.Web.Controllers
                 }).ToList();
             // Ensure positions are available for consolidated AI generation modal
             ViewBag.Positions = _uow.Positions.GetAll(p => p.Department, p => p.Company).ToList();
-            ViewBag.CanManageQuestions = _rolePermissionService.CanCurrentUserAccessModule(
-                RoleModuleCatalog.Questions,
-                RoleAccessLevels.Manage);
+            SetQuestionBankViewPermissions();
             // Use the combined AI-enhanced questions view
             return View("QuestionsWithMCP", list);
         }
@@ -175,7 +179,18 @@ namespace HR.Web.Controllers
         {
             if (id == null)
             {
+                if (!_rolePermissionService.CanCurrentUserManageQuestionBank())
+                {
+                    return new HttpStatusCodeResult(403, "Access Denied");
+                }
+
+                SetQuestionBankViewPermissions();
                 return View(new QuestionAdminViewModel { IsActive = true });
+            }
+
+            if (!_rolePermissionService.CanCurrentUserEditQuestions())
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
             }
             var question = _uow.Questions.GetAll(q => q.QuestionOptions).FirstOrDefault(x => x.Id == id.Value);
             if (question == null)
@@ -201,6 +216,7 @@ namespace HR.Web.Controllers
                     Points = o.Points
                 }).ToList()
             };
+            SetQuestionBankViewPermissions();
             return View(vm);
         }
 
@@ -218,6 +234,11 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult DeleteQuestion(int id)
         {
+            if (!_rolePermissionService.CanCurrentUserManageQuestionBank())
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
             var q = _uow.Questions.Get(id);
             if (q == null) return HttpNotFound();
 
@@ -282,6 +303,11 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         public ActionResult BatchDeleteQuestions(int[] questionIds)
         {
+            if (!_rolePermissionService.CanCurrentUserManageQuestionBank())
+            {
+                return Json(new { success = false, message = "Access Denied" });
+            }
+
             if (questionIds == null || questionIds.Length == 0)
             {
                 return Json(new { success = false, message = "No questions selected for deletion." });

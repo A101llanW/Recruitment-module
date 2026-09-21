@@ -2,6 +2,7 @@
 @{
     ViewBag.Title = "Questionnaire Templates";
     Layout = "~/Views/Shared/_Layout.cshtml";
+    var canManageQuestions = ViewBag.CanManageQuestions != null && (bool)ViewBag.CanManageQuestions;
 }
 
 <div class="container mt-4 mb-5">
@@ -14,9 +15,12 @@
             <a class="btn btn-outline-secondary shadow-sm" href="@Url.Action("Questions", "Admin")">
                 <i class="fas fa-arrow-left mr-1"></i> Back to Questions
             </a>
+            @if (canManageQuestions)
+            {
             <a class="btn btn-success shadow-sm" href="@Url.Action("EditQuestionnaireTemplate", "Admin")">
                 <i class="fas fa-plus mr-1"></i> New Template
             </a>
+            }
         </div>
     </div>
 
@@ -63,6 +67,8 @@
                                     <td class="align-middle">@template.QuestionCount</td>
                                     <td class="align-middle">@template.StageCount</td>
                                     <td class="text-right pr-4 align-middle">
+                                        @if (canManageQuestions)
+                                        {
                                         <a class="btn btn-sm btn-light border" href="@Url.Action("EditQuestionnaireTemplate", "Admin", new { id = template.Id })" title="Edit">
                                             <i class="fas fa-edit text-primary"></i>
                                         </a>
@@ -73,6 +79,7 @@
                                                 <i class="fas fa-trash text-danger"></i>
                                             </button>
                                         </form>
+                                        }
                                     </td>
                                 </tr>
                             }
@@ -84,7 +91,10 @@
             {
                 <div class="p-4 text-center text-muted">
                     <p class="mb-3">No questionnaire templates yet.</p>
+                    @if (canManageQuestions)
+                    {
                     <a class="btn btn-primary" href="@Url.Action("EditQuestionnaireTemplate", "Admin")">Create your first template</a>
+                    }
                 </div>
             }
         </div>

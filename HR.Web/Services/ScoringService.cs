@@ -34,6 +34,11 @@ namespace HR.Web.Services
             _mcpService = new MCPService();
         }
 
+        private static int NormalizeStageNumber(int stageNumber)
+        {
+            return stageNumber < 1 ? 1 : stageNumber;
+        }
+
         /// <summary>
         /// Calculate total score for an application based on questionnaire responses
         /// Returns percentage out of 100
@@ -95,7 +100,9 @@ namespace HR.Web.Services
                 }
 
                 return positionQuestionsQuery
-                    .Where(pq => Math.Max(1, pq.StageNumber) <= completedCap)
+                    .Where(pq =>
+                        (pq.StageNumber < 1 && completedCap >= 1)
+                        || (pq.StageNumber >= 1 && pq.StageNumber <= completedCap))
                     .OrderBy(pq => pq.Order)
                     .ToList();
             }
@@ -125,7 +132,7 @@ namespace HR.Web.Services
                     continue;
                 }
 
-                var stageNumber = Math.Max(1, positionQuestion.StageNumber);
+                var stageNumber = NormalizeStageNumber(positionQuestion.StageNumber);
                 var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId, stageNumber);
                 if (rawMaxScore <= 0)
                 {
@@ -134,7 +141,7 @@ namespace HR.Web.Services
 
                 var answer = answers.FirstOrDefault(a =>
                     a.QuestionId == positionQuestion.QuestionId &&
-                    Math.Max(1, a.StageNumber) == stageNumber);
+                    NormalizeStageNumber(a.StageNumber) == stageNumber);
                 if (answer == null)
                 {
                     continue;
@@ -1287,12 +1294,12 @@ namespace HR.Web.Services
 
         private PositionQuestion GetPositionQuestionForScoring(int positionId, int questionId, int stageNumber)
         {
-            var normalizedStage = Math.Max(1, stageNumber);
+            var normalizedStage = NormalizeStageNumber(stageNumber);
             return _uow.Context.Set<PositionQuestion>()
                 .FirstOrDefault(pq =>
                     pq.PositionId == positionId &&
                     pq.QuestionId == questionId &&
-                    Math.Max(1, pq.StageNumber) == normalizedStage);
+                    ((pq.StageNumber < 1 && normalizedStage == 1) || pq.StageNumber == normalizedStage));
         }
 
         private static List<decimal> GetEffectiveChoicePoints(IEnumerable<PositionQuestionOption> positionOptions)
@@ -1355,10 +1362,10 @@ namespace HR.Web.Services
 
             foreach (var positionQuestion in positionQuestions)
             {
-                var stageNumber = Math.Max(1, positionQuestion.StageNumber);
+                var stageNumber = NormalizeStageNumber(positionQuestion.StageNumber);
                 var answer = answers.FirstOrDefault(a =>
                     a.QuestionId == positionQuestion.QuestionId &&
-                    Math.Max(1, a.StageNumber) == stageNumber);
+                    NormalizeStageNumber(a.StageNumber) == stageNumber);
                 var rawScore = answer != null ?
                     CalculateQuestionScore(positionQuestion.Question, answer.AnswerText, application.PositionId, stageNumber) : 0;
                 var rawMaxScore = GetMaxScoreForQuestion(positionQuestion.Question, application.PositionId, stageNumber);

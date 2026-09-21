@@ -32,6 +32,7 @@ namespace HR.Web.Controllers
         // POST: Admin/GenerateQuestions
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         public ActionResult GenerateQuestions(string jobTitle, string jobDescription, string keyResponsibilities, string requiredQualifications, int count, string experience, string[] questionTypes)
         {
             return HandleGenerateQuestions(jobTitle, jobDescription, keyResponsibilities, requiredQualifications, count, experience, questionTypes);
@@ -52,6 +53,7 @@ namespace HR.Web.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         public ActionResult CheckDuplicateQuestions(string questionsJson)
         {
             return HandleCheckDuplicateQuestions(questionsJson);
@@ -62,6 +64,7 @@ namespace HR.Web.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         public ActionResult AddGeneratedQuestionsToSample(string questionsJson)
         {
             try
@@ -234,7 +237,8 @@ namespace HR.Web.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult CreatePositionWithQuestions(string positionTitle, string positionDescription, 
+        [ValidateInput(false)]
+        public ActionResult CreatePositionWithQuestions(string positionTitle, string positionDescription,
             string positionDepartment, string positionSalaryMin, string positionSalaryMax,
             string positionKeyResponsibilities, string positionRequiredQualifications, 
             string questionsJson)
@@ -276,6 +280,7 @@ namespace HR.Web.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         public ActionResult AddGeneratedQuestionsToBank(string questionsJson)
         {
             try
