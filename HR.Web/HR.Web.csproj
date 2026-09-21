@@ -194,6 +194,8 @@
     <None Include="Migrations\202605260439187_ModelSyncCheckpoint20260526.resx" />
     <None Include="Migrations\202605290000000_DropResumePathFromApplications.cs" />
     <None Include="Migrations\202605290000000_DropResumePathFromApplications.sql" />
+    <None Include="Migrations\202609210000016_AddCompanySmtpSettings.cs" />
+    <None Include="Migrations\202609210000016_AddCompanySmtpSettings.sql" />
     <None Include="Migrations\AddPasswordResetTable.cs" />
     <None Include="Migrations\Configuration.cs" />
     <Compile Include="Models\Application.cs" />
@@ -205,6 +207,7 @@
     <Compile Include="Models\RoleDefinition.cs" />
     <Compile Include="Models\RolePermission.cs" />
     <Compile Include="Models\CompanyHrCcEmail.cs" />
+    <Compile Include="Models\CompanySmtpSettings.cs" />
     <Compile Include="Models\PositionQuestion.cs" />
     <Compile Include="Models\PositionQuestionOption.cs" />
     <Compile Include="Models\QuestionnaireTemplate.cs" />
@@ -226,6 +229,7 @@
     <Compile Include="ViewModels\CoverLetterViewModel.cs" />
     <Compile Include="ViewModels\EmailTemplateManagementViewModel.cs" />
     <Compile Include="ViewModels\HrCcEmailsPageViewModel.cs" />
+    <Compile Include="ViewModels\CompanySmtpSettingsPageViewModel.cs" />
     <Compile Include="Data\DbSetExtensions.cs" />
     <Compile Include="Data\HrContext.cs" />
     <Compile Include="Data\Repository.cs" />
@@ -237,6 +241,8 @@
     <Compile Include="Services\AdminFeatureFlags.cs" />
     <Compile Include="Services\QuestionnaireTemplateService.cs" />
     <Compile Include="Services\EmailService.cs" />
+    <Compile Include="Services\SmtpConfiguration.cs" />
+    <Compile Include="Services\CompanySmtpSettingsService.cs" />
     <Compile Include="Services\CandidateEvaluationService.cs" />
     <Compile Include="Services\DynamicQuestionService.cs" />
     <Compile Include="Services\MCPService.cs" />
@@ -295,6 +301,7 @@
     <Compile Include="Controllers\AdminController.UserManagementOperations.cs" />
     <Compile Include="Controllers\AdminController.EmailTemplates.cs" />
     <Compile Include="Controllers\AdminController.HrCcEmails.cs" />
+    <Compile Include="Controllers\AdminController.CompanySmtpSettings.cs" />
     <Compile Include="Controllers\CompaniesController.cs" />
     <Compile Include="Controllers\CompaniesController.CredentialContent.cs" />
     <Compile Include="Controllers\CompaniesController.Operations.cs" />
@@ -437,6 +444,7 @@
     <Content Include="Views\Admin\RoleManagement.cshtml" />
     <Content Include="Views\Admin\EmailTemplates.cshtml" />
     <Content Include="Views\Admin\HrCcEmails.cshtml" />
+    <Content Include="Views\Admin\CompanySmtpSettings.cshtml" />
     <Content Include="Views\Admin\AddPanelist.cshtml" />
     <Content Include="Views\Applications\CoverLetter.cshtml" />
     <Content Include="Views\Applications\ProfileDetails.cshtml" />

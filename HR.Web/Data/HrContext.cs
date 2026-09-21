@@ -43,6 +43,7 @@ namespace HR.Web.Data
         public DbSet<SystemSetting> SystemSettings { get; set; }
         public DbSet<TemporaryCredential> TemporaryCredentials { get; set; }
         public DbSet<CompanyHrCcEmail> CompanyHrCcEmails { get; set; }
+        public DbSet<CompanySmtpSettings> CompanySmtpSettings { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
@@ -171,6 +172,12 @@ namespace HR.Web.Data
                 .HasRequired(e => e.Company)
                 .WithMany(c => c.HrCcEmails)
                 .HasForeignKey(e => e.CompanyId)
+                .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<CompanySmtpSettings>()
+                .HasRequired(s => s.Company)
+                .WithOptional(c => c.SmtpSettings)
+                .HasForeignKey(s => s.CompanyId)
                 .WillCascadeOnDelete(true);
         }
 
