@@ -498,6 +498,7 @@ namespace HR.Web.Controllers
             _uow.Complete();
             var applicantEmail = applicationModel.Applicant != null ? applicationModel.Applicant.Email : null;
             _email.SendAsync(applicantEmail, "Application received", "We received your application.");
+            NotifyCompanyOfNewApplication(applicationModel.Id);
             return RedirectToAction("Index");
         }
 

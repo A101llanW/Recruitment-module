@@ -541,6 +541,8 @@ namespace HR.Web.Services
             {
                 adminItems.Add(CreateItem(context.Url, context.TenantToken, "HR CC Emails", "Admin", "HrCcEmails", "fas fa-at",
                     IsAdminActionActive(context.CurrentController, context.CurrentAction, "HrCcEmails")));
+                adminItems.Add(CreateItem(context.Url, context.TenantToken, "Application notifications", "Admin", "ApplicationNotifyRecipients", "fas fa-bell",
+                    IsAdminActionActive(context.CurrentController, context.CurrentAction, "ApplicationNotifyRecipients")));
             }
 
             return adminItems;

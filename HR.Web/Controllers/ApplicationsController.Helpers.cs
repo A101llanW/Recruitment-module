@@ -1002,6 +1002,7 @@ namespace HR.Web.Controllers
             _uow.Complete();
             ClearPendingCoverLetter();
             ScoreQuestionnaireApplication(application);
+            NotifyCompanyOfNewApplication(application.Id);
             return null;
         }
 
