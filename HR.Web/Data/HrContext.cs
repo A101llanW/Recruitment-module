@@ -179,7 +179,6 @@ namespace HR.Web.Data
             modelBuilder.Entity<CompanySmtpSettings>()
                 .HasRequired(s => s.Company)
                 .WithOptional(c => c.SmtpSettings)
-                .HasForeignKey(s => s.CompanyId)
                 .WillCascadeOnDelete(true);
 
             modelBuilder.Entity<CompanyApplicationNotifyRecipient>()
