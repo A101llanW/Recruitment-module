@@ -237,6 +237,7 @@
     <Compile Include="Services\NavMenuBuilder.cs" />
     <Compile Include="Services\QuestionnaireTemplateService.cs" />
     <Compile Include="Services\EmailService.cs" />
+    <Compile Include="Services\EmailSendResult.cs" />
     <Compile Include="Services\SmtpConfiguration.cs" />
     <Compile Include="Services\CompanySmtpSettingsService.cs" />
     <Compile Include="Services\CandidateEvaluationService.cs" />
