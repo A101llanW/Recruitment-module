@@ -483,8 +483,13 @@ namespace HR.Web.Controllers
             _uow.Complete();
         }
 
-        private void ScoreQuestionnaireApplication(Application application)
+        private bool ScoreQuestionnaireApplication(Application application, Position position)
         {
+            if (application == null)
+            {
+                return false;
+            }
+
             try
             {
                 var score = _scoringService.CalculateApplicationScore(application);
@@ -493,9 +498,25 @@ namespace HR.Web.Controllers
                 application.ScoreReason = "Questionnaire score calculated from responses.";
                 _uow.Applications.Update(application);
                 _uow.Complete();
+                return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                var positionId = position != null ? (int?)position.Id : application.PositionId;
+                var positionTitle = position != null && !string.IsNullOrWhiteSpace(position.Title)
+                    ? position.Title
+                    : null;
+
+                System.Diagnostics.Trace.WriteLine(string.Format(
+                    "[QUESTIONNAIRE_SCORING] Failed for ApplicationId={0}, PositionId={1}, PositionTitle={2}. Error: {3}{4}Stack: {5}",
+                    application.Id,
+                    positionId.HasValue ? positionId.Value.ToString() : "unknown",
+                    positionTitle ?? "unknown",
+                    ex.Message,
+                    Environment.NewLine,
+                    ex.StackTrace ?? string.Empty));
+
+                return false;
             }
         }
 
@@ -582,7 +603,12 @@ namespace HR.Web.Controllers
 
         private string ValidateApplicationOwnership(Application model)
         {
-            if (!IsCurrentUserAuthenticated() || User.IsInRole("Admin"))
+            if (!IsCurrentUserAuthenticated())
+            {
+                return "You must be signed in to create an application.";
+            }
+
+            if (User.IsInRole("Admin"))
             {
                 return null;
             }
@@ -1001,8 +1027,72 @@ namespace HR.Web.Controllers
             _uow.Applications.Update(application);
             _uow.Complete();
             ClearPendingCoverLetter();
-            ScoreQuestionnaireApplication(application);
+            if (!ScoreQuestionnaireApplication(application, position))
+            {
+                TempData["ErrorMessage"] =
+                    "Your application was saved, but we could not calculate your questionnaire score. Please contact support or try again later.";
+                return RedirectToAction("Index", "Positions");
+            }
+
+            var emailResult = SendApplicationReceivedNotification(application, applicant, position);
+            if (emailResult.Attempted && !emailResult.Success)
+            {
+                TempData["QuestionnaireEmailWarning"] =
+                    "Your application was submitted, but we could not send the confirmation email. Our team has your submission.";
+            }
+
             return null;
+        }
+
+        private EmailSendResult SendApplicationReceivedNotification(Application application, Applicant applicant, Position position)
+        {
+            if (application == null || applicant == null || string.IsNullOrWhiteSpace(applicant.Email))
+            {
+                return EmailSendResult.Skipped();
+            }
+
+            try
+            {
+                Company company = null;
+                if (position != null && position.CompanyId.HasValue)
+                {
+                    company = _uow.Companies.Get(position.CompanyId.Value);
+                }
+                else if (application.CompanyId.HasValue)
+                {
+                    company = _uow.Companies.Get(application.CompanyId.Value);
+                }
+
+                var companyName = company != null && !string.IsNullOrWhiteSpace(company.Name)
+                    ? company.Name.Trim()
+                    : "Recruitment Team";
+                var candidateName = string.IsNullOrWhiteSpace(applicant.FullName) ? "Candidate" : applicant.FullName.Trim();
+                var positionTitle = position != null && !string.IsNullOrWhiteSpace(position.Title)
+                    ? position.Title.Trim()
+                    : "the position";
+
+                var rendered = _emailTemplateService.Render(
+                    EmailTemplateCatalog.ApplicationReceivedStandard,
+                    new Dictionary<string, string>
+                    {
+                        { "CandidateName", candidateName },
+                        { "PositionTitle", positionTitle },
+                        { "CompanyName", companyName },
+                        { "CustomMessageBlock", string.Empty }
+                    },
+                    company != null ? (int?)company.Id : application.CompanyId);
+
+                return _email.TrySendAsync(
+                    applicant.Email.Trim(),
+                    rendered.Subject,
+                    rendered.BodyHtml,
+                    application.CompanyId).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("[APPLICATION_RECEIVED_EMAIL] Failed: " + ex.Message);
+                return EmailSendResult.Failed(ex.Message);
+            }
         }
 
         private ActionResult SubmitPendingQuestionnaireStage(
@@ -1029,7 +1119,15 @@ namespace HR.Web.Controllers
             existingApplication.PendingQuestionnaireStage = null;
             _uow.Applications.Update(existingApplication);
             _uow.Complete();
-            ScoreQuestionnaireApplication(existingApplication);
+
+            var position = _uow.Positions.Get(reviewModel.PositionId);
+            if (!ScoreQuestionnaireApplication(existingApplication, position))
+            {
+                TempData["ErrorMessage"] =
+                    "Your questionnaire responses were saved, but we could not calculate your score. Please contact support or try again later.";
+                return RedirectToAction("Index", "Positions");
+            }
+
             return null;
         }
 

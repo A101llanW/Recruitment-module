@@ -547,6 +547,24 @@ namespace HR.Web.Controllers
 
         private void ValidateRoleDefinitionModuleSelection(RoleManagementPageViewModel model)
         {
+            if (model.ModulePermissions != null)
+            {
+                foreach (var permission in model.ModulePermissions)
+                {
+                    if (permission.IsSelected && permission.IsReadOnlySelected)
+                    {
+                        var moduleLabel = !string.IsNullOrWhiteSpace(permission.DisplayName)
+                            ? permission.DisplayName
+                            : permission.ModuleKey;
+                        ModelState.AddModelError(
+                            "",
+                            string.Format(
+                                "For module \"{0}\", Allow Access and Allow Read-Only Access cannot both be selected.",
+                                moduleLabel));
+                    }
+                }
+            }
+
             if (!HasSelectedModulePermissions(model))
             {
                 ModelState.AddModelError("", "Select at least one module before saving the role template.");
@@ -572,24 +590,18 @@ namespace HR.Web.Controllers
         {
             var scope = GetRoleManagementScopeContext();
             var options = new List<SelectListItem>();
+            var restrictBuiltinRoles = restrictToFullAdmin && !scope.IsGlobalSuperAdmin;
 
-            if (restrictToFullAdmin && !scope.IsGlobalSuperAdmin)
+            if (!restrictBuiltinRoles)
             {
                 options.Add(new SelectListItem
                 {
-                    Value = "builtin:Admin",
-                    Text = "Elevated Control (Admin)",
-                    Selected = string.Equals(selectedRoleKey, "builtin:Admin", StringComparison.OrdinalIgnoreCase)
+                    Value = "builtin:Client",
+                    Text = "Standard Access (Client)",
+                    Selected = string.Equals(selectedRoleKey, "builtin:Client", StringComparison.OrdinalIgnoreCase)
                 });
-                return options;
             }
 
-            options.Add(new SelectListItem
-            {
-                Value = "builtin:Client",
-                Text = "Standard Access (Client)",
-                Selected = string.Equals(selectedRoleKey, "builtin:Client", StringComparison.OrdinalIgnoreCase)
-            });
             options.Add(new SelectListItem
             {
                 Value = "builtin:Admin",
@@ -597,7 +609,7 @@ namespace HR.Web.Controllers
                 Selected = string.Equals(selectedRoleKey, "builtin:Admin", StringComparison.OrdinalIgnoreCase)
             });
 
-            if (scope.IsGlobalSuperAdmin)
+            if (!restrictBuiltinRoles && scope.IsGlobalSuperAdmin)
             {
                 options.Add(new SelectListItem
                 {

@@ -327,6 +327,8 @@ namespace HR.Web.Controllers
                 return passwordFailure;
             }
 
+            TryUpgradePasswordHashOnLogin(user, request.Password);
+
             var companyAccessFailure = ValidateCompanyPortalAccessForLogin(user);
             if (companyAccessFailure != null)
             {
@@ -489,6 +491,38 @@ namespace HR.Web.Controllers
         private static bool IsPasswordValid(User user, string password)
         {
             return !string.IsNullOrEmpty(user.PasswordHash) && PasswordHelper.VerifyPassword(user.PasswordHash, password);
+        }
+
+        private void TryUpgradePasswordHashOnLogin(User user, string plainPassword)
+        {
+            if (user == null || string.IsNullOrWhiteSpace(plainPassword) || string.IsNullOrWhiteSpace(user.PasswordHash))
+            {
+                return;
+            }
+
+            if (!PasswordHelper.NeedsRehash(user.PasswordHash))
+            {
+                return;
+            }
+
+            try
+            {
+                user.PasswordHash = PasswordHelper.HashPassword(plainPassword);
+                _uow.Users.Update(user);
+                _uow.Complete();
+                AuditSvc.LogAction(
+                    user.UserName,
+                    "PASSWORD_REHASH",
+                    "Account",
+                    user.Id.ToString(),
+                    true,
+                    "Password hash upgraded to current iteration count after successful login");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    "[PASSWORD_REHASH] Failed to upgrade hash for user " + user.UserName + ": " + ex.Message);
+            }
         }
 
         private static string BuildInvalidPasswordMessage(int remainingAttempts)
@@ -705,7 +739,7 @@ namespace HR.Web.Controllers
 
             AuditSvc.LogAction(username, "LOGIN_REDIRECT_EMAIL_VERIFY", "Account", user.Id.ToString(), true, "Redirecting to email verification");
             var otpCode = GenerateAndStoreEmailVerificationCode(user);
-            QueueEmailVerificationDelivery(user.Email, otpCode);
+            QueueEmailVerificationDelivery(user.Email, otpCode, user.CompanyId);
             return RedirectToAction("VerifyEmail", "Account", new { tenant = tenantSlug });
         }
 
@@ -719,11 +753,11 @@ namespace HR.Web.Controllers
             return otpCode;
         }
 
-        private void QueueEmailVerificationDelivery(string userEmail, string securityToken)
+        private void QueueEmailVerificationDelivery(string userEmail, string securityToken, int? companyId)
         {
             try
             {
-                EmailSvc.SendEmailVerificationOtpAsync(userEmail, securityToken).GetAwaiter().GetResult();
+                EmailSvc.SendEmailVerificationOtpAsync(userEmail, securityToken, companyId).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copy to Web.config for local IIS / Visual Studio (Web.config is gitignored).
+
+  Encryption (required for Release; see EncryptionHelper):
+    SystemEncryptionKey — deployment-specific AES key material. Do NOT commit real secrets.
+    AllowInsecureDefaultEncryptionKey — Debug/local only: set to true to allow the documented dev fallback.
+      Never enable in Production / Release builds.
+-->
+<configuration>
+  <appSettings>
+    <!-- <add key="SystemEncryptionKey" value="YOUR-DEPLOYMENT-SPECIFIC-KEY-HERE" /> -->
+    <!-- <add key="AllowInsecureDefaultEncryptionKey" value="true" /> -->
+  </appSettings>
+</configuration>

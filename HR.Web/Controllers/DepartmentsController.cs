@@ -7,6 +7,7 @@ using HR.Web.Filters;
 
 namespace HR.Web.Controllers
 {
+    [Authorize]
     [ModuleAccess(RoleModuleCatalog.Departments)]
     public class DepartmentsController : Controller
     {

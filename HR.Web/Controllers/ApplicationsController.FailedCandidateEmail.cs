@@ -138,9 +138,9 @@ namespace HR.Web.Controllers
                 key,
                 new Dictionary<string, string>
                 {
-                    { "CandidateName", HttpUtility.HtmlEncode(candidateNameSafe) },
-                    { "PositionTitle", HttpUtility.HtmlEncode(positionDisplay) },
-                    { "CompanyName", HttpUtility.HtmlEncode(companyName) },
+                    { "CandidateName", candidateNameSafe },
+                    { "PositionTitle", positionDisplay },
+                    { "CompanyName", companyName },
                     { "CustomMessageBlock", customBlock }
                 },
                 company != null ? (int?)company.Id : null);
@@ -452,7 +452,17 @@ namespace HR.Web.Controllers
                 return RedirectWithEmailError("No CC recipients could be resolved. Check selected addresses.");
             }
 
-            await _email.SendAsync(recipientEmail.Trim(), emailContent.Subject, emailContent.BodyHtml, ccRecipients);
+            var sendResult = await _email.TrySendAsync(
+                recipientEmail.Trim(),
+                emailContent.Subject,
+                emailContent.BodyHtml,
+                ccRecipients,
+                app.CompanyId);
+            if (!sendResult.Success)
+            {
+                return RedirectWithEmailError(
+                    "Email could not be sent: " + (sendResult.ErrorMessage ?? "Check SMTP settings and try again."));
+            }
 
             app.FailedCandidateEmailSentAt = DateTime.UtcNow;
             _uow.Applications.Update(app);
@@ -589,12 +599,13 @@ namespace HR.Web.Controllers
                 return RedirectWithEmailError(ccValidation);
             }
 
-            var emailTasks = recipients.Select(r =>
+            var sendFailures = 0;
+            foreach (var recipientApplication in recipients)
             {
-                var recipientEmail = r.Applicant.Email.Trim();
+                var recipientEmail = recipientApplication.Applicant.Email.Trim();
                 var emailContent = BuildFailedCandidateEmailContent(
                     company,
-                    r.Applicant != null ? r.Applicant.FullName : null,
+                    recipientApplication.Applicant != null ? recipientApplication.Applicant.FullName : null,
                     position.Title,
                     composeMode,
                     templateKey,
@@ -610,12 +621,24 @@ namespace HR.Web.Controllers
                     selectedHrCcIds,
                     requireRecipientsWhenToggled: false);
 
-                return _email.SendAsync(recipientEmail, emailContent.Subject, emailContent.BodyHtml, ccRecipients);
-            }).ToList();
+                var sendResult = await _email.TrySendAsync(
+                    recipientEmail,
+                    emailContent.Subject,
+                    emailContent.BodyHtml,
+                    ccRecipients,
+                    recipientApplication.CompanyId ?? position.CompanyId);
+                if (sendResult.Attempted && !sendResult.Success)
+                {
+                    sendFailures++;
+                }
+            }
 
-            foreach (var emailTask in emailTasks)
+            if (sendFailures > 0)
             {
-                await emailTask;
+                TempData["ApplicationEmailWarning"] = string.Format(
+                    "Batch email completed with {0} failure(s). Check SMTP settings and retry for affected candidates.",
+                    sendFailures);
+                return RedirectToAction("Index");
             }
 
             var emailedAt = DateTime.UtcNow;

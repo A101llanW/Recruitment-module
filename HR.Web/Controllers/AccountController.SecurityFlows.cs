@@ -602,37 +602,37 @@ namespace HR.Web.Controllers
             var isSuperAdmin = !user.CompanyId.HasValue &&
                 (string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(userRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
+            var isAdmin = string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase);
+            var tenantToken = RouteData.Values["tenant"] as string;
 
-            if (isSuperAdmin || string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase))
+            if (isSuperAdmin || isAdmin)
             {
-                Session.Remove("PendingMfaUsername");
-                Session.Remove("ForcedMfaSetup");
-                Session["MfaVerified"] = true;
+                Session.Remove("MfaVerified");
 
+                if (!user.IsTwoFactorEnabled)
+                {
+                    Session["ForcedMfaSetup"] = user.UserName;
+                    return RedirectToAction("SetupMFA", "Account", new { tenant = isSuperAdmin ? (string)null : tenantToken });
+                }
+
+                Session["PendingMfaUsername"] = user.UserName;
                 AuditSvc.LogAction(
                     username,
-                    "LOGIN_MFA_BYPASSED",
+                    "EMAIL_VERIFY_REDIRECT_MFA",
                     "Account",
                     user.Id.ToString(),
                     true,
-                    "MFA challenge seamlessly bypassed for first login after email verification");
+                    "Admin/SuperAdmin redirected to MFA after email verification");
 
-                var tenantToken = RouteData.Values["tenant"] as string;
-                if (isSuperAdmin)
-                {
-                    return RedirectToAction("Index", "Companies", new { tenant = (string)null });
-                }
-
-                return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
+                return RedirectToAction("VerifyMFA", "Account", new { tenant = isSuperAdmin ? (string)null : tenantToken });
             }
 
-            var fallbackTenant = RouteData.Values["tenant"] as string;
             if (isSuperAdmin)
             {
                 return RedirectToAction("Index", "Companies", new { tenant = (string)null });
             }
 
-            return RedirectToAction("Index", "Positions", new { tenant = fallbackTenant });
+            return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
         }
 
         private ActionResult HandleVerifyMfaSubmission(string code)

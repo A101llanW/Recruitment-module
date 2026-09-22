@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Linq;
 using System.Net;
 using System.Net.Mail;
@@ -12,92 +11,138 @@ namespace HR.Web.Services
     public interface IEmailService
     {
         Task SendAsync(string to, string subject, string body);
-
+        Task SendAsync(string to, string subject, string body, int? companyId);
         Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients);
+        Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId);
+        Task<EmailSendResult> TrySendAsync(string to, string subject, string body);
+        Task<EmailSendResult> TrySendAsync(string to, string subject, string body, int? companyId);
+        Task<EmailSendResult> TrySendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients);
+        Task<EmailSendResult> TrySendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId);
         Task SendPasswordResetEmailAsync(string to, string resetLink);
+        Task SendPasswordResetEmailAsync(string to, string resetLink, int? companyId);
         Task SendMfaCodeEmailAsync(string to, string code);
+        Task SendMfaCodeEmailAsync(string to, string code, int? companyId);
         Task SendEmailVerificationOtpAsync(string to, string code);
+        Task SendEmailVerificationOtpAsync(string to, string code, int? companyId);
     }
 
     public class EmailService : IEmailService
     {
-        private readonly ISettingsService _settingsService;
-        private readonly string _smtpHost;
-        private readonly int _smtpPort;
-        private readonly string _smtpUser;
-        private readonly string _smtpPass;
-        private readonly bool _enableSsl;
-        private readonly string _fromEmail;
-        private readonly string _fromName;
+        private readonly ICompanySmtpSettingsService _companySmtpSettingsService;
 
-        public EmailService() : this(new SettingsService()) { }
+        public EmailService()
+            : this(new CompanySmtpSettingsService())
+        {
+        }
 
         public EmailService(ISettingsService settingsService)
+            : this(new CompanySmtpSettingsService())
         {
             if (settingsService == null)
             {
-                throw new ArgumentNullException("settingsService");
+                throw new ArgumentNullException(nameof(settingsService));
             }
+        }
 
-            _settingsService = settingsService;
+        public EmailService(ICompanySmtpSettingsService companySmtpSettingsService)
+        {
+            _companySmtpSettingsService = companySmtpSettingsService ?? throw new ArgumentNullException(nameof(companySmtpSettingsService));
+        }
 
-            // Prioritize Database Settings, fall back to Web.config
-            _smtpHost = _settingsService.GetSetting("SmtpHost") ?? ConfigurationManager.AppSettings["SmtpHost"] ?? "smtp.gmail.com";
-            _smtpPort = _settingsService.GetSetting<int>("SmtpPort", int.Parse(ConfigurationManager.AppSettings["SmtpPort"] ?? "587"));
-            _smtpUser = _settingsService.GetSetting("SmtpUser") ?? ConfigurationManager.AppSettings["SmtpUser"] ?? "";
-            _smtpPass = _settingsService.GetSetting("SmtpPassword") ?? ConfigurationManager.AppSettings["SmtpPassword"] ?? "";
-            _enableSsl = _settingsService.GetSetting<bool>("SmtpEnableSsl", bool.Parse(ConfigurationManager.AppSettings["SmtpEnableSsl"] ?? "true"));
-            _fromEmail = _settingsService.GetSetting("FromEmail") ?? ConfigurationManager.AppSettings["FromEmail"] ?? "noreply@nanosoft.com";
-            _fromName = _settingsService.GetSetting("FromName") ?? ConfigurationManager.AppSettings["FromName"] ?? AppConfig.ProductName;
+        public EmailService(ISettingsService settingsService, ICompanySmtpSettingsService companySmtpSettingsService)
+            : this(companySmtpSettingsService)
+        {
+            if (settingsService == null)
+            {
+                throw new ArgumentNullException(nameof(settingsService));
+            }
         }
 
         public async Task SendAsync(string to, string subject, string body)
         {
-            await SendAsync(to, subject, body, null);
+            await SendAsync(to, subject, body, null, null);
+        }
+
+        public async Task SendAsync(string to, string subject, string body, int? companyId)
+        {
+            await SendAsync(to, subject, body, null, companyId);
         }
 
         public async Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients)
         {
+            await SendAsync(to, subject, body, ccRecipients, null);
+        }
+
+        public async Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId)
+        {
+            await TrySendAsync(to, subject, body, ccRecipients, companyId);
+        }
+
+        public Task<EmailSendResult> TrySendAsync(string to, string subject, string body)
+        {
+            return TrySendAsync(to, subject, body, null, null);
+        }
+
+        public Task<EmailSendResult> TrySendAsync(string to, string subject, string body, int? companyId)
+        {
+            return TrySendAsync(to, subject, body, null, companyId);
+        }
+
+        public Task<EmailSendResult> TrySendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients)
+        {
+            return TrySendAsync(to, subject, body, ccRecipients, null);
+        }
+
+        public async Task<EmailSendResult> TrySendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId)
+        {
             if (string.IsNullOrWhiteSpace(to))
             {
-                return;
+                return EmailSendResult.Skipped();
             }
 
             try
             {
-                await SendMailCoreAsync(to, subject, body, ccRecipients);
+                var smtpConfig = _companySmtpSettingsService.ResolveForCompany(companyId);
+                await SendMailCoreAsync(to, subject, body, ccRecipients, smtpConfig);
+                return EmailSendResult.Succeeded();
             }
             catch (Exception ex)
             {
                 LogEmailFailure(to, ex);
+                return EmailSendResult.Failed(ex.Message);
             }
         }
 
-        private async Task SendMailCoreAsync(string to, string subject, string body, IEnumerable<string> ccRecipients)
+        private async Task SendMailCoreAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, SmtpConfiguration smtpConfig)
         {
             if (string.IsNullOrWhiteSpace(to))
             {
                 return;
+            }
+
+            if (smtpConfig == null || !smtpConfig.IsUsable())
+            {
+                smtpConfig = _companySmtpSettingsService.ResolveGlobal();
             }
 
             var recipient = to.Trim();
             var messageSubject = subject ?? string.Empty;
             var messageBody = body ?? string.Empty;
 
-            using (var client = new SmtpClient(_smtpHost, _smtpPort))
+            using (var client = new SmtpClient(smtpConfig.Host, smtpConfig.Port))
             {
-                client.EnableSsl = _enableSsl;
+                client.EnableSsl = smtpConfig.EnableSsl;
                 client.UseDefaultCredentials = false;
                 client.Timeout = 10000;
 
-                if (!string.IsNullOrEmpty(_smtpUser) || !string.IsNullOrEmpty(_smtpPass))
+                if (!string.IsNullOrEmpty(smtpConfig.User) || !string.IsNullOrEmpty(smtpConfig.Password))
                 {
-                    client.Credentials = new NetworkCredential(_smtpUser, _smtpPass);
+                    client.Credentials = new NetworkCredential(smtpConfig.User, smtpConfig.Password);
                 }
 
                 var mailMessage = new MailMessage
                 {
-                    From = new MailAddress(_fromEmail, _fromName),
+                    From = new MailAddress(smtpConfig.FromEmail, smtpConfig.FromName),
                     Subject = messageSubject,
                     Body = messageBody,
                     IsBodyHtml = true
@@ -116,11 +161,12 @@ namespace HR.Web.Services
             }
         }
 
-        private async Task SendCriticalAsync(string to, string subject, string body)
+        private async Task SendCriticalAsync(string to, string subject, string body, int? companyId)
         {
             try
             {
-                await SendMailCoreAsync(to, subject, body, null);
+                var smtpConfig = _companySmtpSettingsService.ResolveForCompany(companyId);
+                await SendMailCoreAsync(to, subject, body, null, smtpConfig);
             }
             catch (Exception ex)
             {
@@ -157,6 +203,11 @@ namespace HR.Web.Services
         }
 
         public async Task SendPasswordResetEmailAsync(string to, string resetLink)
+        {
+            await SendPasswordResetEmailAsync(to, resetLink, null);
+        }
+
+        public async Task SendPasswordResetEmailAsync(string to, string resetLink, int? companyId)
         {
             if (string.IsNullOrWhiteSpace(to))
             {
@@ -212,9 +263,15 @@ namespace HR.Web.Services
 </body>
 </html>", link, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
-            await SendAsync(to, subject, body);
+            await SendAsync(to, subject, body, companyId);
         }
+
         public async Task SendMfaCodeEmailAsync(string to, string code)
+        {
+            await SendMfaCodeEmailAsync(to, code, null);
+        }
+
+        public async Task SendMfaCodeEmailAsync(string to, string code, int? companyId)
         {
             if (string.IsNullOrWhiteSpace(to))
             {
@@ -263,10 +320,15 @@ namespace HR.Web.Services
 
             LogSensitiveCodeForDevelopment("MFA CODE", to, verificationCode, "mfa_codes.txt");
 
-            await SendCriticalAsync(to, subject, body);
+            await SendCriticalAsync(to, subject, body, companyId);
         }
 
         public async Task SendEmailVerificationOtpAsync(string to, string code)
+        {
+            await SendEmailVerificationOtpAsync(to, code, null);
+        }
+
+        public async Task SendEmailVerificationOtpAsync(string to, string code, int? companyId)
         {
             if (string.IsNullOrWhiteSpace(to))
             {
@@ -313,7 +375,7 @@ namespace HR.Web.Services
 
             LogSensitiveCodeForDevelopment("EMAIL VERIFICATION OTP", to, verificationCode, "verification_codes.txt");
 
-            await SendCriticalAsync(to, subject, body);
+            await SendCriticalAsync(to, subject, body, companyId);
         }
 
         private static void LogSensitiveCodeForDevelopment(string label, string to, string code, string fileName)
@@ -340,13 +402,3 @@ namespace HR.Web.Services
         }
     }
 }
-
-
-
-
-
-
-
-
-
-

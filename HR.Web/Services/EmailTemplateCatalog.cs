@@ -1,11 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Web;
+using HR.Web.Helpers;
 
 namespace HR.Web.Services
 {
     public static class EmailTemplateCatalog
     {
+        private static readonly HashSet<string> RawHtmlInterpolationKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "CustomMessageBlock"
+        };
         public static readonly string FailedCandidateStandard = "failed_candidate_standard";
         public static readonly string FailedCandidateNextSteps = "failed_candidate_next_steps";
         public static readonly string InterviewCandidateStandard = "interview_candidate_standard";
@@ -261,10 +267,12 @@ namespace HR.Web.Services
         public static RenderedTemplate RenderRawTemplates(string subjectTemplate, string bodyTemplate, IDictionary<string, string> tokens)
         {
             var effectiveTokens = WithQuestionnaireStageLinkAliases(tokens);
+            var subject = ReplaceTokens(subjectTemplate, effectiveTokens, htmlEncodeValues: true);
+            var body = EmailBodyHtmlSanitizer.Sanitize(ReplaceTokens(bodyTemplate, effectiveTokens, htmlEncodeValues: true));
             return new RenderedTemplate
             {
-                Subject = ReplaceTokens(subjectTemplate, effectiveTokens),
-                BodyHtml = ReplaceTokens(bodyTemplate, effectiveTokens)
+                Subject = subject,
+                BodyHtml = body
             };
         }
 
@@ -318,7 +326,7 @@ namespace HR.Web.Services
                 : templateKey.Trim().ToLowerInvariant();
         }
 
-        private static string ReplaceTokens(string template, IDictionary<string, string> tokens)
+        private static string ReplaceTokens(string template, IDictionary<string, string> tokens, bool htmlEncodeValues)
         {
             if (string.IsNullOrEmpty(template) || tokens == null || tokens.Count == 0)
             {
@@ -329,7 +337,11 @@ namespace HR.Web.Services
             foreach (var pair in tokens)
             {
                 var token = "{{" + pair.Key + "}}";
-                result = result.Replace(token, pair.Value ?? string.Empty);
+                var rawValue = pair.Value ?? string.Empty;
+                var replacement = htmlEncodeValues && !RawHtmlInterpolationKeys.Contains(pair.Key)
+                    ? HttpUtility.HtmlEncode(rawValue)
+                    : rawValue;
+                result = result.Replace(token, replacement);
             }
 
             return result;

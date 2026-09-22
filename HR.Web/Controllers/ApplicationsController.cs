@@ -422,6 +422,7 @@ namespace HR.Web.Controllers
             return View(app);
         }
 
+        [Authorize]
         public ActionResult Create(int? positionId)
         {
             if (!IsCurrentUserAuthenticated())
@@ -462,6 +463,7 @@ namespace HR.Web.Controllers
         }
 
         [HttpPost]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public ActionResult Create(Application model)
         {
@@ -496,8 +498,18 @@ namespace HR.Web.Controllers
 
             _uow.Applications.Add(applicationModel);
             _uow.Complete();
-            var applicantEmail = applicationModel.Applicant != null ? applicationModel.Applicant.Email : null;
-            _email.SendAsync(applicantEmail, "Application received", "We received your application.");
+
+            var savedApplicant = applicationModel.Applicant ??
+                _uow.Applicants.Get(applicationModel.ApplicantId);
+            var savedPosition = applicationModel.Position ??
+                _uow.Positions.Get(applicationModel.PositionId);
+            var emailResult = SendApplicationReceivedNotification(applicationModel, savedApplicant, savedPosition);
+            if (emailResult.Attempted && !emailResult.Success)
+            {
+                TempData["ApplicationEmailWarning"] =
+                    "Application saved, but the confirmation email could not be sent. Check SMTP settings.";
+            }
+
             return RedirectToAction("Index");
         }
 
