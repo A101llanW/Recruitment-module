@@ -422,6 +422,7 @@ namespace HR.Web.Controllers
             return View(app);
         }
 
+        [Authorize]
         public ActionResult Create(int? positionId)
         {
             if (!IsCurrentUserAuthenticated())
@@ -462,6 +463,7 @@ namespace HR.Web.Controllers
         }
 
         [HttpPost]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public ActionResult Create(Application model)
         {
@@ -496,8 +498,19 @@ namespace HR.Web.Controllers
 
             _uow.Applications.Add(applicationModel);
             _uow.Complete();
-            var applicantEmail = applicationModel.Applicant != null ? applicationModel.Applicant.Email : null;
-            _email.SendAsync(applicantEmail, "Application received", "We received your application.");
+
+            var persistedApplication = _uow.Applications.GetAll(a => a.Applicant, a => a.Position)
+                .FirstOrDefault(a => a.Id == applicationModel.Id);
+            if (persistedApplication != null &&
+                persistedApplication.Applicant != null &&
+                persistedApplication.Position != null)
+            {
+                SendApplicationReceivedStandardEmail(
+                    persistedApplication,
+                    persistedApplication.Applicant,
+                    persistedApplication.Position);
+            }
+
             return RedirectToAction("Index");
         }
 

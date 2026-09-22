@@ -603,36 +603,32 @@ namespace HR.Web.Controllers
                 (string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(userRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
 
+            var tenantToken = RouteData.Values["tenant"] as string;
+
             if (isSuperAdmin || string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase))
             {
-                Session.Remove("PendingMfaUsername");
-                Session.Remove("ForcedMfaSetup");
-                Session["MfaVerified"] = true;
+                Session["PendingMfaUsername"] = user.UserName;
+                if (user.CompanyId.HasValue)
+                {
+                    Session[LegalConsentSession.PendingCompanyIdSession] = user.CompanyId.Value;
+                }
+                else
+                {
+                    Session.Remove(LegalConsentSession.PendingCompanyIdSession);
+                }
 
                 AuditSvc.LogAction(
                     username,
-                    "LOGIN_MFA_BYPASSED",
+                    "LOGIN_REDIRECT_MFA_AFTER_EMAIL_VERIFY",
                     "Account",
                     user.Id.ToString(),
                     true,
-                    "MFA challenge seamlessly bypassed for first login after email verification");
+                    "Email verified; Admin/SuperAdmin must complete MFA before session continues");
 
-                var tenantToken = RouteData.Values["tenant"] as string;
-                if (isSuperAdmin)
-                {
-                    return RedirectToAction("Index", "Companies", new { tenant = (string)null });
-                }
-
-                return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
+                return RedirectToAction("VerifyMFA", "Account", new { tenant = tenantToken });
             }
 
-            var fallbackTenant = RouteData.Values["tenant"] as string;
-            if (isSuperAdmin)
-            {
-                return RedirectToAction("Index", "Companies", new { tenant = (string)null });
-            }
-
-            return RedirectToAction("Index", "Positions", new { tenant = fallbackTenant });
+            return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
         }
 
         private ActionResult HandleVerifyMfaSubmission(string code)

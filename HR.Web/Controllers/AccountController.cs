@@ -607,6 +607,19 @@ namespace HR.Web.Controllers
                 return Json(new { success = false, message = "Email verification is not enabled for this account." });
             }
 
+            int secondsRemaining;
+            if (IsMfaResendWithinCooldown(out secondsRemaining))
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = string.Format(
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        "Please wait {0} seconds before requesting another code.",
+                        secondsRemaining)
+                });
+            }
+
             if (!SendMfaCode(user))
             {
                 return Json(new { success = false, message = "Failed to send verification email. Check SMTP configuration." });
@@ -670,6 +683,9 @@ namespace HR.Web.Controllers
             return SendMfaCode(user, null);
         }
 
+        private const int MfaResendCooldownSeconds = 60;
+        private const string MfaLastSendSessionKey = "MfaLastSendUtcTicks";
+
         private bool SendMfaCode(User user, string overrideMethod)
         {
             if (user == null)
@@ -699,42 +715,63 @@ namespace HR.Web.Controllers
             var recipientEmail = mfaUser.Email;
             DevDiagnostics.LogOneTimeCode("MFA CODE", recipientEmail, code);
 
-            QueueMfaEmailSend(recipientEmail.Trim(), code, mfaUser.UserName, mfaUser.Id.ToString());
+            if (!SendMfaEmailSynchronously(recipientEmail.Trim(), code, mfaUser.UserName, mfaUser.Id.ToString()))
+            {
+                return false;
+            }
+
+            Session[MfaLastSendSessionKey] = DateTime.UtcNow.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
             return true;
         }
 
-        private void QueueMfaEmailSend(string recipientEmail, string code, string username, string userId)
+        private bool SendMfaEmailSynchronously(string recipientEmail, string code, string username, string userId)
         {
             if (string.IsNullOrWhiteSpace(recipientEmail))
             {
-                return;
+                return false;
             }
 
-            ThreadPool.QueueUserWorkItem(_ =>
+            try
             {
+                var emailService = EmailSvc ?? new EmailService();
+                emailService.SendMfaCodeEmailAsync(recipientEmail, code).GetAwaiter().GetResult();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DevDiagnostics.LogOneTimeCode("MFA CODE (email failed — use code above)", recipientEmail, code);
+                System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
                 try
                 {
-                    var emailService = new EmailService();
-                    emailService.SendMfaCodeEmailAsync(recipientEmail, code).GetAwaiter().GetResult();
+                    AuditSvc.LogAction(username, "MFA_EMAIL_SEND_FAILED", "Account", userId, ex.Message);
                 }
-                catch (Exception ex)
+                catch
                 {
-                    DevDiagnostics.LogOneTimeCode("MFA CODE (email failed — use code above)", recipientEmail, code);
-                    System.Diagnostics.Trace.WriteLine("--- [MFA EMAIL ERROR] Failed to send: " + ex.Message);
-                    try
-                    {
-                        using (var uow = new UnitOfWork())
-                        {
-                            var audit = new AuditService();
-                            audit.LogAction(username, "MFA_EMAIL_SEND_FAILED", "Account", userId, ex.Message);
-                        }
-                    }
-                    catch
-                    {
-                        // Best-effort audit only.
-                    }
+                    // Best-effort audit only.
                 }
-            });
+
+                return false;
+            }
+        }
+
+        private bool IsMfaResendWithinCooldown(out int secondsRemaining)
+        {
+            secondsRemaining = 0;
+            var rawTicks = Session[MfaLastSendSessionKey] as string;
+            long ticks;
+            if (string.IsNullOrEmpty(rawTicks) || !long.TryParse(rawTicks, out ticks))
+            {
+                return false;
+            }
+
+            var elapsed = DateTime.UtcNow - new DateTime(ticks, DateTimeKind.Utc);
+            if (elapsed.TotalSeconds >= MfaResendCooldownSeconds)
+            {
+                return false;
+            }
+
+            secondsRemaining = Math.Max(1, MfaResendCooldownSeconds - (int)elapsed.TotalSeconds);
+            return true;
         }
 
         private string MaskContactInfo(string email)
