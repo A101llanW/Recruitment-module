@@ -1,0 +1,95 @@
+@model HR.Web.ViewModels.CustomReportRunViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Reports";
+}
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-lg-10">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h3>@Model.Name</h3>
+                    @if (!string.IsNullOrEmpty(Model.Description))
+                    {
+                        <p class="text-muted">@Model.Description</p>
+                    }
+                    <p class="small text-muted mb-0">Dataset: @Model.DatasetLabel</p>
+                </div>
+                <div>
+                    <a class="btn btn-outline-secondary" href="@Url.Action("Index", "ReportGenerator")">Back to reports</a>
+                    <a class="btn btn-primary" href="@Url.Action("ExportSaved", "ReportGenerator", new { id = Model.Id })">Export CSV</a>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(Model.Error))
+            {
+                <div class="alert alert-danger">@Model.Error</div>
+            }
+            else if (Model.Page != null)
+            {
+                @Html.Partial("~/Views/Reports/_CustomReportTable.cshtml", Model.Page)
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var reportId = @Model.Id;
+            var currentPage = @(Model.Page != null ? Model.Page.Page : 1);
+            var totalRows = @(Model.Page != null && Model.Page.Rows != null ? Model.Page.Rows.Count : 0);
+
+            function loadMoreRows() {
+                var nextPage = parseInt($('#custom-report-view-more').data('next-page'), 10) || (currentPage + 1);
+                if (nextPage > 20) {
+                    return;
+                }
+
+                $.get('@Url.Action("RunData", "ReportGenerator")', { id: reportId, page: nextPage }, function (response) {
+                    if (!response.success) {
+                        alert(response.message || 'Unable to load more rows.');
+                        return;
+                    }
+
+                    if (response.warning) {
+                        if ($('.alert-warning').length === 0) {
+                            $('#custom-report-table').before('<div class="alert alert-warning py-2"></div>');
+                        }
+                        $('.alert-warning').text(response.warning);
+                    }
+
+                    var tbody = document.getElementById('custom-report-table-body');
+                    (response.rows || []).forEach(function (row) {
+                        var tr = document.createElement('tr');
+                        row.forEach(function (cell) {
+                            var td = document.createElement('td');
+                            td.textContent = cell;
+                            tr.appendChild(td);
+                        });
+                        tbody.appendChild(tr);
+                    });
+
+                    currentPage = response.page;
+                    totalRows += (response.rows || []).length;
+                    $('#custom-report-view-more').remove();
+
+                    if (response.hasMore && totalRows < 200) {
+                        var btn = $('<button type="button" class="btn btn-link p-0" id="custom-report-view-more">View more</button>');
+                        btn.attr('data-next-page', currentPage + 1);
+                        $('#custom-report-table').after(btn);
+                        btn.on('click', loadMoreRows);
+                    } else if (!response.hasMore || totalRows >= 200) {
+                        if ($('#custom-report-cap-note').length === 0) {
+                            $('<p class="text-muted small mb-0" id="custom-report-cap-note">Preview shows the first 200 rows. Export CSV for the full result (up to 5000).</p>')
+                                .insertAfter('#custom-report-table');
+                        }
+                    }
+                });
+            }
+
+            $('#custom-report-view-more').on('click', loadMoreRows);
+        })();
+    </script>
+}

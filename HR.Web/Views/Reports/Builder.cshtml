@@ -1,0 +1,467 @@
+@model HR.Web.ViewModels.CustomReportBuilderViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Reports";
+    var isEdit = Model.Id.HasValue;
+}
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-lg-8">
+            <h3>@(isEdit ? "Edit custom report" : "New custom report")</h3>
+            @if (Model.SavedFlash)
+            {
+                <div class="alert alert-success py-2">Saved.</div>
+            }
+            @if (!string.IsNullOrEmpty(Model.CompanyWarning))
+            {
+                <div class="alert alert-warning py-2">@Model.CompanyWarning</div>
+            }
+            @if (!string.IsNullOrEmpty(Model.Error))
+            {
+                <div class="alert alert-danger py-2">@Model.Error</div>
+            }
+
+            @using (Html.BeginForm("SaveCustom", "ReportGenerator", FormMethod.Post, new { id = "custom-report-form" }))
+            {
+                @Html.AntiForgeryToken()
+                if (Model.Id.HasValue)
+                {
+                    <input type="hidden" name="id" value="@Model.Id.Value" />
+                }
+                <input type="hidden" name="configJson" id="configJson" />
+
+                <div class="form-group">
+                    <label for="reportName">Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="reportName" name="name" maxlength="100" required value="@Model.Name" />
+                </div>
+
+                <div class="form-group">
+                    <label for="reportDescription">Description</label>
+                    <textarea class="form-control" id="reportDescription" name="description" maxlength="500" rows="2">@Model.Description</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Dataset</label>
+                    @foreach (var dataset in Model.Datasets)
+                    {
+                        var checkedAttr = string.Equals(Model.DatasetWireKey, dataset.WireKey, StringComparison.Ordinal) ? "checked" : string.Empty;
+                        <div class="custom-control custom-radio">
+                            <input type="radio" class="custom-control-input dataset-radio" id="dataset-@dataset.WireKey" name="datasetWire" value="@dataset.WireKey" @checkedAttr />
+                            <label class="custom-control-label" for="dataset-@dataset.WireKey">@dataset.Label</label>
+                        </div>
+                        <small class="form-text text-muted dataset-help" data-dataset="@dataset.WireKey" style="display:none;">
+                            @if (dataset.WireKey == "applications")
+                            {
+                                <span>One row per application, with the applicant and position fields you select.</span>
+                            }
+                            else
+                            {
+                                <span>One row per position. Applicants counts distinct people who applied in the selected time frame and filters.</span>
+                            }
+                        </small>
+                    }
+                </div>
+
+                <div class="form-group">
+                    <label>Columns</label>
+                    @foreach (var dataset in Model.Datasets)
+                    {
+                        <div class="dataset-columns" data-dataset="@dataset.WireKey" style="display:none;">
+                            @foreach (var column in dataset.Columns)
+                            {
+                                var isChecked = Model.SelectedColumns != null && Model.SelectedColumns.Contains(column.Key);
+                                var disabledAttr = column.Required ? "disabled" : string.Empty;
+                                var checkedAttr = (isChecked || column.Required) ? "checked" : string.Empty;
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox"
+                                           class="custom-control-input column-checkbox"
+                                           id="col-@dataset.WireKey-@column.Key"
+                                           data-dataset="@dataset.WireKey"
+                                           data-column="@column.Key"
+                                           data-required="@(column.Required ? "true" : "false")"
+                                           value="@column.Key"
+                                           @checkedAttr @disabledAttr />
+                                    @if (column.Required)
+                                    {
+                                        <input type="hidden" class="required-column-hidden" data-dataset="@dataset.WireKey" data-column="@column.Key" value="@column.Key" />
+                                    }
+                                    <label class="custom-control-label" for="col-@dataset.WireKey-@column.Key">@column.Header</label>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="form-group">
+                    <label for="timePreset">Time frame</label>
+                    <select class="form-control" id="timePreset">
+                        <option value="allTime" @(Model.Preset == "allTime" ? "selected" : null)>All time</option>
+                        <option value="last7Days" @(Model.Preset == "last7Days" ? "selected" : null)>Last 7 days</option>
+                        <option value="last30Days" @(Model.Preset == "last30Days" ? "selected" : null)>Last 30 days</option>
+                        <option value="last90Days" @(Model.Preset == "last90Days" ? "selected" : null)>Last 90 days</option>
+                        <option value="thisYear" @(Model.Preset == "thisYear" ? "selected" : null)>This year</option>
+                        <option value="custom" @(Model.Preset == "custom" ? "selected" : null)>Custom range</option>
+                    </select>
+                    <div id="custom-date-range" class="row mt-2" style="display:none;">
+                        <div class="col-md-6">
+                            <label for="customFrom">From</label>
+                            <input type="date" class="form-control" id="customFrom" value="@Model.From" />
+                        </div>
+                        <div class="col-md-6">
+                            <label for="customTo">To</label>
+                            <input type="date" class="form-control" id="customTo" value="@Model.To" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Status</label>
+                    <small class="form-text text-muted">None selected means all statuses.</small>
+                    @foreach (var status in Model.Statuses)
+                    {
+                        var isChecked = Model.SelectedStatuses != null && Model.SelectedStatuses.Contains(status);
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input status-checkbox" id="status-@status" value="@status" @(isChecked ? "checked" : null) />
+                            <label class="custom-control-label" for="status-@status">@status</label>
+                        </div>
+                    }
+                </div>
+
+                <div class="form-group">
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="openPositionsOnly" @(Model.OpenPositionsOnly ? "checked" : null) />
+                        <label class="custom-control-label" for="openPositionsOnly">Open positions only</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Positions</label>
+                    <div id="position-filters">
+                        @foreach (var position in Model.Positions)
+                        {
+                            var isChecked = Model.SelectedPositionIds != null && Model.SelectedPositionIds.Contains(position.Id);
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input position-checkbox" id="position-@position.Id" value="@position.Id" @(isChecked ? "checked" : null) />
+                                <label class="custom-control-label" for="position-@position.Id">@position.Label</label>
+                            </div>
+                        }
+                    </div>
+                    @if (Model.PositionsHasMore)
+                    {
+                        <button type="button" class="btn btn-link p-0" id="positions-view-more" data-next-page="2">View more</button>
+                    }
+                </div>
+
+                <div class="form-group">
+                    <label>Departments</label>
+                    <div id="department-filters">
+                        @foreach (var department in Model.Departments)
+                        {
+                            var isChecked = Model.SelectedDepartmentIds != null && Model.SelectedDepartmentIds.Contains(department.Id);
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input department-checkbox" id="department-@department.Id" value="@department.Id" @(isChecked ? "checked" : null) />
+                                <label class="custom-control-label" for="department-@department.Id">@department.Label</label>
+                            </div>
+                        }
+                    </div>
+                    @if (Model.DepartmentsHasMore)
+                    {
+                        <button type="button" class="btn btn-link p-0" id="departments-view-more" data-next-page="2">View more</button>
+                    }
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label for="sortColumn">Sort column</label>
+                        <select class="form-control" id="sortColumn"></select>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label for="sortDirection">Direction</label>
+                        <select class="form-control" id="sortDirection">
+                            <option value="asc" @(Model.SortDirection == "asc" ? "selected" : null)>Ascending</option>
+                            <option value="desc" @(Model.SortDirection == "desc" ? "selected" : null)>Descending</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <button type="button" class="btn btn-outline-primary" id="previewBtn">Preview</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-outline-secondary" id="exportBtn">Export CSV</button>
+                    <a class="btn btn-link" href="@Url.Action("Index", "ReportGenerator")">Back to reports</a>
+                </div>
+            }
+
+            <div id="preview-region" class="border rounded p-3 bg-light">
+                <p class="text-muted mb-0" id="preview-placeholder">Choose columns and click Preview.</p>
+                <div id="preview-content" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var selectedSortColumn = '@(Model.SortColumn ?? "")';
+            var previewPage = 1;
+            var previewRowCount = 0;
+
+            function getToken() {
+                return $('input[name="__RequestVerificationToken"]').first().val();
+            }
+
+            function currentDataset() {
+                return $('.dataset-radio:checked').val();
+            }
+
+            function showDataset(dataset) {
+                $('.dataset-columns').hide();
+                $('.dataset-help').hide();
+                $('.dataset-columns[data-dataset="' + dataset + '"]').show();
+                $('.dataset-help[data-dataset="' + dataset + '"]').show();
+                rebuildSortOptions();
+            }
+
+            function selectedColumns(dataset) {
+                var columns = [];
+                $('.column-checkbox[data-dataset="' + dataset + '"]:checked').each(function () {
+                    columns.push($(this).data('column'));
+                });
+                $('.required-column-hidden[data-dataset="' + dataset + '"]').each(function () {
+                    var col = $(this).data('column');
+                    if (columns.indexOf(col) === -1) {
+                        columns.push(col);
+                    }
+                });
+                return columns;
+            }
+
+            function rebuildSortOptions() {
+                var dataset = currentDataset();
+                var columns = selectedColumns(dataset);
+                var select = $('#sortColumn');
+                var previous = select.val() || selectedSortColumn;
+                select.empty();
+                columns.forEach(function (col) {
+                    var label = $('label[for="col-' + dataset + '-' + col + '"]').text() || col;
+                    var option = $('<option></option>').attr('value', col).text(label);
+                    select.append(option);
+                });
+                if (previous && columns.indexOf(previous) !== -1) {
+                    select.val(previous);
+                } else if (columns.length > 0) {
+                    select.val(columns[0]);
+                }
+            }
+
+            function buildConfigJson() {
+                var dataset = currentDataset();
+                var preset = $('#timePreset').val();
+                return JSON.stringify({
+                    version: 1,
+                    dataset: dataset,
+                    columns: selectedColumns(dataset),
+                    timeFrame: {
+                        preset: preset,
+                        from: preset === 'custom' ? $('#customFrom').val() : null,
+                        to: preset === 'custom' ? $('#customTo').val() : null
+                    },
+                    filters: {
+                        statuses: $('.status-checkbox:checked').map(function () { return $(this).val(); }).get(),
+                        positionIds: $('.position-checkbox:checked').map(function () { return parseInt($(this).val(), 10); }).get(),
+                        departmentIds: $('.department-checkbox:checked').map(function () { return parseInt($(this).val(), 10); }).get(),
+                        openPositionsOnly: $('#openPositionsOnly').is(':checked')
+                    },
+                    sort: {
+                        column: $('#sortColumn').val(),
+                        direction: $('#sortDirection').val()
+                    }
+                });
+            }
+
+            function toggleCustomDates() {
+                var show = $('#timePreset').val() === 'custom';
+                $('#custom-date-range').toggle(show);
+            }
+
+            function appendFilterOptions(kind, page, containerSelector, checkboxClass, idPrefix) {
+                $.get('@Url.Action("FilterOptions", "ReportGenerator")', { kind: kind, page: page }, function (response) {
+                    var container = $(containerSelector);
+                    (response.items || []).forEach(function (item) {
+                        if ($('#' + idPrefix + '-' + item.id).length > 0) {
+                            return;
+                        }
+                        var wrapper = $('<div class="custom-control custom-checkbox"></div>');
+                        var input = $('<input type="checkbox" class="custom-control-input ' + checkboxClass + '" />')
+                            .attr('id', idPrefix + '-' + item.id)
+                            .val(item.id);
+                        var label = $('<label class="custom-control-label"></label>')
+                            .attr('for', idPrefix + '-' + item.id)
+                            .text(item.label);
+                        wrapper.append(input).append(label);
+                        container.append(wrapper);
+                    });
+
+                    var buttonId = kind === 'positions' ? '#positions-view-more' : '#departments-view-more';
+                    if (response.hasMore) {
+                        $(buttonId).data('next-page', page + 1).show();
+                    } else {
+                        $(buttonId).hide();
+                    }
+                });
+            }
+
+            function renderPreviewTable(headers, rows, hasMore, warning) {
+                var content = $('#preview-content');
+                content.empty().show();
+                $('#preview-placeholder').hide();
+
+                if (warning) {
+                    content.append('<div class="alert alert-warning py-2"></div>');
+                    content.find('.alert-warning').text(warning);
+                }
+
+                var table = $('<table class="table table-sm table-bordered"></table>');
+                var thead = $('<thead><tr></tr></thead>');
+                headers.forEach(function (header) {
+                    thead.find('tr').append($('<th></th>').text(header));
+                });
+                table.append(thead);
+
+                var tbody = $('<tbody id="builder-preview-body"></tbody>');
+                rows.forEach(function (row) {
+                    var tr = $('<tr></tr>');
+                    row.forEach(function (cell) {
+                        tr.append($('<td></td>').text(cell));
+                    });
+                    tbody.append(tr);
+                });
+                table.append(tbody);
+                content.append(table);
+
+                $('#builder-preview-view-more').remove();
+                $('#builder-preview-cap-note').remove();
+
+                if (hasMore && previewRowCount < 200) {
+                    var btn = $('<button type="button" class="btn btn-link p-0" id="builder-preview-view-more">View more</button>');
+                    content.append(btn);
+                } else if (!hasMore || previewRowCount >= 200) {
+                    content.append('<p class="text-muted small mb-0" id="builder-preview-cap-note">Preview shows the first 200 rows. Export CSV for the full result (up to 5000).</p>');
+                }
+            }
+
+            function runPreview(page, append) {
+                var btn = $('#previewBtn');
+                btn.prop('disabled', true).text('Previewing…');
+
+                $.ajax({
+                    url: '@Url.Action("PreviewCustom", "ReportGenerator")',
+                    type: 'POST',
+                    data: {
+                        __RequestVerificationToken: getToken(),
+                        name: $('#reportName').val(),
+                        description: $('#reportDescription').val(),
+                        configJson: buildConfigJson(),
+                        page: page
+                    },
+                    success: function (response) {
+                        btn.prop('disabled', false).text('Preview');
+                        if (!response.success) {
+                            $('#preview-content').hide();
+                            $('#preview-placeholder').text(response.message || 'Preview failed.').show();
+                            return;
+                        }
+
+                        previewPage = response.page;
+                        if (!append) {
+                            previewRowCount = 0;
+                            renderPreviewTable(response.headers, response.rows, response.hasMore, response.warning);
+                        } else {
+                            if (response.warning) {
+                                if ($('#preview-content .alert-warning').length === 0) {
+                                    $('#preview-content').prepend('<div class="alert alert-warning py-2"></div>');
+                                }
+                                $('#preview-content .alert-warning').text(response.warning);
+                            }
+                            var tbody = $('#builder-preview-body');
+                            (response.rows || []).forEach(function (row) {
+                                var tr = $('<tr></tr>');
+                                row.forEach(function (cell) {
+                                    tr.append($('<td></td>').text(cell));
+                                });
+                                tbody.append(tr);
+                            });
+                            $('#builder-preview-view-more').remove();
+                        }
+
+                        previewRowCount += (response.rows || []).length;
+                        if (response.hasMore && previewRowCount < 200) {
+                            var moreBtn = $('<button type="button" class="btn btn-link p-0" id="builder-preview-view-more">View more</button>');
+                            $('#preview-content').append(moreBtn);
+                        } else {
+                            $('#builder-preview-cap-note').remove();
+                            if (!$('#builder-preview-cap-note').length) {
+                                $('#preview-content').append('<p class="text-muted small mb-0" id="builder-preview-cap-note">Preview shows the first 200 rows. Export CSV for the full result (up to 5000).</p>');
+                            }
+                        }
+                    },
+                    error: function () {
+                        btn.prop('disabled', false).text('Preview');
+                        $('#preview-content').hide();
+                        $('#preview-placeholder').text('Preview failed.').show();
+                    }
+                });
+            }
+
+            $('#custom-report-form').on('submit', function () {
+                $('#configJson').val(buildConfigJson());
+            });
+
+            $('.dataset-radio').on('change', function () {
+                showDataset($(this).val());
+            });
+
+            $('.column-checkbox, .dataset-radio').on('change', rebuildSortOptions);
+            $('#timePreset').on('change', toggleCustomDates);
+
+            $('#previewBtn').on('click', function () {
+                previewPage = 1;
+                runPreview(1, false);
+            });
+
+            $(document).on('click', '#builder-preview-view-more', function () {
+                runPreview(previewPage + 1, true);
+            });
+
+            $('#exportBtn').on('click', function () {
+                var form = $('<form method="post"></form>')
+                    .attr('action', '@Url.Action("ExportCustom", "ReportGenerator")');
+                form.append($('<input type="hidden" name="__RequestVerificationToken" />').val(getToken()));
+                form.append($('<input type="hidden" name="name" />').val($('#reportName').val()));
+                form.append($('<input type="hidden" name="description" />').val($('#reportDescription').val()));
+                form.append($('<input type="hidden" name="configJson" />').val(buildConfigJson()));
+                $('body').append(form);
+                form.submit();
+                form.remove();
+            });
+
+            $('#positions-view-more').on('click', function () {
+                var page = parseInt($(this).data('next-page'), 10) || 2;
+                appendFilterOptions('positions', page, '#position-filters', 'position-checkbox', 'position');
+            });
+
+            $('#departments-view-more').on('click', function () {
+                var page = parseInt($(this).data('next-page'), 10) || 2;
+                appendFilterOptions('departments', page, '#department-filters', 'department-checkbox', 'department');
+            });
+
+            showDataset(currentDataset());
+            toggleCustomDates();
+            if (selectedSortColumn) {
+                $('#sortColumn').val(selectedSortColumn);
+            }
+        })();
+    </script>
+}

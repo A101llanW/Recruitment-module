@@ -1,3 +1,4 @@
+@model HR.Web.ViewModels.CustomReportPageViewModel
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Reports";
@@ -123,6 +124,51 @@
             </div>
         </div>
     </div>
+
+    @if (Model != null)
+    {
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h3 class="mb-0"><i class="fas fa-table"></i> Custom reports</h3>
+                        @if (Model.CanManage)
+                        {
+                            <a class="btn btn-primary btn-sm" href="@Url.Action("Builder", "ReportGenerator")">
+                                <i class="fas fa-plus"></i> New custom report
+                            </a>
+                        }
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm table-hover" id="saved-custom-reports-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Dataset</th>
+                                    <th>Updated</th>
+                                    <th>Created by</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="saved-custom-reports-body">
+                                @if (Model.Saved != null && Model.Saved.Items != null && Model.Saved.Items.Count > 0)
+                                {
+                                    ViewData["CanManage"] = Model.CanManage;
+                                    @Html.Partial("~/Views/Reports/_SavedCustomReports.cshtml", Model.Saved)
+                                }
+                                else
+                                {
+                                    <tr id="saved-custom-empty-row">
+                                        <td colspan="5" class="text-muted">No custom reports yet.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 <!-- Loading Modal -->
@@ -349,6 +395,19 @@
             });
         }
         
+        $(document).on('click', '#saved-custom-view-more', function () {
+            var nextPage = parseInt($(this).data('next-page'), 10) || 2;
+            var button = $(this);
+            button.prop('disabled', true).text('Loading…');
+            $.get('@Url.Action("SavedPage", "ReportGenerator")', { page: nextPage }, function (html) {
+                $('#saved-custom-view-more-row').remove();
+                $('#saved-custom-empty-row').remove();
+                $('#saved-custom-reports-body').append(html);
+            }).always(function () {
+                button.prop('disabled', false).text('View more');
+            });
+        });
+
         function addToRecentReports(fileName, reportType) {
             var reportHtml = '<div class="list-group-item">' +
                 '<div class="d-flex w-100 justify-content-between align-items-center">' +
