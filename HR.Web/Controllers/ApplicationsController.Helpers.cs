@@ -483,8 +483,13 @@ namespace HR.Web.Controllers
             _uow.Complete();
         }
 
-        private void ScoreQuestionnaireApplication(Application application)
+        private bool ScoreQuestionnaireApplication(Application application, Position position)
         {
+            if (application == null)
+            {
+                return false;
+            }
+
             try
             {
                 var score = _scoringService.CalculateApplicationScore(application);
@@ -493,9 +498,25 @@ namespace HR.Web.Controllers
                 application.ScoreReason = "Questionnaire score calculated from responses.";
                 _uow.Applications.Update(application);
                 _uow.Complete();
+                return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                var positionId = position != null ? (int?)position.Id : application.PositionId;
+                var positionTitle = position != null && !string.IsNullOrWhiteSpace(position.Title)
+                    ? position.Title
+                    : null;
+
+                System.Diagnostics.Trace.WriteLine(string.Format(
+                    "[QUESTIONNAIRE_SCORING] Failed for ApplicationId={0}, PositionId={1}, PositionTitle={2}. Error: {3}{4}Stack: {5}",
+                    application.Id,
+                    positionId.HasValue ? positionId.Value.ToString() : "unknown",
+                    positionTitle ?? "unknown",
+                    ex.Message,
+                    Environment.NewLine,
+                    ex.StackTrace ?? string.Empty));
+
+                return false;
             }
         }
 
@@ -1006,7 +1027,13 @@ namespace HR.Web.Controllers
             _uow.Applications.Update(application);
             _uow.Complete();
             ClearPendingCoverLetter();
-            ScoreQuestionnaireApplication(application);
+            if (!ScoreQuestionnaireApplication(application, position))
+            {
+                TempData["ErrorMessage"] =
+                    "Your application was saved, but we could not calculate your questionnaire score. Please contact support or try again later.";
+                return RedirectToAction("Index", "Positions");
+            }
+
             SendApplicationReceivedNotification(application, applicant, position);
             return null;
         }
@@ -1081,7 +1108,15 @@ namespace HR.Web.Controllers
             existingApplication.PendingQuestionnaireStage = null;
             _uow.Applications.Update(existingApplication);
             _uow.Complete();
-            ScoreQuestionnaireApplication(existingApplication);
+
+            var position = _uow.Positions.Get(reviewModel.PositionId);
+            if (!ScoreQuestionnaireApplication(existingApplication, position))
+            {
+                TempData["ErrorMessage"] =
+                    "Your questionnaire responses were saved, but we could not calculate your score. Please contact support or try again later.";
+                return RedirectToAction("Index", "Positions");
+            }
+
             return null;
         }
 
