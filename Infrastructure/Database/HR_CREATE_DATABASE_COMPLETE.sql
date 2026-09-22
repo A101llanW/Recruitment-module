@@ -464,6 +464,14 @@ BEGIN
     PRINT '   + AuditLogs table created';
 END
 
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_AuditLogs_Action_Username_Timestamp' AND object_id = OBJECT_ID('dbo.AuditLogs'))
+BEGIN
+    CREATE NONCLUSTERED INDEX IX_AuditLogs_Action_Username_Timestamp
+        ON dbo.AuditLogs (Action, Username, Timestamp DESC)
+        INCLUDE (IPAddress);
+    PRINT '   + IX_AuditLogs_Action_Username_Timestamp created';
+END
+
 -- PasswordResets (Security)
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'PasswordResets')
 BEGIN

@@ -706,6 +706,30 @@ namespace HR.Web.Controllers
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, true, user.CompanyId);
             SecuritySvc.ClearFailedAttempts(request.Username, user.CompanyId);
             AuditSvc.LogLogin(request.Username, true);
+            IncrementCandidateLoginCount(user);
+        }
+
+        private static bool IsCandidateAccount(User user)
+        {
+            return user != null &&
+                (string.IsNullOrWhiteSpace(user.Role) ||
+                 string.Equals(user.Role, "Client", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void IncrementCandidateLoginCount(User user)
+        {
+            if (!IsCandidateAccount(user))
+            {
+                return;
+            }
+
+            user.SuccessfulLoginCount = user.SuccessfulLoginCount + 1;
+            if (_uow.Context.Entry(user).State == System.Data.EntityState.Detached)
+            {
+                _uow.Users.Update(user);
+            }
+
+            _uow.Complete();
         }
 
         private void EnsureLoginAccessToken(User user, string username)

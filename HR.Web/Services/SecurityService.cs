@@ -152,6 +152,44 @@ namespace HR.Web.Services
 
             return highestCount;
         }
+
+        /// <summary>
+        /// Resolves lockout status for a user list with one recent-attempt read.
+        /// </summary>
+        public Dictionary<int, UserLockoutState> GetLockoutStates(IEnumerable<User> users)
+        {
+            var userList = users?.Where(user => user != null).ToList() ?? new List<User>();
+            var states = new Dictionary<int, UserLockoutState>();
+            if (userList.Count == 0)
+            {
+                return states;
+            }
+
+            var threshold = DateTime.Now.AddMinutes(-LockoutDurationMinutes);
+            var recentFailures = _uow.LoginAttempts.GetAll()
+                .Where(a => !a.WasSuccessful && a.AttemptTime > threshold)
+                .Select(a => new
+                {
+                    a.Username,
+                    a.CompanyId,
+                    a.AttemptTime
+                })
+                .ToList()
+                .Select(a => new RecentFailedAttempt
+                {
+                    Username = a.Username,
+                    CompanyId = a.CompanyId,
+                    AttemptTime = a.AttemptTime
+                })
+                .ToList();
+
+            foreach (var user in userList)
+            {
+                states[user.Id] = BuildLockoutState(user, recentFailures);
+            }
+
+            return states;
+        }
         
         public void ClearFailedAttempts(string username, int? companyId = null)
         {
@@ -375,10 +413,65 @@ namespace HR.Web.Services
             }
         }
 
+        private UserLockoutState BuildLockoutState(User user, IList<RecentFailedAttempt> recentFailures)
+        {
+            var state = new UserLockoutState();
+            foreach (var identity in GetLoginIdentities(user))
+            {
+                ApplyLockoutScope(state, recentFailures, identity, user.CompanyId);
+                ApplyLockoutScope(state, recentFailures, identity, null);
+            }
+
+            return state;
+        }
+
+        private static void ApplyLockoutScope(
+            UserLockoutState state,
+            IList<RecentFailedAttempt> recentFailures,
+            string identity,
+            int? companyId)
+        {
+            var matching = recentFailures.Where(attempt =>
+                string.Equals(attempt.Username, identity, StringComparison.OrdinalIgnoreCase) &&
+                (!companyId.HasValue || attempt.CompanyId == companyId.Value)).ToList();
+
+            state.FailedLoginAttempts = Math.Max(state.FailedLoginAttempts, matching.Count);
+            if (matching.Count >= MaxFailedAttempts)
+            {
+                state.IsLocked = true;
+            }
+
+            var newestAttempts = matching
+                .OrderByDescending(attempt => attempt.AttemptTime)
+                .Take(MaxFailedAttempts)
+                .ToList();
+            if (newestAttempts.Count < MaxFailedAttempts)
+            {
+                return;
+            }
+
+            var lockoutEnd = newestAttempts[newestAttempts.Count - 1].AttemptTime.AddMinutes(LockoutDurationMinutes);
+            state.LockoutEndTime = MaxNullableDateTime(state.LockoutEndTime, lockoutEnd);
+        }
+
+        private sealed class RecentFailedAttempt
+        {
+            public string Username { get; set; }
+            public int? CompanyId { get; set; }
+            public DateTime AttemptTime { get; set; }
+        }
+
         private sealed class MfaCodeSnapshot
         {
             public string TwoFactorCode { get; set; }
             public DateTime? TwoFactorExpiry { get; set; }
         }
+    }
+
+    public sealed class UserLockoutState
+    {
+        public bool IsLocked { get; set; }
+        public DateTime? LockoutEndTime { get; set; }
+        public int FailedLoginAttempts { get; set; }
     }
 }

@@ -90,6 +90,7 @@ namespace HR.Web.Controllers
             
             var result = query.OrderByDescending(p => p.PostedOn).ToList();
             PopulateCandidatePositionActions(result, canManagePositions, isReadOnly);
+            ApplyRecentlyViewedFlags(result);
             return View(result);
         }
 
@@ -120,7 +121,8 @@ namespace HR.Web.Controllers
                 !(bool)ViewBag.CanManagePositions;
 
             ViewBag.CandidateAction = ResolveCandidatePositionAction(position);
-            
+            RecordCandidatePositionView(position);
+
             return View(position);
         }
 

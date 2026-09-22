@@ -537,11 +537,6 @@ namespace HR.Web.Services
             {
                 adminItems.Add(CreateItem(context.Url, context.TenantToken, "Role Templates", "Admin", "RoleManagement", "fas fa-user-tag",
                     IsAdminActionActive(context.CurrentController, context.CurrentAction, "RoleManagement")));
-                if (AdminFeatureFlags.EmailTemplatesAdminUiEnabled)
-                {
-                    adminItems.Add(CreateItem(context.Url, context.TenantToken, "Email Templates", "Admin", "EmailTemplates", "fas fa-envelope-open-text",
-                        IsAdminActionActive(context.CurrentController, context.CurrentAction, "EmailTemplates")));
-                }
             }
 
             if (!context.IsSuperAdminUser || context.IsImpersonating)
@@ -555,6 +550,11 @@ namespace HR.Web.Services
 
             if (context.IsAdminUser || context.IsImpersonating || context.IsSuperAdminUser)
             {
+                if (AdminFeatureFlags.EmailTemplatesAdminUiEnabled && context.CanManageRoleTemplates)
+                {
+                    adminItems.Add(CreateItem(context.Url, context.TenantToken, "Email Templates", "Admin", "EmailTemplates", "fas fa-envelope-open-text",
+                        IsAdminActionActive(context.CurrentController, context.CurrentAction, "EmailTemplates")));
+                }
                 adminItems.Add(CreateItem(context.Url, context.TenantToken, "HR CC Emails", "Admin", "HrCcEmails", "fas fa-at",
                     IsAdminActionActive(context.CurrentController, context.CurrentAction, "HrCcEmails")));
                 adminItems.Add(CreateItem(context.Url, context.TenantToken, "Company email (SMTP)", "Admin", "CompanySmtpSettings", "fas fa-mail-bulk",

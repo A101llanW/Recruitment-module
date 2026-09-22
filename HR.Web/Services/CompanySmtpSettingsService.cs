@@ -93,6 +93,7 @@ namespace HR.Web.Services
                 throw new ArgumentNullException(nameof(input));
             }
 
+            NormalizeGmailSettings(input);
             var validationError = ValidateInput(input, companyId);
             if (validationError != null)
             {
@@ -157,6 +158,34 @@ namespace HR.Web.Services
                 FromName = string.IsNullOrWhiteSpace(settings.FromName) ? AppConfig.ProductName : settings.FromName.Trim(),
                 IsCompanyScoped = true
             };
+        }
+
+        private static void NormalizeGmailSettings(CompanySmtpSettingsInput input)
+        {
+            var host = input.SmtpHost == null ? string.Empty : input.SmtpHost.Trim();
+            var looksLikeGmailAddress = host.EndsWith("@gmail.com", StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith(".gmail.com", StringComparison.OrdinalIgnoreCase);
+            if (!looksLikeGmailAddress)
+            {
+                return;
+            }
+
+            if (host.IndexOf('@') >= 0 && (string.IsNullOrWhiteSpace(input.SmtpUser) || input.SmtpUser.IndexOf('@') < 0))
+            {
+                input.SmtpUser = host;
+            }
+            else if (!string.IsNullOrWhiteSpace(input.FromEmail) &&
+                     input.FromEmail.IndexOf('@') >= 0 &&
+                     (string.IsNullOrWhiteSpace(input.SmtpUser) || input.SmtpUser.IndexOf('@') < 0))
+            {
+                input.SmtpUser = input.FromEmail.Trim();
+            }
+
+            input.SmtpHost = "smtp.gmail.com";
+            if (input.SmtpPort <= 0)
+            {
+                input.SmtpPort = 587;
+            }
         }
 
         private string ValidateInput(CompanySmtpSettingsInput input, int companyId)

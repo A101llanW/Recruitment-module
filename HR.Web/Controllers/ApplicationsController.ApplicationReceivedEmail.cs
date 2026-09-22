@@ -48,10 +48,12 @@ namespace HR.Web.Controllers
                 return;
             }
 
+            var companyId = company != null ? (int?)company.Id : null;
             _email.SendAsync(
                 recipientEmail.Trim(),
                 rendered.Subject ?? "Application received",
-                WrapCandidateEmailDocument(rendered.BodyHtml)).GetAwaiter().GetResult();
+                WrapCandidateEmailDocument(rendered.BodyHtml),
+                companyId).GetAwaiter().GetResult();
         }
 
         private void TrySendApplicationReceivedEmailForApplication(

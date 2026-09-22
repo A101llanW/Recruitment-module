@@ -61,15 +61,17 @@ namespace HR.Web.Services
                 return;
             }
 
-            var requestSnapshot = request;
+            var portalBaseUrl = ExternalUrlHelper.GetBaseUri(request).ToString().TrimEnd('/');
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
                     using (var context = new HrContext())
                     {
-                        var service = new ApplicationNotificationService(context, new EmailService(), new SecurityService());
-                        service.SendNewApplicationNotificationsAsync(applicationId, requestSnapshot).GetAwaiter().GetResult();
+                        var smtpSettings = new CompanySmtpSettingsService(context, new SettingsService());
+                        var emailService = new EmailService(smtpSettings);
+                        var service = new ApplicationNotificationService(context, emailService, new SecurityService());
+                        service.SendNewApplicationNotificationsAsync(applicationId, portalBaseUrl).GetAwaiter().GetResult();
                     }
                 }
                 catch (Exception ex)
@@ -79,7 +81,13 @@ namespace HR.Web.Services
             });
         }
 
-        public async Task SendNewApplicationNotificationsAsync(int applicationId, HttpRequestBase request)
+        public Task SendNewApplicationNotificationsAsync(int applicationId, HttpRequestBase request)
+        {
+            var portalBaseUrl = ExternalUrlHelper.GetBaseUri(request).ToString().TrimEnd('/');
+            return SendNewApplicationNotificationsAsync(applicationId, portalBaseUrl);
+        }
+
+        private async Task SendNewApplicationNotificationsAsync(int applicationId, string portalBaseUrl)
         {
             var application = _context.Applications
                 .Include(a => a.Applicant)
@@ -87,13 +95,19 @@ namespace HR.Web.Services
                 .Include(a => a.Company)
                 .FirstOrDefault(a => a.Id == applicationId);
 
-            if (application == null || !application.CompanyId.HasValue)
+            var companyId = application != null ? application.CompanyId : null;
+            if (!companyId.HasValue && application != null && application.Position != null)
+            {
+                companyId = application.Position.CompanyId;
+            }
+
+            if (application == null || !companyId.HasValue)
             {
                 return;
             }
 
             var recipients = _context.CompanyApplicationNotifyRecipients
-                .Where(r => r.CompanyId == application.CompanyId.Value && r.IsActive)
+                .Where(r => r.CompanyId == companyId.Value && r.IsActive)
                 .OrderBy(r => r.SortOrder)
                 .ThenBy(r => r.Email)
                 .ToList();
@@ -126,7 +140,7 @@ namespace HR.Web.Services
                     continue;
                 }
 
-                var detailsUrl = BuildDetailsUrl(recipient, application, tenantSlug, request);
+                var detailsUrl = BuildDetailsUrl(recipient, application, tenantSlug, portalBaseUrl);
                 var subject = string.Format("New application: {0} — {1}", candidateName, positionTitle);
                 var body = BuildNotificationEmailBody(
                     candidateName,
@@ -136,7 +150,7 @@ namespace HR.Web.Services
                     detailsUrl,
                     recipient.AccessMode);
 
-                await _emailService.SendAsync(recipient.Email.Trim(), subject, body);
+                await _emailService.SendAsync(recipient.Email.Trim(), subject, body, companyId).ConfigureAwait(false);
             }
         }
 
@@ -253,16 +267,18 @@ namespace HR.Web.Services
             CompanyApplicationNotifyRecipient recipient,
             Application application,
             string tenantSlug,
-            HttpRequestBase request)
+            string portalBaseUrl)
         {
+            var baseUrl = string.IsNullOrWhiteSpace(portalBaseUrl) ? string.Empty : portalBaseUrl.TrimEnd('/');
             if (string.Equals(recipient.AccessMode, ApplicationNotifyAccessModes.PublicReadOnly, StringComparison.OrdinalIgnoreCase))
             {
                 var token = CreateOrGetPublicAccessToken(application.Id, recipient.Id);
-                var baseUri = ExternalUrlHelper.GetBaseUri(request);
-                return string.Format("{0}/Applications/NotificationSummary?token={1}", baseUri.ToString().TrimEnd('/'), Uri.EscapeDataString(token));
+                return string.Format("{0}/Applications/NotificationSummary?token={1}", baseUrl, Uri.EscapeDataString(token));
             }
 
-            var tenantBase = ExternalUrlHelper.GetTenantPortalUrl(request, tenantSlug);
+            var tenantBase = string.IsNullOrWhiteSpace(tenantSlug)
+                ? baseUrl
+                : baseUrl + "/" + tenantSlug.Trim().TrimStart('/');
             return string.Format("{0}/Applications/Details/{1}", tenantBase.TrimEnd('/'), application.Id);
         }
 

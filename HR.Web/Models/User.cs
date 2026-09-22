@@ -85,6 +85,9 @@ namespace HR.Web.Models
 
         /// <summary>When true, user may be assigned as an interview panelist for workflow routing.</summary>
         public bool IsPanelist { get; set; }
+
+        /// <summary>Successful candidate sign-ins. Used to expire "Recently viewed" position tags.</summary>
+        public int SuccessfulLoginCount { get; set; }
     }
 }
 

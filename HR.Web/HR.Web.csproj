@@ -152,6 +152,7 @@
     <Compile Include="Models\ITenantEntity.cs" />
     <Compile Include="Models\Department.cs" />
     <Compile Include="Models\Position.cs" />
+    <Compile Include="Models\PositionView.cs" />
     <Compile Include="Models\RegisterViewModel.cs" />
     <Compile Include="Models\ChangePasswordViewModel.cs" />
     <Compile Include="Models\ForgotPasswordViewModel.cs" />
@@ -198,6 +199,8 @@
     <None Include="Migrations\202609210000016_AddCompanySmtpSettings.sql" />
     <None Include="Migrations\202609210000017_AddApplicationNotifyRecipients.cs" />
     <None Include="Migrations\202609210000017_AddApplicationNotifyRecipients.sql" />
+    <None Include="Migrations\202609220000018_AddPositionViews.cs" />
+    <None Include="Migrations\202609220000018_AddPositionViews.sql" />
     <None Include="Migrations\AddPasswordResetTable.cs" />
     <None Include="Migrations\Configuration.cs" />
     <Compile Include="Models\Application.cs" />
@@ -285,6 +288,7 @@
     <Compile Include="Helpers\SecurityLogTranslator.cs" />
     <Compile Include="Helpers\LegalConsentSession.cs" />
     <Compile Include="Helpers\PositionCandidateActionHelper.cs" />
+    <Compile Include="Helpers\PositionViewTagHelper.cs" />
     <Compile Include="Helpers\QuestionStagePayloadHelper.cs" />
     <Compile Include="Helpers\AppConfig.cs" />
     <Compile Include="Helpers\UserAgentFingerprint.cs" />
@@ -318,6 +322,7 @@
     <Compile Include="Controllers\DashboardController.cs" />
     <Compile Include="Controllers\HomeController.cs" />
     <Compile Include="Controllers\PositionsController.cs" />
+    <Compile Include="Controllers\PositionsController.CandidateViews.cs" />
     <Compile Include="Controllers\PositionsController.Operations.cs" />
     <Compile Include="Controllers\ApplicationsController.cs" />
     <Compile Include="Controllers\ApplicationsController.CoverLetter.cs" />

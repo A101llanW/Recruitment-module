@@ -9,6 +9,9 @@
     var displayPositions = isAdmin ? allPositions : Model;
     var candidateActionsByPositionId = ViewBag.CandidateActionsByPositionId as IDictionary<int, PositionCandidateActionViewModel>
         ?? new Dictionary<int, PositionCandidateActionViewModel>();
+    var isReadOnlyPositions = ViewBag.IsReadOnly != null && (bool)ViewBag.IsReadOnly;
+    var isSuperAdminPositions = ViewBag.IsSuperAdmin == true;
+    var trackCandidateViews = Request.IsAuthenticated && !isAdmin && !isReadOnlyPositions && !isSuperAdminPositions;
     
     // Helper function to safely get Responsibilities property
     Func<HR.Web.Models.Position, string> getResponsibilities = (p) => {
@@ -208,6 +211,23 @@
         color: #5a6268;
         border: 1px solid rgba(108, 117, 125, 0.25);
     }
+    .position-viewed-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+        margin-left: 0.35rem;
+        vertical-align: middle;
+        white-space: nowrap;
+        background: rgba(13, 71, 161, 0.1);
+        color: #0d47a1;
+        border: 1px solid rgba(13, 71, 161, 0.28);
+    }
     .position-applied-meta {
         font-size: 0.78rem;
         color: #2e7d60;
@@ -302,7 +322,7 @@
         flex-wrap: wrap;
     }
 
-    @@media (max-width: 767.98px) {
+    @@media (max-width: 991.98px) {
         .position-item .d-flex.w-100.justify-content-between {
             flex-direction: column;
             gap: 0.5rem;
@@ -313,8 +333,47 @@
             text-align: left;
         }
 
+        .position-item::after {
+            content: "Tap for details";
+            display: block;
+            margin-top: 0.35rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--app-accent-deep, #3d8fad);
+        }
+
+        /* Sidebar actions sit below the list on tablets/phones; modal replaces them */
+        .positions-detail-column,
         #positionDetail {
-            margin-top: 1rem;
+            display: none !important;
+        }
+
+        #positionModal .modal-dialog {
+            margin: 0.5rem;
+            max-width: calc(100% - 1rem);
+        }
+
+        #positionModal .modal-content {
+            max-height: calc(100vh - 1rem);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #positionModal .modal-body {
+            overflow-y: auto;
+        }
+
+        #positionModal .modal-footer {
+            position: sticky;
+            bottom: 0;
+            z-index: 2;
+            flex-wrap: nowrap;
+            gap: 0.5rem;
+        }
+
+        #positionModal .modal-footer .btn {
+            flex: 1 1 0;
+            min-width: 0;
         }
     }
 </style>
@@ -389,7 +448,7 @@ else if (!Request.IsAuthenticated)
 else
 {
     <div class="row">
-        <div class="col-md-8">
+        <div class="col-lg-8 col-12">
             <div class="list-group">
                 @foreach (var p in displayPositions)
                 {
@@ -409,6 +468,8 @@ else
                     }
                     <a class="@itemClasses"
                        href="#"
+                       role="button"
+                       tabindex="0"
                        data-position-id="@p.Id"
                        data-title="@p.Title"
                        data-desc="@(p.Description ?? "")"
@@ -440,6 +501,13 @@ else
                                         <span class="position-applied-badge @(candidateAction.BadgeCssClass)">
                                             <i class="fas fa-check-circle" aria-hidden="true"></i>
                                             @candidateAction.BadgeLabel
+                                        </span>
+                                    }
+                                    else if (candidateAction.ShowRecentlyViewed)
+                                    {
+                                        <span class="position-viewed-badge">
+                                            <i class="fas fa-eye" aria-hidden="true"></i>
+                                            Recently viewed
                                         </span>
                                     }
                                 </h5>
@@ -475,7 +543,7 @@ else
                 }
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-lg-4 positions-detail-column d-none d-lg-block">
             <div id="positionDetail" class="pos-detail-card" style="display:none;">
                 <div id="posAppliedStatus" role="status" aria-live="polite"></div>
                 <h4 id="posTitle" class="mb-3"></h4>
@@ -518,7 +586,7 @@ else if (ViewBag.IsReadOnly != true)
 @section Modals {
 <!-- Modal lives outside .app-page so Bootstrap backdrop stacks correctly -->
 <div class="modal fade" id="positionModal" tabindex="-1" role="dialog" aria-labelledby="positionModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg" role="document">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="modalPosTitle">Position</h5>
@@ -570,8 +638,17 @@ else if (ViewBag.IsReadOnly != true)
 </div>
 }
 
+@if (trackCandidateViews)
+{
+    <div id="positionViewAntiForgery" class="d-none">
+        @Html.AntiForgeryToken()
+    </div>
+}
+
 @section Scripts {
     <script>
+        window.hrTrackCandidateViews = @(trackCandidateViews ? "true" : "false");
+        window.hrRecordCandidateViewUrl = '@Url.Action("RecordCandidateView", "Positions")';
         (function () {
             // Wait for DOM and jQuery to be ready
             if (typeof jQuery === 'undefined') {
@@ -593,11 +670,87 @@ else if (ViewBag.IsReadOnly != true)
                 var linkViewApplications = document.getElementById('posViewApplications');
                 var linkQuestionWeights = document.getElementById('posQuestionWeights');
                 var appliedStatus = document.getElementById('posAppliedStatus');
+                var positionModal = document.getElementById('positionModal');
+                var modalTitle = document.getElementById('modalPosTitle');
+                var modalDesc = document.getElementById('modalPosDesc');
+                var modalResponsibilities = document.getElementById('modalPosResponsibilities');
+                var modalResponsibilitiesContent = document.getElementById('modalPosResponsibilitiesContent');
+                var modalQualifications = document.getElementById('modalPosQualifications');
+                var modalQualificationsContent = document.getElementById('modalPosQualificationsContent');
+                var modalDept = document.getElementById('modalPosDept');
+                var modalPosted = document.getElementById('modalPosPosted');
+                var modalExpiry = document.getElementById('modalPosExpiry');
+                var modalRange = document.getElementById('modalPosRange');
+                var modalEdit = document.getElementById('modalEdit');
+                var modalDelete = document.getElementById('modalDelete');
+                var modalApply = document.getElementById('modalApply');
+                var modalViewApplications = document.getElementById('modalViewApplications');
+                var modalQuestionWeights = document.getElementById('modalQuestionWeights');
+                var compactLayoutQuery = window.matchMedia('(max-width: 991.98px)');
 
-                // Check if required elements exist
+                if (!positionModal) {
+                    console.error('Position modal not found');
+                    return;
+                }
+
                 if (!title || !dept || !posted || !range || !detail) {
                     console.error('Required DOM elements not found');
                     return;
+                }
+
+                function usesCompactPositionLayout() {
+                    return compactLayoutQuery.matches;
+                }
+
+                function populateModal(src) {
+                    if (!src) return;
+                    if (modalTitle) modalTitle.textContent = src.getAttribute('data-title') || '';
+                    var descText = src.getAttribute('data-desc') || '';
+                    if (modalDesc) {
+                        modalDesc.textContent = descText || 'No description provided.';
+                        modalDesc.style.display = descText ? 'block' : 'none';
+                    }
+                    var respText = src.getAttribute('data-responsibilities') || '';
+                    if (modalResponsibilities && modalResponsibilitiesContent) {
+                        if (respText) {
+                            modalResponsibilitiesContent.textContent = respText;
+                            modalResponsibilities.style.display = 'block';
+                        } else {
+                            modalResponsibilities.style.display = 'none';
+                        }
+                    }
+                    var qualText = src.getAttribute('data-qualifications') || '';
+                    if (modalQualifications && modalQualificationsContent) {
+                        if (qualText) {
+                            modalQualificationsContent.textContent = qualText;
+                            modalQualifications.style.display = 'block';
+                        } else {
+                            modalQualifications.style.display = 'none';
+                        }
+                    }
+                    if (modalDept) modalDept.textContent = src.getAttribute('data-dept') || '';
+                    if (modalPosted) modalPosted.textContent = src.getAttribute('data-posted') || '';
+                    if (modalExpiry) modalExpiry.textContent = src.getAttribute('data-expiry') || '';
+                    if (modalRange) modalRange.textContent = src.getAttribute('data-range') || '';
+                    if (modalEdit) modalEdit.href = src.getAttribute('data-url-edit') || '#';
+                    if (modalDelete) modalDelete.href = src.getAttribute('data-url-delete') || '#';
+                    if (modalApply) updateCandidateActionLink(modalApply, src);
+                    if (modalViewApplications) modalViewApplications.href = src.getAttribute('data-url-applications') || '#';
+                    if (modalQuestionWeights) modalQuestionWeights.href = src.getAttribute('data-url-question-weights') || '#';
+                }
+
+                function openPositionModal(src) {
+                    if (!src || !positionModal) return;
+                    populateModal(src);
+                    var $modal = $('#positionModal');
+                    if ($modal.length && typeof $modal.modal === 'function') {
+                        $modal.modal('show');
+                        return;
+                    }
+                    positionModal.classList.add('show');
+                    positionModal.style.display = 'block';
+                    positionModal.removeAttribute('aria-hidden');
+                    document.body.classList.add('modal-open');
                 }
 
                 function updateAppliedStatus(el) {
@@ -659,6 +812,10 @@ else if (ViewBag.IsReadOnly != true)
                     }
                 }
 
+                function isMobileViewport() {
+                    return usesCompactPositionLayout();
+                }
+
                 function makeActive(el) {
                     if (!el) return;
                     items.forEach(function (i) { i.classList.remove('active'); });
@@ -674,78 +831,63 @@ else if (ViewBag.IsReadOnly != true)
                     if (linkViewApplications) { linkViewApplications.href = el.getAttribute('data-url-applications') || '#'; }
                     if (linkQuestionWeights) { linkQuestionWeights.href = el.getAttribute('data-url-question-weights') || '#'; }
                     updateAppliedStatus(el);
-                    if (detail) detail.style.display = '';
+                    if (detail && !usesCompactPositionLayout()) {
+                        detail.style.display = '';
+                    } else if (detail) {
+                        detail.style.display = 'none';
+                    }
+                }
+
+                function recordCandidatePositionView(el) {
+                    if (!el || !window.hrTrackCandidateViews) return;
+                    if (el.getAttribute('data-has-applied') === 'true') return;
+                    var positionId = el.getAttribute('data-position-id');
+                    var tokenInput = document.querySelector('#positionViewAntiForgery input[name="__RequestVerificationToken"]');
+                    if (!positionId || !tokenInput || !tokenInput.value) return;
+                    var body = 'positionId=' + encodeURIComponent(positionId) +
+                        '&__RequestVerificationToken=' + encodeURIComponent(tokenInput.value);
+                    if (window.fetch) {
+                        window.fetch(window.hrRecordCandidateViewUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                            body: body,
+                            credentials: 'same-origin'
+                        });
+                        return;
+                    }
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('POST', window.hrRecordCandidateViewUrl, true);
+                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
+                    xhr.send(body);
+                }
+
+                function handlePositionSelect(el, e) {
+                    if (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                    makeActive(el);
+                    recordCandidatePositionView(el);
+                    if (usesCompactPositionLayout()) {
+                        openPositionModal(el);
+                    }
                 }
 
                 items.forEach(function (el) {
-                    el.addEventListener('click', function () { makeActive(el); });
+                    el.addEventListener('click', function (e) { handlePositionSelect(el, e); });
+                    el.addEventListener('keydown', function (e) {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            handlePositionSelect(el, e);
+                        }
+                    });
                 });
-
-                // modal elements
-                var modalTitle = document.getElementById('modalPosTitle');
-                var modalDesc = document.getElementById('modalPosDesc');
-                var modalResponsibilities = document.getElementById('modalPosResponsibilities');
-                var modalResponsibilitiesContent = document.getElementById('modalPosResponsibilitiesContent');
-                var modalQualifications = document.getElementById('modalPosQualifications');
-                var modalQualificationsContent = document.getElementById('modalPosQualificationsContent');
-                var modalDept = document.getElementById('modalPosDept');
-                var modalPosted = document.getElementById('modalPosPosted');
-                var modalExpiry = document.getElementById('modalPosExpiry');
-                var modalRange = document.getElementById('modalPosRange');
-                var modalEdit = document.getElementById('modalEdit');
-                var modalDelete = document.getElementById('modalDelete');
-                var modalApply = document.getElementById('modalApply');
-                var modalViewApplications = document.getElementById('modalViewApplications');
-                var modalQuestionWeights = document.getElementById('modalQuestionWeights');
-
-                function populateModal(src) {
-                    if (!src) return;
-                    if (modalTitle) modalTitle.textContent = src.getAttribute('data-title') || '';
-                    var descText = src.getAttribute('data-desc') || '';
-                    if (modalDesc) {
-                        modalDesc.textContent = descText || 'No description provided.';
-                        modalDesc.style.display = descText ? 'block' : 'none';
-                    }
-                    var respText = src.getAttribute('data-responsibilities') || '';
-                    if (modalResponsibilities && modalResponsibilitiesContent) {
-                        if (respText) {
-                            modalResponsibilitiesContent.textContent = respText;
-                            modalResponsibilities.style.display = 'block';
-                        } else {
-                            modalResponsibilities.style.display = 'none';
-                        }
-                    }
-                    var qualText = src.getAttribute('data-qualifications') || '';
-                    if (modalQualifications && modalQualificationsContent) {
-                        if (qualText) {
-                            modalQualificationsContent.textContent = qualText;
-                            modalQualifications.style.display = 'block';
-                        } else {
-                            modalQualifications.style.display = 'none';
-                        }
-                    }
-                    if (modalDept) modalDept.textContent = src.getAttribute('data-dept') || '';
-                    if (modalPosted) modalPosted.textContent = src.getAttribute('data-posted') || '';
-                    if (modalExpiry) modalExpiry.textContent = src.getAttribute('data-expiry') || '';
-                    if (modalRange) modalRange.textContent = src.getAttribute('data-range') || '';
-                    if (modalEdit) modalEdit.href = src.getAttribute('data-url-edit') || '#';
-                    if (modalDelete) modalDelete.href = src.getAttribute('data-url-delete') || '#';
-                    if (modalApply) updateCandidateActionLink(modalApply, src);
-                    if (modalViewApplications) modalViewApplications.href = src.getAttribute('data-url-applications') || '#';
-                    if (modalQuestionWeights) modalQuestionWeights.href = src.getAttribute('data-url-question-weights') || '#';
-                }
-
 
                 var cardView = document.getElementById('posViewDetails');
                 if (cardView) {
                     cardView.addEventListener('click', function () {
                         var active = document.querySelector('.position-item.active');
                         if (!active) return;
-                        populateModal(active);
-                        var modal = $('#positionModal');
-                        if (modal.length) {
-                            modal.modal('show');
-                        }
+                        openPositionModal(active);
                     });
                 }
 

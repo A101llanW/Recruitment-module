@@ -137,10 +137,7 @@ namespace HR.Web.Controllers
 
         ViewBag.Position = position;
         PopulateApplicantViewBag(position.CompanyId);
-        ViewBag.PositionQuestions = position.PositionQuestions
-            .Where(pq => pq.StageNumber == activeQuestionnaireStage)
-            .OrderBy(pq => pq.Order)
-            .ToList();
+        ViewBag.PositionQuestions = GetPositionQuestions(positionId, true, activeQuestionnaireStage);
 
         return View();
     }

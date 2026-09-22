@@ -8,6 +8,7 @@ namespace HR.Web.ViewModels
         public string Url { get; set; }
         public string IconClass { get; set; }
         public bool HasApplied { get; set; }
+        public bool ShowRecentlyViewed { get; set; }
         public string BadgeLabel { get; set; }
         public string BadgeCssClass { get; set; }
         public DateTime? AppliedOn { get; set; }

@@ -57,17 +57,17 @@ namespace HR.Web.Services
 
         public async Task SendAsync(string to, string subject, string body)
         {
-            await SendAsync(to, subject, body, null, null);
+            await SendAsync(to, subject, body, null, null).ConfigureAwait(false);
         }
 
         public async Task SendAsync(string to, string subject, string body, int? companyId)
         {
-            await SendAsync(to, subject, body, null, companyId);
+            await SendAsync(to, subject, body, null, companyId).ConfigureAwait(false);
         }
 
         public async Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients)
         {
-            await SendAsync(to, subject, body, ccRecipients, null);
+            await SendAsync(to, subject, body, ccRecipients, null).ConfigureAwait(false);
         }
 
         public async Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId)
@@ -79,11 +79,11 @@ namespace HR.Web.Services
 
             try
             {
-                await SendRequiredAsync(to, subject, body, ccRecipients, companyId);
+                await SendRequiredAsync(to, subject, body, ccRecipients, companyId).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                LogEmailFailure(to, ex);
+                LogEmailFailure(to, ex, companyId);
             }
         }
 
@@ -102,11 +102,11 @@ namespace HR.Web.Services
             try
             {
                 var smtpConfig = _companySmtpSettingsService.ResolveForCompany(companyId);
-                await SendMailCoreAsync(to, subject, body, ccRecipients, smtpConfig);
+                await SendMailCoreAsync(to, subject, body, ccRecipients, smtpConfig).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                LogEmailFailure(to, ex);
+                LogEmailFailure(to, ex, companyId);
                 throw;
             }
         }
@@ -155,7 +155,7 @@ namespace HR.Web.Services
                     }
                 }
 
-                await Task.Factory.StartNew(() => client.Send(mailMessage));
+                await Task.Factory.StartNew(() => client.Send(mailMessage)).ConfigureAwait(false);
             }
         }
 
@@ -164,22 +164,23 @@ namespace HR.Web.Services
             try
             {
                 var smtpConfig = _companySmtpSettingsService.ResolveForCompany(companyId);
-                await SendMailCoreAsync(to, subject, body, null, smtpConfig);
+                await SendMailCoreAsync(to, subject, body, null, smtpConfig).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                LogEmailFailure(to, ex);
+                LogEmailFailure(to, ex, companyId);
                 throw;
             }
         }
 
-        private static void LogEmailFailure(string to, Exception ex)
+        private static void LogEmailFailure(string to, Exception ex, int? companyId = null)
         {
             var recipient = to ?? string.Empty;
+            var companyLabel = companyId.HasValue ? companyId.Value.ToString() : "global";
             if (ex == null)
             {
-                System.Diagnostics.Debug.WriteLine("Email sending failed to " + recipient + ": unknown error");
-                System.Diagnostics.Trace.WriteLine("Email sending failed to " + recipient + ": unknown error");
+                System.Diagnostics.Debug.WriteLine("Email sending failed to " + recipient + " company " + companyLabel + ": unknown error");
+                System.Diagnostics.Trace.WriteLine("Email sending failed to " + recipient + " company " + companyLabel + ": unknown error");
                 return;
             }
 
@@ -187,8 +188,8 @@ namespace HR.Web.Services
             try
             {
                 string logPath = AppDomain.CurrentDomain.BaseDirectory + "email_errors.txt";
-                string logMessage = string.Format("[{0}] ERROR sending to {1}: {2}{3}Stack: {4}{3}",
-                    DateTime.Now, recipient, error.Message, Environment.NewLine, error.StackTrace);
+                string logMessage = string.Format("[{0}] ERROR sending to {1} company {2}: {3}{4}Stack: {5}{4}",
+                    DateTime.Now, recipient, companyLabel, error.Message, Environment.NewLine, error.StackTrace);
                 System.IO.File.AppendAllText(logPath, logMessage);
             }
             catch (Exception)
@@ -202,7 +203,7 @@ namespace HR.Web.Services
 
         public async Task SendPasswordResetEmailAsync(string to, string resetLink)
         {
-            await SendPasswordResetEmailAsync(to, resetLink, null);
+            await SendPasswordResetEmailAsync(to, resetLink, null).ConfigureAwait(false);
         }
 
         public async Task SendPasswordResetEmailAsync(string to, string resetLink, int? companyId)
@@ -261,12 +262,12 @@ namespace HR.Web.Services
 </body>
 </html>", link, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
-            await SendAsync(to, subject, body, companyId);
+            await SendAsync(to, subject, body, companyId).ConfigureAwait(false);
         }
 
         public async Task SendMfaCodeEmailAsync(string to, string code)
         {
-            await SendMfaCodeEmailAsync(to, code, null);
+            await SendMfaCodeEmailAsync(to, code, null).ConfigureAwait(false);
         }
 
         public async Task SendMfaCodeEmailAsync(string to, string code, int? companyId)
@@ -318,12 +319,12 @@ namespace HR.Web.Services
 
             LogSensitiveCodeForDevelopment("MFA CODE", to, verificationCode, "mfa_codes.txt");
 
-            await SendCriticalAsync(to, subject, body, companyId);
+            await SendCriticalAsync(to, subject, body, companyId).ConfigureAwait(false);
         }
 
         public async Task SendEmailVerificationOtpAsync(string to, string code)
         {
-            await SendEmailVerificationOtpAsync(to, code, null);
+            await SendEmailVerificationOtpAsync(to, code, null).ConfigureAwait(false);
         }
 
         public async Task SendEmailVerificationOtpAsync(string to, string code, int? companyId)
@@ -373,7 +374,7 @@ namespace HR.Web.Services
 
             LogSensitiveCodeForDevelopment("EMAIL VERIFICATION OTP", to, verificationCode, "verification_codes.txt");
 
-            await SendCriticalAsync(to, subject, body, companyId);
+            await SendCriticalAsync(to, subject, body, companyId).ConfigureAwait(false);
         }
 
         private static void LogSensitiveCodeForDevelopment(string label, string to, string code, string fileName)

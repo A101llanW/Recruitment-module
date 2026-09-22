@@ -46,6 +46,7 @@ namespace HR.Web.Data
         public DbSet<CompanySmtpSettings> CompanySmtpSettings { get; set; }
         public DbSet<CompanyApplicationNotifyRecipient> CompanyApplicationNotifyRecipients { get; set; }
         public DbSet<ApplicationNotificationAccessToken> ApplicationNotificationAccessTokens { get; set; }
+        public DbSet<PositionView> PositionViews { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
@@ -197,6 +198,18 @@ namespace HR.Web.Data
                 .HasRequired(t => t.Recipient)
                 .WithMany()
                 .HasForeignKey(t => t.RecipientId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<PositionView>()
+                .HasRequired(v => v.User)
+                .WithMany()
+                .HasForeignKey(v => v.UserId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<PositionView>()
+                .HasRequired(v => v.Position)
+                .WithMany()
+                .HasForeignKey(v => v.PositionId)
                 .WillCascadeOnDelete(false);
         }
 

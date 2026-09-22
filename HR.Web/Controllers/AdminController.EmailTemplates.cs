@@ -82,9 +82,7 @@ namespace HR.Web.Controllers
                 if (IsSecondaryStageTemplate(normalizedTemplateKey) &&
                     !TemplateBodyContainsQuestionnaireStageLinkToken(bodyForStorage))
                 {
-                    TempData["ErrorMessage"] =
-                        "The Next questionnaire stage invitation template must include the Questionnaire stage link token so candidates receive a working link.";
-                    return RedirectToEmailTemplates();
+                    bodyForStorage += "<p><a href='{{" + EmailTemplateCatalog.QuestionnaireStageLinkToken + "}}'>Open questionnaire stage</a></p>";
                 }
 
                 SaveTemplateSetting(

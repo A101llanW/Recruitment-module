@@ -21,6 +21,13 @@ try {
     Write-Log "Stopped app pool Hirehub_Pool"
 
     [xml]$doc = Get-Content -Path $webConfigPath
+    foreach ($add in $doc.configuration.appSettings.add) {
+        if ($add.key -eq "AppEnvironment") {
+            $add.SetAttribute("value", "Remote/Dev")
+        }
+    }
+    Write-Log "Set AppEnvironment=Remote/Dev"
+
     $customErrors = $doc.CreateElement("customErrors")
     $customErrors.SetAttribute("mode", "Off")
     $systemWeb = $doc.configuration."system.web"

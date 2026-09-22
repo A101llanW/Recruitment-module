@@ -26,7 +26,13 @@ if (-not $SkipBuild) {
     Write-Host "Building Release..." -ForegroundColor Yellow
     Push-Location $repoRoot
     try {
-        $msbuild = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe"
+        $msbuild = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+        if (-not (Test-Path $msbuild)) {
+            $msbuild = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"
+        }
+        if (-not (Test-Path $msbuild)) {
+            $msbuild = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe"
+        }
         if (-not (Test-Path $msbuild)) {
             $msbuild = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
         }
@@ -68,7 +74,7 @@ function Set-ProductionWebConfig {
     [xml]$doc = Get-Content -Path $WebConfigPath
     foreach ($add in $doc.configuration.appSettings.add) {
         if ($add.key -eq "AppEnvironment") {
-            $add.SetAttribute("value", "Production")
+            $add.SetAttribute("value", $(if ($DetailedErrors) { "Remote/Dev" } else { "Production" }))
         }
         elseif ($add.key -eq "LastRestart") {
             $add.SetAttribute("value", (Get-Date -Format "yyyy-MM-dd") + "-prod")
@@ -130,7 +136,7 @@ function Set-ProductionWebConfig {
     }
 
     if ($DetailedErrors) {
-        Write-Host "  Applied publish Web.config (AppEnvironment=Production, customErrors=Off, httpErrors=Detailed, debug=true)" -ForegroundColor Green
+        Write-Host "  Applied publish Web.config (AppEnvironment=Remote/Dev, customErrors=Off, httpErrors=Detailed, debug=true)" -ForegroundColor Green
     }
     else {
         Write-Host "  Applied publish Web.config (AppEnvironment=Production, customErrors=On+Rewrite, debug=true)" -ForegroundColor Green

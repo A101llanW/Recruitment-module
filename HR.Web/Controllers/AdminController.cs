@@ -458,19 +458,19 @@ namespace HR.Web.Controllers
             var usersQuery = _uow.Users.GetAll(u => u.RoleDefinition, u => u.Company).AsQueryable();
             usersQuery = _tenantService.ApplyTenantFilter(usersQuery);
             var users = usersQuery.ToList();
-            var userViewModels = new List<UserManagementViewModel>();
+            var lastLogins = LoadLatestSuccessfulLogins(users.Select(u => u.UserName));
+            var phonesByEmail = LoadPhonesByEmail(users.Select(u => u.Email));
+            var lockouts = _securityService.GetLockoutStates(users);
+            var userViewModels = new List<UserManagementViewModel>(users.Count);
 
             foreach (var user in users)
             {
-                var isLocked = _securityService.IsAccountLockedForUser(user);
-                var lockoutEndTime = _securityService.GetLockoutEndTimeForUser(user);
-                var actualFailedAttempts = _securityService.GetFailedAttemptCountForUser(user);
-
-                // Get last login info from audit logs
-                var lastLogin = _uow.AuditLogs.GetAll()
-                    .Where(a => a.Username == user.UserName && a.Action == "LOGIN_SUCCESS")
-                    .OrderByDescending(a => a.Timestamp)
-                    .FirstOrDefault();
+                lastLogins.TryGetValue(user.UserName ?? string.Empty, out var lastLogin);
+                phonesByEmail.TryGetValue(user.Email ?? string.Empty, out var phone);
+                if (!lockouts.TryGetValue(user.Id, out var lockout))
+                {
+                    lockout = new UserLockoutState();
+                }
 
                 userViewModels.Add(new UserManagementViewModel
                 {
@@ -481,17 +481,13 @@ namespace HR.Web.Controllers
                     Email = user.Email,
                     Role = _rolePermissionService.GetDisplayRole(user),
                     BaseRole = user.Role,
-
-                    Phone = _uow.Applicants.GetAll() // Applicants are already tenant filtered if TenantService is applied, but here we query by email
-                        .Where(a => a.Email == user.Email)
-                        .Select(a => a.Phone)
-                        .FirstOrDefault(),
+                    Phone = phone,
                     CompanyName = user.Company != null ? user.Company.Name : "System",
                     LastLoginDate = lastLogin != null ? (DateTime?)lastLogin.Timestamp : null,
                     LastLoginIP = lastLogin != null ? lastLogin.IPAddress : null,
-                    IsLocked = isLocked,
-                    LockoutEndTime = lockoutEndTime,
-                    FailedLoginAttempts = actualFailedAttempts,
+                    IsLocked = lockout.IsLocked,
+                    LockoutEndTime = lockout.LockoutEndTime,
+                    FailedLoginAttempts = lockout.FailedLoginAttempts,
                     CreatedDate = user.Id > 0 ? DateTime.Now.AddDays(-30) : DateTime.Now // Placeholder since we don't have created date
                 });
             }

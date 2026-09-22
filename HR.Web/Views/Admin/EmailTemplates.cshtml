@@ -455,6 +455,12 @@
         return html;
     }
 
+    function markComposeDirty(composeEl) {
+        if (composeEl) {
+            composeEl.classList.add('is-dirty');
+        }
+    }
+
     function syncComposeToStorage(composeEl) {
         if (!composeEl) {
             return;
@@ -475,6 +481,9 @@
         enableTemplateStorages();
         var composeCards = document.querySelectorAll('.email-template-compose');
         for (var i = 0; i < composeCards.length; i++) {
+            if (!composeCards[i].classList.contains('is-dirty')) {
+                continue;
+            }
             syncComposeToStorage(composeCards[i]);
         }
     }
@@ -532,6 +541,7 @@
             return;
         }
         markEmailComposeEditing(compose);
+        markComposeDirty(compose);
         editor.focus();
         restoreSelection(editor);
         var inserted = false;
@@ -553,6 +563,7 @@
             return;
         }
         markEmailComposeEditing(compose);
+        markComposeDirty(compose);
         body.focus();
         restoreSelection(body);
         try {
@@ -573,7 +584,8 @@
             (function (evt) {
                 div.addEventListener(evt, function () {
                     saveSelection(div);
-                    if (evt === 'input' || evt === 'blur' || evt === 'keyup') {
+                    if (evt === 'input' || evt === 'keyup') {
+                        markComposeDirty(compose);
                         syncComposeToStorage(compose);
                     }
                     if (evt === 'focus') {

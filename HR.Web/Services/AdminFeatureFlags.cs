@@ -10,6 +10,6 @@ namespace HR.Web.Services
         /// Does not affect candidate send modals (Applications / Interviews): those keep
         /// Use Template vs Compose from Scratch regardless of this flag.
         /// </summary>
-        public const bool EmailTemplatesAdminUiEnabled = false;
+        public const bool EmailTemplatesAdminUiEnabled = true;
     }
 }
