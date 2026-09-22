@@ -203,13 +203,13 @@
                                             <div class="mt-2 mt-md-0">
                                                 @Html.HiddenFor(m => m.ModulePermissions[i].AccessLevel)
                                                 <div class="custom-control custom-checkbox mb-2">
-                                                    @Html.CheckBoxFor(m => m.ModulePermissions[i].IsSelected, new { @class = "custom-control-input", id = "perm_manage_" + i })
+                                                    @Html.CheckBoxFor(m => m.ModulePermissions[i].IsSelected, new { @class = "custom-control-input module-access-manage", id = "perm_manage_" + i, data_row = i })
                                                     <label class="custom-control-label font-weight-bold" for="@("perm_manage_" + i)">
                                                         Allow Access
                                                     </label>
                                                 </div>
                                                 <div class="custom-control custom-checkbox">
-                                                    @Html.CheckBoxFor(m => m.ModulePermissions[i].IsReadOnlySelected, new { @class = "custom-control-input", id = "perm_view_" + i })
+                                                    @Html.CheckBoxFor(m => m.ModulePermissions[i].IsReadOnlySelected, new { @class = "custom-control-input module-access-readonly", id = "perm_view_" + i, data_row = i })
                                                     <label class="custom-control-label font-weight-bold" for="@("perm_view_" + i)">
                                                         Allow Read-Only Access
                                                     </label>
@@ -309,3 +309,41 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    (function () {
+        function bindModuleAccessMutualExclusion() {
+            document.querySelectorAll('.module-access-manage').forEach(function (manageCheckbox) {
+                var rowIndex = manageCheckbox.getAttribute('data-row');
+                var readOnlyCheckbox = document.querySelector('.module-access-readonly[data-row="' + rowIndex + '"]');
+                if (!readOnlyCheckbox) {
+                    return;
+                }
+
+                manageCheckbox.addEventListener('change', function () {
+                    if (manageCheckbox.checked) {
+                        readOnlyCheckbox.checked = false;
+                    }
+                });
+
+                readOnlyCheckbox.addEventListener('change', function () {
+                    if (readOnlyCheckbox.checked) {
+                        manageCheckbox.checked = false;
+                    }
+                });
+
+                if (manageCheckbox.checked && readOnlyCheckbox.checked) {
+                    readOnlyCheckbox.checked = false;
+                }
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bindModuleAccessMutualExclusion);
+        } else {
+            bindModuleAccessMutualExclusion();
+        }
+    })();
+</script>
+}
