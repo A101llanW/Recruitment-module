@@ -582,7 +582,12 @@ namespace HR.Web.Controllers
 
         private string ValidateApplicationOwnership(Application model)
         {
-            if (!IsCurrentUserAuthenticated() || User.IsInRole("Admin"))
+            if (!IsCurrentUserAuthenticated())
+            {
+                return "You must be signed in to create an application.";
+            }
+
+            if (User.IsInRole("Admin"))
             {
                 return null;
             }
@@ -1002,7 +1007,54 @@ namespace HR.Web.Controllers
             _uow.Complete();
             ClearPendingCoverLetter();
             ScoreQuestionnaireApplication(application);
+            SendApplicationReceivedNotification(application, applicant, position);
             return null;
+        }
+
+        private void SendApplicationReceivedNotification(Application application, Applicant applicant, Position position)
+        {
+            if (application == null || applicant == null || string.IsNullOrWhiteSpace(applicant.Email))
+            {
+                return;
+            }
+
+            try
+            {
+                Company company = null;
+                if (position != null && position.CompanyId.HasValue)
+                {
+                    company = _uow.Companies.Get(position.CompanyId.Value);
+                }
+                else if (application.CompanyId.HasValue)
+                {
+                    company = _uow.Companies.Get(application.CompanyId.Value);
+                }
+
+                var companyName = company != null && !string.IsNullOrWhiteSpace(company.Name)
+                    ? company.Name.Trim()
+                    : "Recruitment Team";
+                var candidateName = string.IsNullOrWhiteSpace(applicant.FullName) ? "Candidate" : applicant.FullName.Trim();
+                var positionTitle = position != null && !string.IsNullOrWhiteSpace(position.Title)
+                    ? position.Title.Trim()
+                    : "the position";
+
+                var rendered = _emailTemplateService.Render(
+                    EmailTemplateCatalog.ApplicationReceivedStandard,
+                    new Dictionary<string, string>
+                    {
+                        { "CandidateName", HttpUtility.HtmlEncode(candidateName) },
+                        { "PositionTitle", HttpUtility.HtmlEncode(positionTitle) },
+                        { "CompanyName", HttpUtility.HtmlEncode(companyName) },
+                        { "CustomMessageBlock", string.Empty }
+                    },
+                    company != null ? (int?)company.Id : application.CompanyId);
+
+                _email.SendAsync(applicant.Email.Trim(), rendered.Subject, rendered.BodyHtml).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("[APPLICATION_RECEIVED_EMAIL] Failed: " + ex.Message);
+            }
         }
 
         private ActionResult SubmitPendingQuestionnaireStage(

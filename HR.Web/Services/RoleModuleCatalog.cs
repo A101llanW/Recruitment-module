@@ -57,6 +57,13 @@ namespace HR.Web.Services
             "Create",
             "CreatePositionWithQuestions",
             "CreateUser",
+            "CreateRole",
+            "UpdateRole",
+            "DeleteRole",
+            "SaveEmailTemplates",
+            "ResetEmailTemplatesToDefaults",
+            "AddHrCcEmail",
+            "DeleteHrCcEmail",
             "Delete",
             "DeleteConfirmed",
             "DeleteQuestion",
@@ -110,6 +117,21 @@ namespace HR.Web.Services
             {
                 switch (actionName)
                 {
+                    case "Index":
+                        return UserManagement;
+
+                    case "RoleManagement":
+                    case "CreateRole":
+                    case "UpdateRole":
+                    case "DeleteRole":
+                    case "EmailTemplates":
+                    case "SaveEmailTemplates":
+                    case "ResetEmailTemplatesToDefaults":
+                    case "HrCcEmails":
+                    case "AddHrCcEmail":
+                    case "DeleteHrCcEmail":
+                        return UserManagement;
+
                     case "Questions":
                     case "EditQuestion":
                     case "DeleteQuestion":

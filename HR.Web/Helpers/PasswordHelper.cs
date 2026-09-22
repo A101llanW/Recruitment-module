@@ -9,9 +9,9 @@ namespace HR.Web.Helpers
     {
         private const int SaltSize = 16; // 128 bit 
         private const int KeySize = 32; // 256 bit
-        private const int Iterations = 1000; // .NET 4.0 default-compatible iteration count for new hashes
+        private const int Iterations = 100000; // OWASP-aligned iteration count for new hashes
         private const int LegacyIterations = 100000; // Existing production hashes
-        private const int MinPasswordLength = 8; // Reduced from 12 to 8 for better usability
+        public const int MinPasswordLength = 8;
         private const int MaxPasswordLength = 128; // Maximum reasonable length
 
         public static string HashPassword(string password)
@@ -61,6 +61,31 @@ namespace HR.Web.Helpers
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Returns true when the stored hash uses fewer iterations than the current default or an unrecognized format.
+        /// </summary>
+        public static bool NeedsRehash(string hash)
+        {
+            if (string.IsNullOrWhiteSpace(hash))
+            {
+                return false;
+            }
+
+            var parts = hash.Split(new[] { '.' }, 3);
+            if (parts.Length != 3)
+            {
+                return true;
+            }
+
+            int storedIterations;
+            if (!int.TryParse(parts[0], out storedIterations))
+            {
+                return true;
+            }
+
+            return storedIterations < Iterations;
         }
 
         // Backward compatibility for old password format
