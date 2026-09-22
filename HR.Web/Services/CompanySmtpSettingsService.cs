@@ -110,7 +110,7 @@ namespace HR.Web.Services
             entity.SmtpHost = NormalizeOptional(input.SmtpHost);
             entity.SmtpPort = input.SmtpPort > 0 ? input.SmtpPort : 587;
             entity.SmtpUser = NormalizeOptional(input.SmtpUser);
-            entity.SmtpEnableSsl = input.SmtpEnableSsl;
+            entity.SmtpEnableSsl = true;
             entity.FromEmail = NormalizeOptional(input.FromEmail);
             entity.FromName = NormalizeOptional(input.FromName);
             entity.UpdatedDate = DateTime.UtcNow;
@@ -152,7 +152,7 @@ namespace HR.Web.Services
                 Port = settings.SmtpPort > 0 ? settings.SmtpPort : 587,
                 User = settings.SmtpUser ?? string.Empty,
                 Password = password ?? string.Empty,
-                EnableSsl = settings.SmtpEnableSsl,
+                EnableSsl = true,
                 FromEmail = settings.FromEmail.Trim(),
                 FromName = string.IsNullOrWhiteSpace(settings.FromName) ? AppConfig.ProductName : settings.FromName.Trim(),
                 IsCompanyScoped = true
@@ -174,6 +174,11 @@ namespace HR.Web.Services
             if (string.IsNullOrWhiteSpace(input.SmtpHost))
             {
                 return "SMTP host is required when company email is enabled.";
+            }
+
+            if (input.SmtpHost.IndexOf('@') >= 0 || input.SmtpHost.IndexOf('.') < 0)
+            {
+                return "SMTP host must be a mail server name, such as smtp.gmail.com, not an email address.";
             }
 
             if (input.SmtpHost.Length > 255)

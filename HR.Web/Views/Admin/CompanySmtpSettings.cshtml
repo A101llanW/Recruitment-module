@@ -61,10 +61,11 @@
                 {
                     @Html.AntiForgeryToken()
                     @Html.HiddenFor(m => m.Form.CompanyId)
+                    <input type="hidden" name="Form.SmtpEnableSsl" value="true" />
 
-                    <div class="form-group form-check mb-3">
-                        @Html.CheckBoxFor(m => m.Form.IsEnabled, new { @class = "form-check-input", id = "smtpEnabled" })
-                        <label class="form-check-label" for="smtpEnabled">Enable company SMTP for outbound email</label>
+                    <div class="custom-control custom-checkbox mb-3">
+                        @Html.CheckBoxFor(m => m.Form.IsEnabled, new { @class = "custom-control-input", id = "smtpEnabled" })
+                        <label class="custom-control-label" for="smtpEnabled">Enable company SMTP for outbound email</label>
                     </div>
 
                     <div class="form-row">
@@ -85,17 +86,16 @@
                         </div>
                         <div class="form-group col-md-6">
                             @Html.LabelFor(m => m.Form.SmtpPassword)
-                            @Html.PasswordFor(m => m.Form.SmtpPassword, new { @class = "form-control", autocomplete = "new-password", placeholder = Model.HasStoredPassword ? "Leave blank to keep existing password" : "Required when enabling SMTP" })
+                            @Html.PasswordFor(m => m.Form.SmtpPassword, new { @class = "form-control", autocomplete = "new-password" })
                             @if (Model.HasStoredPassword)
                             {
                                 <small class="form-text text-muted">A password is stored. Leave the field empty to keep it, or enter a new value to replace it.</small>
                             }
+                            else
+                            {
+                                <small class="form-text text-muted">Required when enabling SMTP.</small>
+                            }
                         </div>
-                    </div>
-
-                    <div class="form-group form-check mb-3">
-                        @Html.CheckBoxFor(m => m.Form.SmtpEnableSsl, new { @class = "form-check-input", id = "smtpSsl" })
-                        <label class="form-check-label" for="smtpSsl">Use SSL/TLS</label>
                     </div>
 
                     <div class="form-row">
@@ -109,11 +109,11 @@
                         </div>
                     </div>
 
-                    @if (Model.HasStoredPassword)
+                    if (Model.HasStoredPassword)
                     {
-                        <div class="form-group form-check mb-3">
-                            @Html.CheckBoxFor(m => m.Form.ClearStoredPassword, new { @class = "form-check-input", id = "clearPassword" })
-                            <label class="form-check-label text-danger" for="clearPassword">Remove stored SMTP password</label>
+                        <div class="custom-control custom-checkbox mb-3">
+                            @Html.CheckBoxFor(m => m.Form.ClearStoredPassword, new { @class = "custom-control-input", id = "clearPassword" })
+                            <label class="custom-control-label text-danger" for="clearPassword">Remove stored SMTP password</label>
                         </div>
                     }
 

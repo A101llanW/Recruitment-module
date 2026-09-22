@@ -72,8 +72,7 @@ namespace HR.Web.Controllers
                     "COMPANY_SMTP_SETTINGS_SAVED",
                     "CompanySmtpSettings",
                     targetCompanyId.ToString(),
-                    true,
-                    string.Format("Updated company SMTP settings (enabled={0}) for company {1}", form.IsEnabled, targetCompanyId));
+                    newValues: string.Format("Updated company SMTP settings (enabled={0}) for company {1}", form.IsEnabled, targetCompanyId));
 
                 TempData["SuccessMessage"] = form.IsEnabled
                     ? "Company SMTP settings saved. Candidate emails for this company will use these settings."
@@ -129,16 +128,16 @@ namespace HR.Web.Controllers
 
             try
             {
-                await emailService.SendAsync(model.TestRecipient.Trim(), subject, body, targetCompanyId);
+                await emailService.SendRequiredAsync(model.TestRecipient.Trim(), subject, body, targetCompanyId);
                 TempData["SuccessMessage"] = string.Format("Test email sent to {0}.", model.TestRecipient.Trim());
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 return RedirectWithCompanySmtpError(
                     isSuperAdmin,
                     actorCompanyId,
                     targetCompanyId,
-                    "Test email could not be sent. Check your SMTP settings and try again.");
+                    DescribeSmtpTestFailure(ex));
             }
 
             return RedirectToCompanySmtpSettings(isSuperAdmin, isSuperAdmin ? (int?)targetCompanyId : null);
@@ -186,7 +185,7 @@ namespace HR.Web.Controllers
                 SmtpPort = form.SmtpPort,
                 SmtpUser = form.SmtpUser,
                 SmtpPassword = form.SmtpPassword,
-                SmtpEnableSsl = form.SmtpEnableSsl,
+                SmtpEnableSsl = true,
                 FromEmail = form.FromEmail,
                 FromName = form.FromName,
                 ClearStoredPassword = form.ClearStoredPassword
@@ -206,6 +205,28 @@ namespace HR.Web.Controllers
         private ActionResult RedirectToCompanySmtpSettings(bool isSuperAdmin, int? companyId)
         {
             return RedirectToAction("CompanySmtpSettings", new { companyId = isSuperAdmin ? companyId : null });
+        }
+
+        private static string DescribeSmtpTestFailure(Exception ex)
+        {
+            var inner = ex;
+            while (inner != null && inner.InnerException != null)
+            {
+                inner = inner.InnerException;
+            }
+
+            var detail = inner != null ? inner.Message : null;
+            if (string.IsNullOrWhiteSpace(detail))
+            {
+                return "Test email could not be sent. Check the SMTP host, port, username, and password.";
+            }
+
+            if (detail.Length > 300)
+            {
+                detail = detail.Substring(0, 300);
+            }
+
+            return "Test email could not be sent. " + detail;
         }
 
         private ActionResult RedirectWithCompanySmtpError(bool isSuperAdmin, int? actorCompanyId, int? targetCompanyId, string message)
