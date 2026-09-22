@@ -162,6 +162,8 @@
     <Compile Include="Models\LoginAttempt.cs" />
     <Compile Include="Models\AuditLog.cs" />
     <Compile Include="Models\Report.cs" />
+    <Compile Include="Models\CustomReportDefinition.cs" />
+    <Compile Include="Models\CustomReportConfig.cs" />
     <Compile Include="Models\LicenseTransaction.cs" />
     <Compile Include="Models\SystemSetting.cs" />
     <Compile Include="Models\AdminCredentialsViewModel.cs" />
@@ -193,6 +195,8 @@
     <None Include="Migrations\202605260439187_ModelSyncCheckpoint20260526.resx" />
     <None Include="Migrations\202605290000000_DropResumePathFromApplications.cs" />
     <None Include="Migrations\202605290000000_DropResumePathFromApplications.sql" />
+    <None Include="Migrations\202609220000016_AddCustomReportDefinitions.cs" />
+    <None Include="Migrations\202609220000016_AddCustomReportDefinitions.sql" />
     <None Include="Migrations\AddPasswordResetTable.cs" />
     <None Include="Migrations\Configuration.cs" />
     <Compile Include="Models\Application.cs" />
@@ -223,6 +227,8 @@
     <Compile Include="ViewModels\CoverLetterViewModel.cs" />
     <Compile Include="ViewModels\EmailTemplateManagementViewModel.cs" />
     <Compile Include="ViewModels\HrCcEmailsPageViewModel.cs" />
+    <Compile Include="ViewModels\CustomReportPageViewModel.cs" />
+    <Compile Include="ViewModels\CustomReportBuilderViewModel.cs" />
     <Compile Include="Data\DbSetExtensions.cs" />
     <Compile Include="Data\HrContext.cs" />
     <Compile Include="Data\Repository.cs" />
@@ -242,6 +248,9 @@
     <Compile Include="Services\SecurityService.cs" />
     <Compile Include="Services\AuditService.cs" />
     <Compile Include="Services\ReportService.cs" />
+    <Compile Include="Services\CustomReportCatalog.cs" />
+    <Compile Include="Services\CustomReportConfigValidator.cs" />
+    <Compile Include="Services\CustomReportService.cs" />
     <Compile Include="Services\SettingsService.cs" />
     <Compile Include="Services\RealisticCaptchaService.cs" />
     <Compile Include="Services\LinkedInProfileImportService.cs" />
@@ -397,6 +406,11 @@
     <Content Include="Views\Applications\QuestionnaireReview.cshtml" />
     <Content Include="Views\Questionnaire\Preview.cshtml" />
     <Content Include="Views\Reports\Create.cshtml" />
+    <Content Include="Views\Reports\Index.cshtml" />
+    <Content Include="Views\Reports\Builder.cshtml" />
+    <Content Include="Views\Reports\Run.cshtml" />
+    <Content Include="Views\Reports\_SavedCustomReports.cshtml" />
+    <Content Include="Views\Reports\_CustomReportTable.cshtml" />
     <Content Include="Views\Shared\FreshPortalRestriction.cshtml" />
     <Content Include="Views\Shared\GuestAccess.cshtml" />
     <Content Include="Views\Shared\SuccessPage.cshtml" />

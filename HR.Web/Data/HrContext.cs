@@ -37,6 +37,7 @@ namespace HR.Web.Data
         public DbSet<LoginAttempt> LoginAttempts { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<Report> Reports { get; set; }
+        public DbSet<CustomReportDefinition> CustomReportDefinitions { get; set; }
         public DbSet<PasswordReset> PasswordResets { get; set; }
         public DbSet<LicenseTransaction> LicenseTransactions { get; set; }
         public DbSet<ImpersonationRequest> ImpersonationRequests { get; set; }
@@ -128,6 +129,12 @@ namespace HR.Web.Data
                 .HasOptional(t => t.Company)
                 .WithMany()
                 .HasForeignKey(t => t.CompanyId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<CustomReportDefinition>()
+                .HasOptional(d => d.Company)
+                .WithMany()
+                .HasForeignKey(d => d.CompanyId)
                 .WillCascadeOnDelete(false);
 
             modelBuilder.Entity<QuestionnaireTemplateQuestion>()

@@ -1,0 +1,44 @@
+@model HR.Web.Models.CustomReportPage
+@if (!string.IsNullOrEmpty(Model.Warning))
+{
+    <div class="alert alert-warning py-2">@Model.Warning</div>
+}
+@if (!string.IsNullOrEmpty(Model.EmptyMessage) && (Model.Rows == null || Model.Rows.Count == 0))
+{
+    <p class="text-muted">@Model.EmptyMessage</p>
+}
+else if (Model.Headers != null && Model.Headers.Count > 0)
+{
+    <table class="table table-sm table-bordered" id="custom-report-table">
+        <thead>
+            <tr>
+                @foreach (var header in Model.Headers)
+                {
+                    <th>@header</th>
+                }
+            </tr>
+        </thead>
+        <tbody id="custom-report-table-body">
+            @if (Model.Rows != null)
+            {
+                foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        @foreach (var cell in row)
+                        {
+                            <td>@cell</td>
+                        }
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+    @if (Model.HasMore)
+    {
+        <button type="button" class="btn btn-link p-0" id="custom-report-view-more" data-next-page="@(Model.Page + 1)">View more</button>
+    }
+    @if (!Model.HasMore && Model.Page >= 1)
+    {
+        <p class="text-muted small mb-0">Preview shows the first 200 rows. Export CSV for the full result (up to 5000).</p>
+    }
+}
