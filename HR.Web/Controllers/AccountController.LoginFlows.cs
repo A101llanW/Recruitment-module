@@ -327,6 +327,8 @@ namespace HR.Web.Controllers
                 return passwordFailure;
             }
 
+            TryUpgradePasswordHashIfNeeded(user, request.Password);
+
             var companyAccessFailure = ValidateCompanyPortalAccessForLogin(user);
             if (companyAccessFailure != null)
             {
@@ -516,6 +518,44 @@ namespace HR.Web.Controllers
         private static bool IsPasswordValid(User user, string password)
         {
             return !string.IsNullOrEmpty(user.PasswordHash) && PasswordHelper.VerifyPassword(user.PasswordHash, password);
+        }
+
+        private void TryUpgradePasswordHashIfNeeded(User user, string plaintextPassword)
+        {
+            if (user == null || string.IsNullOrWhiteSpace(plaintextPassword) || string.IsNullOrWhiteSpace(user.PasswordHash))
+            {
+                return;
+            }
+
+            if (!PasswordHelper.NeedsRehash(user.PasswordHash))
+            {
+                return;
+            }
+
+            try
+            {
+                user.PasswordHash = PasswordHelper.HashPassword(plaintextPassword);
+                _uow.Users.Update(user);
+                _uow.Complete();
+                AuditSvc.LogAction(
+                    user.UserName,
+                    "PASSWORD_REHASH",
+                    "Account",
+                    user.Id.ToString(),
+                    true,
+                    "Password hash upgraded to current PBKDF2 iteration count after successful login");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("Password rehash on login failed for user " + user.UserName + ": " + ex.Message);
+                AuditSvc.LogAction(
+                    user.UserName,
+                    "PASSWORD_REHASH_FAILED",
+                    "Account",
+                    user.Id.ToString(),
+                    false,
+                    ex.Message);
+            }
         }
 
         private static string BuildInvalidPasswordMessage(int remainingAttempts)

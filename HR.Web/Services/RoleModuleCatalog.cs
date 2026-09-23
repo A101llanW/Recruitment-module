@@ -164,6 +164,20 @@ namespace HR.Web.Services
                     case "UpdateUserRole":
                     case "UnlockUserAccount":
                     case "GlobalUserManagement":
+                    case "RoleManagement":
+                    case "CreateRole":
+                    case "UpdateRole":
+                    case "DeleteRole":
+                        return UserManagement;
+
+                    case "EmailTemplates":
+                    case "SaveEmailTemplates":
+                    case "ResetEmailTemplatesToDefaults":
+                        return UserManagement;
+
+                    case "HrCcEmails":
+                    case "AddHrCcEmail":
+                    case "DeleteHrCcEmail":
                         return UserManagement;
 
                     case "SecurityLogs":

@@ -726,7 +726,12 @@ namespace HR.Web.Controllers
 
         private string ValidateApplicationOwnership(Application model)
         {
-            if (!IsCurrentUserAuthenticated() || User.IsInRole("Admin"))
+            if (!IsCurrentUserAuthenticated())
+            {
+                return "You must be signed in to create an application.";
+            }
+
+            if (User.IsInRole("Admin"))
             {
                 return null;
             }
@@ -1187,8 +1192,8 @@ namespace HR.Web.Controllers
             _uow.Complete();
             ClearPendingCoverLetter();
             ScoreQuestionnaireApplication(application);
+            SendApplicationReceivedStandardEmail(application, applicant, position);
             NotifyCompanyOfNewApplication(application.Id);
-            TrySendApplicationReceivedEmailForApplication(application, applicant, position);
             return null;
         }
 
@@ -1218,6 +1223,77 @@ namespace HR.Web.Controllers
             _uow.Complete();
             ScoreQuestionnaireApplication(existingApplication);
             return null;
+        }
+
+        private void SendApplicationReceivedStandardEmail(Application application, Applicant applicant, Position position)
+        {
+            if (application == null || applicant == null || position == null)
+            {
+                return;
+            }
+
+            var recipientEmail = applicant.Email;
+            if (string.IsNullOrWhiteSpace(recipientEmail))
+            {
+                return;
+            }
+
+            try
+            {
+                var company = application.CompanyId.HasValue
+                    ? _uow.Companies.Get(application.CompanyId.Value)
+                    : null;
+                var companyName = company != null && !string.IsNullOrWhiteSpace(company.Name)
+                    ? company.Name.Trim()
+                    : "Recruitment Team";
+                var candidateName = !string.IsNullOrWhiteSpace(applicant.FullName)
+                    ? applicant.FullName.Trim()
+                    : "Candidate";
+                var positionTitle = string.IsNullOrWhiteSpace(position.Title)
+                    ? "this position"
+                    : position.Title.Trim();
+
+                var rendered = _emailTemplateService.Render(
+                    EmailTemplateCatalog.ApplicationReceivedStandard,
+                    new Dictionary<string, string>
+                    {
+                        { "CandidateName", HttpUtility.HtmlEncode(candidateName) },
+                        { "PositionTitle", HttpUtility.HtmlEncode(positionTitle) },
+                        { "CompanyName", HttpUtility.HtmlEncode(companyName) },
+                        { "CustomMessageBlock", string.Empty }
+                    },
+                    application.CompanyId);
+
+                if (rendered == null)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        "ApplicationReceivedStandard template could not be rendered for application " + application.Id);
+                    return;
+                }
+
+                _email.SendAsync(
+                    recipientEmail.Trim(),
+                    rendered.Subject ?? "Application received",
+                    WrapApplicationReceivedEmailBody(rendered.BodyHtml ?? string.Empty)).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    "ApplicationReceivedStandard email failed for application " + application.Id + ": " + ex.Message);
+            }
+        }
+
+        private static string WrapApplicationReceivedEmailBody(string innerHtml)
+        {
+            return string.Format(
+                @"<!DOCTYPE html>
+<html>
+<head><meta charset=""utf-8""/></head>
+<body style=""font-family: Arial, sans-serif; line-height: 1.6; color: #333;"">
+{0}
+</body>
+</html>",
+                innerHtml ?? string.Empty);
         }
 
         private void PopulateApplicationDetailsViewBag(User user, Application app)

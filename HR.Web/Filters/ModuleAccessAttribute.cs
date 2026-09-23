@@ -41,7 +41,9 @@ namespace HR.Web.Filters
 
             if (string.IsNullOrWhiteSpace(moduleKey))
             {
-                base.OnActionExecuting(filterContext);
+                filterContext.Result = new HttpStatusCodeResult(
+                    403,
+                    "Access denied. This action is not mapped to a module permission.");
                 return;
             }
 

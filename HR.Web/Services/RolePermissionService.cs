@@ -29,50 +29,48 @@ namespace HR.Web.Services
         {
             if (string.IsNullOrWhiteSpace(moduleKey))
             {
-                return true;
+                return false;
             }
 
             var context = GetCurrentUserContext();
-            if (!context.IsAuthenticated || context.IsImpersonating || context.IsActualSuperAdmin)
-            {
-                return true;
-            }
-
-            // Any company-scoped admin can fully manage the question bank.
-            if (IsCompanyScopedAdmin(context) &&
-                string.Equals(moduleKey, RoleModuleCatalog.Questions, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (!string.Equals(context.BaseRole, "Admin", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.Equals(context.BaseRole, "Client", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(moduleKey, RoleModuleCatalog.Reports, StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-
-                if (string.Equals(requiredAccessLevel, RoleAccessLevels.Manage, StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(context.BaseRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-
-                return true;
-            }
-
-            if (!context.HasCustomAdminRole)
-            {
-                return true;
-            }
-
-            if (context.PermissionMap == null || !context.PermissionMap.ContainsKey(moduleKey))
+            if (!context.IsAuthenticated)
             {
                 return false;
             }
 
-            return MeetsAccessRequirement(context.PermissionMap[moduleKey], requiredAccessLevel);
+            if (context.IsImpersonating || context.IsActualSuperAdmin)
+            {
+                return true;
+            }
+
+            if (context.IsFullCompanyAdmin)
+            {
+                return true;
+            }
+
+            if (context.HasCustomAdminRole)
+            {
+                if (context.PermissionMap == null || !context.PermissionMap.ContainsKey(moduleKey))
+                {
+                    return false;
+                }
+
+                return MeetsAccessRequirement(context.PermissionMap[moduleKey], requiredAccessLevel);
+            }
+
+            if (context.RoleDefinitionId.HasValue &&
+                context.PermissionMap != null &&
+                context.PermissionMap.Count > 0)
+            {
+                if (!context.PermissionMap.ContainsKey(moduleKey))
+                {
+                    return false;
+                }
+
+                return MeetsAccessRequirement(context.PermissionMap[moduleKey], requiredAccessLevel);
+            }
+
+            return CanBuiltinRoleAccessModule(context.BaseRole, moduleKey, requiredAccessLevel);
         }
 
         public bool CanCurrentUserManageRoleDefinitions()
@@ -171,12 +169,37 @@ namespace HR.Web.Services
             return CanCurrentUserAccessModule(RoleModuleCatalog.Questions, RoleAccessLevels.View);
         }
 
-        private static bool IsCompanyScopedAdmin(CurrentUserAccessContext context)
+        private static bool CanBuiltinRoleAccessModule(string baseRole, string moduleKey, string requiredAccessLevel)
         {
-            return context != null &&
-                   context.IsAuthenticated &&
-                   string.Equals(context.BaseRole, "Admin", StringComparison.OrdinalIgnoreCase) &&
-                   context.CompanyId.HasValue;
+            if (string.Equals(baseRole, "Client", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(baseRole))
+            {
+                if (string.Equals(moduleKey, RoleModuleCatalog.Reports, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                if (string.Equals(moduleKey, RoleModuleCatalog.Positions, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(moduleKey, RoleModuleCatalog.Applications, StringComparison.OrdinalIgnoreCase))
+                {
+                    return MeetsAccessRequirement(RoleAccessLevels.View, requiredAccessLevel);
+                }
+
+                return false;
+            }
+
+            if (string.Equals(baseRole, "Panelist", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.Equals(moduleKey, RoleModuleCatalog.Interviews, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(moduleKey, RoleModuleCatalog.Applications, StringComparison.OrdinalIgnoreCase))
+                {
+                    return MeetsAccessRequirement(RoleAccessLevels.View, requiredAccessLevel);
+                }
+
+                return false;
+            }
+
+            return false;
         }
 
         private static bool MeetsAccessRequirement(string grantedAccessLevel, string requiredAccessLevel)
