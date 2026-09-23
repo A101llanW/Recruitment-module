@@ -572,24 +572,18 @@ namespace HR.Web.Controllers
         {
             var scope = GetRoleManagementScopeContext();
             var options = new List<SelectListItem>();
+            var restrictBuiltinRoles = restrictToFullAdmin && !scope.IsGlobalSuperAdmin;
 
-            if (restrictToFullAdmin && !scope.IsGlobalSuperAdmin)
+            if (!restrictBuiltinRoles)
             {
                 options.Add(new SelectListItem
                 {
-                    Value = "builtin:Admin",
-                    Text = "Elevated Control (Admin)",
-                    Selected = string.Equals(selectedRoleKey, "builtin:Admin", StringComparison.OrdinalIgnoreCase)
+                    Value = "builtin:Client",
+                    Text = "Standard Access (Client)",
+                    Selected = string.Equals(selectedRoleKey, "builtin:Client", StringComparison.OrdinalIgnoreCase)
                 });
-                return options;
             }
 
-            options.Add(new SelectListItem
-            {
-                Value = "builtin:Client",
-                Text = "Standard Access (Client)",
-                Selected = string.Equals(selectedRoleKey, "builtin:Client", StringComparison.OrdinalIgnoreCase)
-            });
             options.Add(new SelectListItem
             {
                 Value = "builtin:Admin",
@@ -597,7 +591,7 @@ namespace HR.Web.Controllers
                 Selected = string.Equals(selectedRoleKey, "builtin:Admin", StringComparison.OrdinalIgnoreCase)
             });
 
-            if (scope.IsGlobalSuperAdmin)
+            if (!restrictBuiltinRoles && scope.IsGlobalSuperAdmin)
             {
                 options.Add(new SelectListItem
                 {
