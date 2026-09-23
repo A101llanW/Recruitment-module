@@ -5,7 +5,7 @@
     var canManageDepartments = ViewBag.CanManageDepartments != null ? (bool)ViewBag.CanManageDepartments : false;
     var canViewDepartments = ViewBag.CanViewDepartments != null ? (bool)ViewBag.CanViewDepartments : canManageDepartments;
 }
-@if (canManageDepartments || (User != null && User.Identity != null && User.IsInRole("HR")))
+@if (canManageDepartments)
 {
     <a class="btn btn-primary mb-2" href="@Url.Action("Create")">New Department</a>
 }
@@ -40,7 +40,7 @@
                     {
                         @Html.ActionLink("Details", "Details", new { id = item.Id }, new { @class = "btn btn-sm btn-info" })
                     }
-                    @if (canManageDepartments || (User != null && User.Identity != null && User.IsInRole("HR")))
+                    @if (canManageDepartments)
                     {
                         @Html.ActionLink("Edit", "Edit", new { id = item.Id }, new { @class = "btn btn-sm btn-secondary" })
                         @Html.ActionLink("Delete", "Delete", new { id = item.Id }, new { @class = "btn btn-sm btn-danger" })

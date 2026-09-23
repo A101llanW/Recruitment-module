@@ -48,6 +48,8 @@
                 { "Email Templates", "Customize candidate and HR email wording." },
                 { "Security Logs", "Review authentication and security-related events." },
                 { "HR CC Emails", "Configure HR contacts copied on candidate emails." },
+                { "Company email (SMTP)", "Configure your company's outbound SMTP server and From address." },
+                { "Application notifications", "Manage who receives email when candidates apply." },
                 { "Privacy", "How we collect, use, and protect personal information." },
                 { "Terms", "Terms and conditions for using " + AppConfig.ProductName + "." },
                 { "License Management", "View and renew licenses across tenant companies." },
@@ -278,6 +280,17 @@
 
     <script src="@Url.Content("~/Scripts/jquery-3.6.0.min.js")"></script>
     <script src="@Url.Content("~/Scripts/bootstrap.bundle.min.js")"></script>
+
+    <script>
+        // Orphaned Bootstrap backdrops (z-index 1040) sit above the sticky navbar (1030)
+        // and swallow clicks, which makes nav dropdown toggles appear dead.
+        $(function () {
+            if ($('.modal.show').length === 0) {
+                $('.modal-backdrop').remove();
+                $('body').removeClass('modal-open').css({ paddingRight: '', overflow: '' });
+            }
+        });
+    </script>
     
     <script>
         // Security logic to prevent "Back Button" after Logout
@@ -462,6 +475,7 @@
                 checkElevationRequests();
                 setInterval(checkElevationRequests, 30000);
                 $('#elevationRequestModal').on('hidden.bs.modal', syncModalBackdrops);
+                syncModalBackdrops();
                 setInterval(syncModalBackdrops, 5000);
 
                 // --- Freeze Overlay & Countdown ---

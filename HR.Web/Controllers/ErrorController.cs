@@ -1,5 +1,6 @@
 using System.Web.Mvc;
 using System.Net;
+using HR.Web.Helpers;
 
 namespace HR.Web.Controllers
 {
@@ -9,21 +10,21 @@ namespace HR.Web.Controllers
         // ── Generic Error ─────────────────────────────────────────────
         public ActionResult Index()
         {
-            Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            SafeNotFoundHandler.ApplyBrandedErrorStatus(HttpContext, (int)HttpStatusCode.InternalServerError);
             return View();
         }
 
         // ── 404 Not Found ─────────────────────────────────────────────
         public ActionResult NotFound()
         {
-            Response.StatusCode = (int)HttpStatusCode.NotFound;
+            SafeNotFoundHandler.ApplyBrandedErrorStatus(HttpContext, (int)HttpStatusCode.NotFound);
             return View();
         }
 
         // ── 403 Forbidden ─────────────────────────────────────────────
         public ActionResult Forbidden()
         {
-            Response.StatusCode = (int)HttpStatusCode.Forbidden;
+            SafeNotFoundHandler.ApplyBrandedErrorStatus(HttpContext, (int)HttpStatusCode.Forbidden);
             return View();
         }
     }

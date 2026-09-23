@@ -584,7 +584,7 @@
                 statusEl.textContent = 'Applying template...';
             }
 
-            fetch('/Admin/GetQuestionnaireTemplateData?id=' + encodeURIComponent(templateId), {
+            fetch('@Url.Action("GetQuestionnaireTemplateData", "Admin")?id=' + encodeURIComponent(templateId), {
                 credentials: 'same-origin'
             })
                 .then(function (response) { return response.json(); })
@@ -592,9 +592,15 @@
                     if (!data || !data.success || !data.template) {
                         throw new Error((data && data.message) || 'Unable to load template.');
                     }
-                    editor.applyTemplateItems(data.template);
+                    var result = editor.applyTemplateItems(data.template);
                     if (statusEl) {
-                        statusEl.textContent = 'Template applied. You can add more questions below.';
+                        if (!result || !result.appliedCount) {
+                            statusEl.textContent = 'Template loaded but no matching questions were found on this page.';
+                        } else if (result.missingCount > 0) {
+                            statusEl.textContent = 'Template applied (' + result.appliedCount + ' questions). ' + result.missingCount + ' template question(s) are not available here.';
+                        } else {
+                            statusEl.textContent = 'Template applied (' + result.appliedCount + ' questions). You can add more questions below.';
+                        }
                     }
                 })
                 .catch(function (err) {

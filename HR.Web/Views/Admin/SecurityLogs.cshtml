@@ -172,11 +172,11 @@
                     <table class="table cyber-table mb-0">
                         <thead>
                             <tr>
-                                <th class="border-0 bg-slate-900 px-4">TIMESTAMP</th>
-                                <th class="border-0 bg-slate-900">IDENTITY</th>
-                                <th class="border-0 bg-slate-900">SOURCE</th>
+                                <th class="border-0 bg-slate-900 px-4">WHEN</th>
+                                <th class="border-0 bg-slate-900">WHO</th>
+                                <th class="border-0 bg-slate-900">IP ADDRESS</th>
                                 <th class="border-0 bg-slate-900">STATUS</th>
-                                <th class="border-0 bg-slate-900">TELEMETRY</th>
+                                <th class="border-0 bg-slate-900">WHAT HAPPENED</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -200,12 +200,22 @@
                                     <td class="font-weight-bold">@log.Username</td>
                                     <td class="font-mono x-small text-info">@log.IPAddress</td>
                                     <td>
-                                        <span class="badge @(log.WasSuccessful ? "badge-soft-success" : "badge-soft-danger") px-3 py-1">
-                                            <i class="fas @(log.WasSuccessful ? "fa-circle-check" : "fa-triangle-exclamation") mr-1"></i>
-                                            @(log.WasSuccessful ? "AUTHORIZED" : "DENIED")
-                                        </span>
+                                        @if (log.IsAnonymousPortalVisit)
+                                        {
+                                            <span class="badge badge-soft-info px-3 py-1">
+                                                <i class="fas fa-door-open mr-1"></i>
+                                                VISITED
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge @(log.WasSuccessful ? "badge-soft-success" : "badge-soft-danger") px-3 py-1">
+                                                <i class="fas @(log.WasSuccessful ? "fa-circle-check" : "fa-triangle-exclamation") mr-1"></i>
+                                                @(log.WasSuccessful ? "AUTHORIZED" : "DENIED")
+                                            </span>
+                                        }
                                     </td>
-                                    <td class="small text-slate-400">@log.FailureReason</td>
+                                    <td class="small text-slate-300">@log.FriendlySummary</td>
                                 </tr>
                             }
                         </tbody>
@@ -231,19 +241,18 @@
                     <table class="table cyber-table mb-0">
                         <thead>
                             <tr>
-                                <th class="border-0 bg-slate-900 px-4">TIMESTAMP</th>
-                                <th class="border-0 bg-slate-900">ACTOR</th>
-                                <th class="border-0 bg-slate-900">OPERATIVE</th>
-                                <th class="border-0 bg-slate-900">MODULE</th>
-                                <th class="border-0 bg-slate-900">OUTCOME</th>
-                                <th class="border-0 bg-slate-900 px-4">DETAILS</th>
+                                <th class="border-0 bg-slate-900 px-4">WHEN</th>
+                                <th class="border-0 bg-slate-900">WHO</th>
+                                <th class="border-0 bg-slate-900">WHAT HAPPENED</th>
+                                <th class="border-0 bg-slate-900">RESULT</th>
+                                <th class="border-0 bg-slate-900 px-4">IP ADDRESS</th>
                             </tr>
                         </thead>
                         <tbody>
                             @if (!auditRows.Any())
                             {
                                 <tr>
-                                    <td colspan="6" class="text-center py-5 text-slate-500 font-italic">
+                                    <td colspan="5" class="text-center py-5 text-slate-500 font-italic">
                                         <i class="fas fa-ghost fa-3x mb-3 d-block opacity-2"></i>
                                         No system audit recorded for current parameters
                                     </td>
@@ -258,24 +267,18 @@
                                 <tr class="@rowClass">
                                     <td class="px-4 text-slate-300 font-mono small">@log.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</td>
                                     <td class="font-weight-bold text-info">@log.Username</td>
-                                    <td><span class="badge badge-outline-info">@log.Action</span></td>
-                                    <td class="small text-slate-400">@log.Controller</td>
+                                    <td class="small text-slate-300">@log.FriendlySummary</td>
                                     <td class="px-4">
                                         @if (log.WasSuccessful)
                                         {
-                                            <span class="text-success small font-weight-bold"><i class="fas fa-check mr-1"></i>COMPLETED</span>
+                                            <span class="text-success small font-weight-bold"><i class="fas fa-check mr-1"></i>OK</span>
                                         }
                                         else
                                         {
                                             <span class="text-danger small font-weight-bold"><i class="fas fa-times mr-1"></i>FAILED</span>
                                         }
                                     </td>
-                                    <td class="px-4 small text-slate-300">
-                                        @if (!string.IsNullOrEmpty(log.ErrorMessage))
-                                        {
-                                            <code class="text-info" style="background: rgba(14, 165, 233, 0.1); padding: 2px 4px; border-radius: 4px; word-break: break-all;">@log.ErrorMessage</code>
-                                        }
-                                    </td>
+                                    <td class="px-4 font-mono x-small text-info">@log.IPAddress</td>
                                 </tr>
                             }
                         </tbody>
@@ -394,6 +397,7 @@
 
     .badge-soft-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
     .badge-soft-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .badge-soft-info { background: rgba(56, 189, 248, 0.12); color: #38bdf8; }
     .badge-outline-info { border: 1px solid var(--info); color: var(--info); }
 
     .btn-cyber-info { background: var(--info); color: white; border: none; font-weight: 600; box-shadow: 0 4px 14px rgba(14, 165, 233, 0.4); }

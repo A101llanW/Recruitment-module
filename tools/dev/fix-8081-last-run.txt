@@ -1,0 +1,79 @@
+Bindings before:
+http *:5002:
+http *:8080:
+http *:8081:
+
+
+name                       : Hirehub
+id                         : 3
+serverAutoStart            : True
+state                      : Stopped
+bindings                   : Microsoft.IIs.PowerShell.Framework.ConfigurationElement
+limits                     : Microsoft.IIs.PowerShell.Framework.ConfigurationElement
+logFile                    : Microsoft.IIs.PowerShell.Framework.ConfigurationElement
+traceFailedRequestsLogging : Microsoft.IIs.PowerShell.Framework.ConfigurationElement
+hsts                       : Microsoft.IIs.PowerShell.Framework.ConfigurationElement
+applicationDefaults        : Microsoft.IIs.PowerShell.Framework.ConfigurationElement
+virtualDirectoryDefaults   : Microsoft.IIs.PowerShell.Framework.ConfigurationElement
+ftpServer                  : Microsoft.IIs.PowerShell.Framework.ConfigurationElement
+Collection                 : {Microsoft.IIs.PowerShell.Framework.ConfigurationElement}
+applicationPool            : Hirehub_Pool
+enabledProtocols           : http
+physicalPath               : C:\inetpub\wwwroot\Hirehub
+userName                   : 
+password                   : 
+Attributes                 : {name, id, serverAutoStart, state}
+ChildElements              : {bindings, limits, logFile, traceFailedRequestsLogging...}
+ElementTagName             : site
+Methods                    : {Start, Stop}
+Schema                     : Microsoft.IIs.PowerShell.Framework.ConfigurationElementSchema
+
+
+
+
+Bindings after:
+http *:5002:
+http *:8080:
+http *:8081:
+
+OK
+Start-Website failed: Cannot create a file when that file already exists. (Exception from HRESULT: 0x800700B7)
+Stopped
+:::8080
+FIX2 2026-09-21T15:06:23.9890105+03:00
+
+URL reservation successfully deleted
+
+
+Start-Website failed: Cannot create a file when that file already exists. (Exception from HRESULT: 0x800700B7)
+State: Stopped
+:::8080
+All sites:
+Default Web Site [] -> 
+HR.Web [] -> 
+Hirehub [Stopped] -> *:5002:, *:8080:, *:8081:
+AssetManagement [Started] -> *:8080:
+HTTP.sys:
+
+>             Number of registered URLs: 1
+>             Registered URLs:
+>                 HTTP://*:8080/
+      URL group ID: FF00000540000001
+>             Number of registered URLs: 1
+>             Registered URLs:
+                  HTTP://*:5357/3FFC5F35-4D17-44D4-BE92-EB776F8BE303/
+
+
+
+URL ACL:
+
+FIX3 2026-09-21T15:08:26.3457681+03:00
+Removed duplicate *:8080 from Hirehub
+Start-Website: OK
+State: Started
+*:5002:
+*:8081:
+:::8081
+:::5002
+Pool: Started
+HTTP 200

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Web.Mvc;
 using HR.Web.Data;
 using HR.Web.Models;
+using HR.Web.Services;
 using HR.Web.ViewModels;
 
 namespace HR.Web.Controllers
@@ -25,7 +26,8 @@ namespace HR.Web.Controllers
         private ActionResult BuildGlobalUserManagementView()
         {
             var allUsers = _uow.Users.GetAll(u => u.Company, u => u.RoleDefinition).ToList();
-            var allLastLogins = GetLatestLoginByUsername();
+            var allLastLogins = LoadLatestSuccessfulLogins(allUsers.Select(u => u.UserName));
+            var lockouts = _securityService.GetLockoutStates(allUsers);
             var viewModel = new SuperAdminUserManagementViewModel
             {
                 GlobalUsers = new List<UserManagementViewModel>(),
@@ -35,25 +37,79 @@ namespace HR.Web.Controllers
 
             foreach (var user in allUsers)
             {
-                var userVm = BuildSuperAdminUserVm(user, allLastLogins);
+                var userVm = BuildSuperAdminUserVm(user, allLastLogins, lockouts);
                 AddUserToGlobalBuckets(viewModel, user, userVm);
             }
 
             return View("GlobalUserManagement", viewModel);
         }
 
-        private Dictionary<string, AuditLog> GetLatestLoginByUsername()
+        private Dictionary<string, LatestLoginSnapshot> LoadLatestSuccessfulLogins(IEnumerable<string> usernames)
         {
+            var names = usernames
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (names.Count == 0)
+            {
+                return new Dictionary<string, LatestLoginSnapshot>(StringComparer.OrdinalIgnoreCase);
+            }
+
             return _uow.AuditLogs.GetAll()
-                .Where(a => a.Action == "LOGIN_SUCCESS")
+                .Where(a => a.Action == "LOGIN_SUCCESS" && names.Contains(a.Username))
+                .Select(a => new
+                {
+                    a.Username,
+                    a.Timestamp,
+                    a.IPAddress
+                })
                 .ToList()
-                .GroupBy(a => a.Username)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First());
+                .GroupBy(a => a.Username, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g =>
+                    {
+                        var latest = g.OrderByDescending(x => x.Timestamp).First();
+                        return new LatestLoginSnapshot
+                        {
+                            Username = latest.Username,
+                            Timestamp = latest.Timestamp,
+                            IPAddress = latest.IPAddress
+                        };
+                    },
+                    StringComparer.OrdinalIgnoreCase);
         }
 
-        private UserManagementViewModel BuildSuperAdminUserVm(User user, Dictionary<string, AuditLog> allLastLogins)
+        private Dictionary<string, string> LoadPhonesByEmail(IEnumerable<string> emails)
         {
-            allLastLogins.TryGetValue(user.UserName, out var lastLogin);
+            var addresses = emails
+                .Where(email => !string.IsNullOrWhiteSpace(email))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (addresses.Count == 0)
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            return _uow.Applicants.GetAll()
+                .Where(a => addresses.Contains(a.Email))
+                .Select(a => new { a.Email, a.Phone })
+                .ToList()
+                .GroupBy(a => a.Email, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Select(a => a.Phone).FirstOrDefault(), StringComparer.OrdinalIgnoreCase);
+        }
+
+        private UserManagementViewModel BuildSuperAdminUserVm(
+            User user,
+            Dictionary<string, LatestLoginSnapshot> allLastLogins,
+            Dictionary<int, UserLockoutState> lockouts)
+        {
+            allLastLogins.TryGetValue(user.UserName ?? string.Empty, out var lastLogin);
+            if (!lockouts.TryGetValue(user.Id, out var lockout))
+            {
+                lockout = new UserLockoutState();
+            }
+
             return new UserManagementViewModel
             {
                 Id = user.Id,
@@ -64,13 +120,20 @@ namespace HR.Web.Controllers
                 Role = _rolePermissionService.GetDisplayRole(user),
                 BaseRole = user.Role,
                 CompanyName = user.Company != null ? user.Company.Name : "System",
-                IsLocked = _securityService.IsAccountLockedForUser(user),
-                LockoutEndTime = _securityService.GetLockoutEndTimeForUser(user),
-                FailedLoginAttempts = _securityService.GetFailedAttemptCountForUser(user),
+                IsLocked = lockout.IsLocked,
+                LockoutEndTime = lockout.LockoutEndTime,
+                FailedLoginAttempts = lockout.FailedLoginAttempts,
                 LastLoginDate = lastLogin != null ? (DateTime?)lastLogin.Timestamp : null,
                 LastLoginIP = lastLogin != null ? lastLogin.IPAddress : null,
                 CreatedDate = DateTime.Now
             };
+        }
+
+        private sealed class LatestLoginSnapshot
+        {
+            public string Username { get; set; }
+            public DateTime Timestamp { get; set; }
+            public string IPAddress { get; set; }
         }
 
         private static void AddUserToGlobalBuckets(SuperAdminUserManagementViewModel viewModel, User user, UserManagementViewModel userVm)

@@ -14,6 +14,11 @@ namespace HR.Web.Controllers
         [Authorize(Roles = "Admin, SuperAdmin")]
         public ActionResult EmailTemplates()
         {
+            if (!AdminFeatureFlags.EmailTemplatesAdminUiEnabled)
+            {
+                return RedirectToRoleManagement();
+            }
+
             if (!_rolePermissionService.CanCurrentUserManageRoleDefinitions())
             {
                 return new HttpStatusCodeResult(403, "Access Denied: Only full company admins and superadmins can manage email templates.");
@@ -25,8 +30,14 @@ namespace HR.Web.Controllers
         [HttpPost]
         [Authorize(Roles = "Admin, SuperAdmin")]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         public ActionResult SaveEmailTemplates(EmailTemplateManagementViewModel model)
         {
+            if (!AdminFeatureFlags.EmailTemplatesAdminUiEnabled)
+            {
+                return RedirectToRoleManagement();
+            }
+
             if (!_rolePermissionService.CanCurrentUserManageRoleDefinitions())
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
@@ -68,6 +79,12 @@ namespace HR.Web.Controllers
                 var bodyForStorage = NormalizeMojibakeArtifacts(
                     EmailBodyHtmlSanitizer.Sanitize(EmailTemplateTokenChipSerializer.EditorHtmlToStorage(bodyEditor)));
 
+                if (IsSecondaryStageTemplate(normalizedTemplateKey) &&
+                    !TemplateBodyContainsQuestionnaireStageLinkToken(bodyForStorage))
+                {
+                    bodyForStorage += "<p><a href='{{" + EmailTemplateCatalog.QuestionnaireStageLinkToken + "}}'>Open questionnaire stage</a></p>";
+                }
+
                 SaveTemplateSetting(
                     settingsService,
                     emailTemplateService.GetGlobalSubjectKey(normalizedTemplateKey),
@@ -94,6 +111,11 @@ namespace HR.Web.Controllers
 
         private ActionResult RedirectToEmailTemplates()
         {
+            if (!AdminFeatureFlags.EmailTemplatesAdminUiEnabled)
+            {
+                return RedirectToRoleManagement();
+            }
+
             var tenant = RouteData.Values["tenant"] as string;
             if (!string.IsNullOrEmpty(tenant))
             {
@@ -101,6 +123,17 @@ namespace HR.Web.Controllers
             }
 
             return RedirectToAction("EmailTemplates", "Admin");
+        }
+
+        private ActionResult RedirectToRoleManagement()
+        {
+            var tenant = RouteData.Values["tenant"] as string;
+            if (!string.IsNullOrEmpty(tenant))
+            {
+                return RedirectToAction("RoleManagement", "Admin", new { tenant });
+            }
+
+            return RedirectToAction("RoleManagement", "Admin");
         }
 
         /// <summary>
@@ -111,6 +144,11 @@ namespace HR.Web.Controllers
         [Authorize(Roles = "Admin, SuperAdmin")]
         public ActionResult ResetEmailTemplatesToDefaults()
         {
+            if (!AdminFeatureFlags.EmailTemplatesAdminUiEnabled)
+            {
+                return RedirectToRoleManagement();
+            }
+
             if (!_rolePermissionService.CanCurrentUserManageRoleDefinitions())
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
@@ -225,6 +263,19 @@ namespace HR.Web.Controllers
                 normalizedTemplateKey,
                 EmailTemplateCatalog.SecondaryStageInvitation,
                 StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TemplateBodyContainsQuestionnaireStageLinkToken(string bodyHtml)
+        {
+            if (string.IsNullOrWhiteSpace(bodyHtml))
+            {
+                return false;
+            }
+
+            return Regex.IsMatch(
+                bodyHtml,
+                @"\{\{(QuestionnaireStageLink|StageTwoLink)\}\}",
+                RegexOptions.IgnoreCase);
         }
 
         private static string RemoveLeadingStandalonePArtifact(string value)

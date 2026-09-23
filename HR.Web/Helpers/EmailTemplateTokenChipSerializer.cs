@@ -182,7 +182,19 @@ namespace HR.Web.Helpers
                 return string.Empty;
             }
 
-            return StorageTokenRegex.Replace(storageHtml, m => BuildChipHtml(m.Groups[1].Value));
+            return Regex.Replace(
+                storageHtml,
+                @"(<[^>]*>)|(\{\{([A-Za-z0-9_]+)\}\})",
+                match =>
+                {
+                    if (match.Groups[1].Success)
+                    {
+                        return match.Value;
+                    }
+
+                    return BuildChipHtml(match.Groups[3].Value);
+                },
+                RegexOptions.IgnoreCase);
         }
 
         public static string EditorHtmlToStorage(string editorHtml)

@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Web.Mvc;
+using HR.Web.Helpers;
 using HR.Web.Models;
 using HR.Web.ViewModels;
 
@@ -21,11 +22,12 @@ namespace HR.Web.Controllers
             viewModel.LoginAttempts = loginAttempts.Select(l => new LoginAttemptLog
             {
                 Id = l.Id,
-                Username = l.Username,
+                Username = SecurityLogTranslator.IsVisitorActivity(l.Username) ? "Visitor" : l.Username,
                 IPAddress = l.IPAddress,
                 AttemptTime = l.AttemptTime,
                 WasSuccessful = l.WasSuccessful,
-                FailureReason = l.FailureReason
+                FailureReason = l.FailureReason,
+                FriendlySummary = SecurityLogTranslator.DescribeLoginAttempt(l.Username, l.WasSuccessful, l.FailureReason)
             }).ToList();
 
             var auditLogsQuery = BuildAuditLogsQuery(normalizedFilter);
@@ -36,7 +38,7 @@ namespace HR.Web.Controllers
             viewModel.AuditLogs = auditLogs.Select(a => new AuditLogEntry
             {
                 Id = a.Id,
-                Username = a.Username,
+                Username = string.Equals(a.Username, "Anonymous", StringComparison.OrdinalIgnoreCase) ? "Visitor" : a.Username,
                 Action = a.Action,
                 Controller = a.Controller,
                 EntityId = a.EntityId,
@@ -44,13 +46,24 @@ namespace HR.Web.Controllers
                 Timestamp = a.Timestamp,
                 UserAgent = a.UserAgent,
                 WasSuccessful = a.WasSuccessful,
-                ErrorMessage = a.ErrorMessage
+                ErrorMessage = a.ErrorMessage,
+                FriendlySummary = SecurityLogTranslator.DescribeAuditActivity(
+                    a.Username,
+                    a.Action,
+                    a.Controller,
+                    a.EntityId,
+                    a.WasSuccessful,
+                    a.ErrorMessage,
+                    null)
             }).ToList();
 
             viewModel.TotalLoginAttempts = loginAttemptsQuery.Count();
             viewModel.TotalAuditLogs = auditLogsQuery.Count();
-            viewModel.FailedLoginAttempts = loginAttemptsQuery.Count(l => !l.WasSuccessful);
-            viewModel.SuccessfulLogins = loginAttemptsQuery.Count(l => l.WasSuccessful);
+            // EF cannot translate SecurityLogTranslator.IsVisitorActivity; use SQL-friendly username checks.
+            viewModel.FailedLoginAttempts = loginAttemptsQuery.Count(l =>
+                !l.WasSuccessful && (l.Username == null || (l.Username.ToLower() != "visitor" && l.Username.ToLower() != "guest")));
+            viewModel.SuccessfulLogins = loginAttemptsQuery.Count(l =>
+                l.WasSuccessful && (l.Username == null || (l.Username.ToLower() != "visitor" && l.Username.ToLower() != "guest")));
 
             return View(viewModel);
         }

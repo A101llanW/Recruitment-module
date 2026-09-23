@@ -17,8 +17,29 @@ namespace HR.Web.Controllers
             public string Message { get; set; }
         }
 
+        private const string RegistrationRequiresTenantMessage =
+            "Registration is only available on your employer's branded portal. Open the sign-in or registration link from their job posting (for example: /your-company/Account/Register), or use the company portal shown below if you have visited one before.";
+
+        private ActionResult EnsureRegistrationRequiresTenant()
+        {
+            var tenantToken = RouteData.Values["tenant"] as string;
+            if (!string.IsNullOrEmpty(tenantToken))
+            {
+                return null;
+            }
+
+            TempData["ErrorMessage"] = RegistrationRequiresTenantMessage;
+            return RedirectToAction("Login", "Account");
+        }
+
         private ActionResult HandleRegisterGet(int? companyId, bool isSuperAdmin, Uri returnUri)
         {
+            var tenantGuard = EnsureRegistrationRequiresTenant();
+            if (tenantGuard != null)
+            {
+                return tenantGuard;
+            }
+
             ViewBag.IsSuperAdmin = isSuperAdmin;
 
             var viewModel = CreateRegisterViewModel(companyId, isSuperAdmin);
@@ -80,6 +101,12 @@ namespace HR.Web.Controllers
 
         private ActionResult HandleRegisterPost(RegisterViewModel model, bool isSuperAdmin, Uri returnUri)
         {
+            var tenantGuard = EnsureRegistrationRequiresTenant();
+            if (tenantGuard != null)
+            {
+                return tenantGuard;
+            }
+
             ViewBag.IsSuperAdmin = isSuperAdmin;
 
             if (model == null)

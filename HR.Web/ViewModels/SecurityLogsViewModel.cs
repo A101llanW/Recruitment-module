@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using HR.Web.Helpers;
 
 namespace HR.Web.ViewModels
 {
@@ -23,6 +24,14 @@ namespace HR.Web.ViewModels
         public DateTime AttemptTime { get; set; }
         public bool WasSuccessful { get; set; }
         public string FailureReason { get; set; }
+        public string FriendlySummary { get; set; }
+        public bool IsAnonymousPortalVisit
+        {
+            get
+            {
+                return SecurityLogTranslator.IsVisitorActivity(Username) && WasSuccessful;
+            }
+        }
         public string StatusClass
         {
             get
@@ -51,6 +60,7 @@ namespace HR.Web.ViewModels
         public string UserAgent { get; set; }
         public bool WasSuccessful { get; set; }
         public string ErrorMessage { get; set; }
+        public string FriendlySummary { get; set; }
         public string StatusClass
         {
             get

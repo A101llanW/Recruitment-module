@@ -24,7 +24,7 @@ namespace HR.Web.Controllers
     private readonly ScoringService _scoringService = new ScoringService();
     private readonly TenantService _tenantService = new TenantService();
 
-    [TenantAuthorize]
+    [Authorize]
     public ActionResult TestQuestionnaire()
     {
         var positionId = 4; // Software Developer
@@ -50,7 +50,7 @@ namespace HR.Web.Controllers
     }
     
     [HttpPost]
-    [TenantAuthorize]
+    [Authorize]
     [ValidateAntiForgeryToken]
     public ActionResult TestQuestionnaire(int positionId, FormCollection form)
     {
@@ -95,33 +95,26 @@ namespace HR.Web.Controllers
     }
 
     // Questionnaire for position application
-    [TenantAuthorize]
     public ActionResult Questionnaire(int positionId)
     {
-        if (positionId <= 0)
-        {
-            TempData["ErrorMessage"] = "Please select a valid position.";
-            return RedirectToAction("Index", "Positions");
-        }
-
         if (!IsCurrentUserAuthenticated())
         {
             return RedirectToApplicationRegistration();
         }
 
-        var position = _uow.Positions.Get(positionId);
-        if (position == null)
+        var positionForCompany = _uow.Positions.Get(positionId);
+        if (positionForCompany == null)
         {
             return HttpNotFound();
         }
 
-        var applicantResult = RequireApplicantForPosition(position.CompanyId, out var applicant);
+        var applicantResult = RequireApplicantForPosition(positionForCompany.CompanyId, out var applicant);
         if (applicantResult != null)
         {
             return applicantResult;
         }
 
-        var workflowResult = TryValidateQuestionnaireWorkflow(positionId, applicant, out position, out var activeQuestionnaireStage, out var existingApplication);
+        var workflowResult = TryValidateQuestionnaireWorkflow(positionId, applicant, out var position, out var activeQuestionnaireStage, out var existingApplication);
         if (workflowResult != null)
         {
             return workflowResult;
@@ -144,13 +137,13 @@ namespace HR.Web.Controllers
 
         ViewBag.Position = position;
         PopulateApplicantViewBag(position.CompanyId);
-        ViewBag.PositionQuestions = GetPositionQuestions(positionId, includeOptions: true, activeQuestionnaireStage);
+        ViewBag.PositionQuestions = GetPositionQuestions(positionId, true, activeQuestionnaireStage);
 
         return View();
     }
 
     [HttpPost]
-    [TenantAuthorize]
+    [Authorize]
     [ValidateAntiForgeryToken]
     public ActionResult Questionnaire(int positionId, FormCollection form)
     {
@@ -194,7 +187,7 @@ namespace HR.Web.Controllers
     }
 
     [HttpPost]
-    [TenantAuthorize]
+    [Authorize]
     [ValidateAntiForgeryToken]
     public ActionResult FinishQuestionnaire(ApplicationReviewViewModel model, FormCollection form)
     {
@@ -263,7 +256,7 @@ namespace HR.Web.Controllers
         return RedirectToAction("Index", "Positions");
     }
 
-    [TenantAuthorize]
+    [Authorize]
     public ActionResult ProfileDetails(int positionId)
     {
         if (!IsCurrentUserAuthenticated())
@@ -303,7 +296,7 @@ namespace HR.Web.Controllers
     }
 
     [HttpPost]
-    [TenantAuthorize]
+    [Authorize]
     [ValidateAntiForgeryToken]
     public ActionResult ProfileDetails(ApplicantProfileViewModel model)
     {
@@ -399,7 +392,7 @@ namespace HR.Web.Controllers
             return View(GetApplicantApplications(user));
         }
 
-        [TenantAuthorize]
+        [Authorize]
         public ActionResult Details(int id)
         {
             var app = _uow.Applications.GetAll(a => a.Applicant, a => a.Position)
@@ -431,12 +424,6 @@ namespace HR.Web.Controllers
             if (!IsCurrentUserAuthenticated())
             {
                 return RedirectToApplicationRegistration();
-            }
-
-            var clientApplyRedirect = RedirectClientToApplyFlow(positionId);
-            if (clientApplyRedirect != null)
-            {
-                return clientApplyRedirect;
             }
 
             // If the user is authenticated and not Admin/HR, attempt to preselect their Applicant record
@@ -481,12 +468,6 @@ namespace HR.Web.Controllers
                 return View(new Application { Status = "Interviewing", AppliedOn = DateTime.UtcNow });
             }
 
-            var clientApplyRedirect = RedirectClientToApplyFlow(model.PositionId > 0 ? (int?)model.PositionId : null);
-            if (clientApplyRedirect != null)
-            {
-                return clientApplyRedirect;
-            }
-
             var applicationModel = model;
 
             var ownershipError = ValidateApplicationOwnership(applicationModel);
@@ -513,11 +494,12 @@ namespace HR.Web.Controllers
             _uow.Applications.Add(applicationModel);
             _uow.Complete();
             var applicantEmail = applicationModel.Applicant != null ? applicationModel.Applicant.Email : null;
-            _email.SendAsync(applicantEmail, "Application received", "We received your application.");
+            _email.SendAsync(applicantEmail, "Application received", "We received your application.", applicationModel.CompanyId);
+            NotifyCompanyOfNewApplication(applicationModel.Id);
             return RedirectToAction("Index");
         }
 
-        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
+        [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(int id)
         {
@@ -533,7 +515,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
+        [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(Application model)
         {
@@ -565,7 +547,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
+        [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult UpdatePositionPassMark(int positionId, decimal passMark)
         {
@@ -600,7 +582,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
+        [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult UpdateStatus(int id, string status)
         {
@@ -616,7 +598,7 @@ namespace HR.Web.Controllers
             return RedirectToAction("Details", new { id });
         }
 
-        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
+        [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Delete(int id)
         {
@@ -631,7 +613,7 @@ namespace HR.Web.Controllers
 
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
+        [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult DeleteConfirmed(int id)
         {

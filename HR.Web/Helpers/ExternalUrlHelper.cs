@@ -55,6 +55,67 @@ namespace HR.Web.Helpers
             return baseUrl + "/" + tenantSlug.Trim().TrimStart('/');
         }
 
+        /// <summary>
+        /// Builds an absolute URL from <see cref="GetBaseUri"/> plus an app-relative path (e.g. from Url.Action).
+        /// When both the configured base and the relative path include the IIS virtual directory, the duplicate segment is removed.
+        /// </summary>
+        public static string ToAbsoluteUrl(HttpRequestBase request, string relativeUrl)
+        {
+            if (string.IsNullOrWhiteSpace(relativeUrl))
+            {
+                return GetBaseUri(request).ToString();
+            }
+
+            Uri absoluteUri;
+            if (Uri.TryCreate(relativeUrl, UriKind.Absolute, out absoluteUri))
+            {
+                return absoluteUri.ToString();
+            }
+
+            var baseString = GetBaseUri(request).ToString().TrimEnd('/');
+            var path = relativeUrl.StartsWith("/", StringComparison.Ordinal)
+                ? relativeUrl
+                : "/" + relativeUrl;
+
+            var appPath = request != null ? request.ApplicationPath : null;
+            path = StripApplicationPathPrefix(path, appPath);
+
+            return path.StartsWith("/", StringComparison.Ordinal)
+                ? baseString + path
+                : baseString + "/" + path;
+        }
+
+        public static string ToAbsoluteUrl(HttpRequest request, string relativeUrl)
+        {
+            if (request == null)
+            {
+                return ToAbsoluteUrl((HttpRequestBase)null, relativeUrl);
+            }
+
+            return ToAbsoluteUrl(new HttpRequestWrapper(request), relativeUrl);
+        }
+
+        private static string StripApplicationPathPrefix(string path, string applicationPath)
+        {
+            if (string.IsNullOrEmpty(path) || string.IsNullOrWhiteSpace(applicationPath) || applicationPath == "/")
+            {
+                return path ?? string.Empty;
+            }
+
+            var normalizedAppPath = applicationPath.TrimEnd('/');
+            if (path.StartsWith(normalizedAppPath + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.Substring(normalizedAppPath.Length);
+            }
+
+            if (string.Equals(path, normalizedAppPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return "/";
+            }
+
+            return path;
+        }
+
         private static Uri ResolveBaseUri(Uri requestUrl, string applicationPath)
         {
             var configuredBaseUri = GetConfiguredBaseUri();

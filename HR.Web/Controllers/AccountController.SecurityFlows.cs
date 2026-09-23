@@ -615,6 +615,7 @@ namespace HR.Web.Controllers
             if (isSuperAdmin || string.Equals(userRole, "Admin", StringComparison.OrdinalIgnoreCase))
             {
                 Session.Remove("PendingMfaUsername");
+                Session.Remove("PendingMfaUserId");
                 Session.Remove("ForcedMfaSetup");
                 Session["MfaVerified"] = true;
 
@@ -647,26 +648,28 @@ namespace HR.Web.Controllers
         private ActionResult HandleVerifyMfaSubmission(string code)
         {
             var username = Session["PendingMfaUsername"] as string ?? (User.Identity.IsAuthenticated ? User.Identity.Name : null);
-            if (string.IsNullOrEmpty(username))
+            var pendingUserId = ReadPendingMfaUserId();
+            if (string.IsNullOrEmpty(username) && !pendingUserId.HasValue)
             {
                 AuditSvc.LogAction("ANONYMOUS", "MFA_VERIFY_KICKBACK", "Account", "", "Session lost or identity missing during MFA POST");
                 return RedirectToAction("Login");
             }
 
-            var user = FindUserByUsername(username);
+            var user = ResolvePendingMfaUser(username, pendingUserId);
             if (user == null)
             {
-                AuditSvc.LogAction(username, "MFA_VERIFY_KICKBACK", "Account", "", "User not found during MFA POST");
+                AuditSvc.LogAction(username ?? "ANONYMOUS", "MFA_VERIFY_KICKBACK", "Account", "", "User not found during MFA POST");
                 return RedirectToAction("Login");
             }
 
             if (!user.IsTwoFactorEnabled)
             {
-                AuditSvc.LogAction(username, "MFA_VERIFY_KICKBACK", "Account", user.Id.ToString(), "MFA was unexpectedly disabled during verification");
+                AuditSvc.LogAction(user.UserName, "MFA_VERIFY_KICKBACK", "Account", user.Id.ToString(), "MFA was unexpectedly disabled during verification");
                 return RedirectToAction("Login");
             }
 
-            var isValid = ValidateMfaCode(username, user, code);
+            var submittedCode = ResolveSubmittedMfaCode(code);
+            var isValid = ValidateMfaCode(user.UserName, user.Id, submittedCode);
             if (isValid)
             {
                 user.TwoFactorCode = null;
@@ -674,26 +677,117 @@ namespace HR.Web.Controllers
                 _uow.Complete();
 
                 Session.Remove("PendingMfaUsername");
+                Session.Remove("PendingMfaUserId");
                 LegalConsentSession.Clear(Session);
                 return CompleteLogin(user);
             }
 
-            AuditSvc.LogAction(username, "MFA_VERIFY_FAILED", "Account", user.Id.ToString(), "Invalid or expired MFA code entered");
+            AuditSvc.LogAction(user.UserName, "MFA_VERIFY_FAILED", "Account", user.Id.ToString(), "Invalid or expired MFA code entered");
             ModelState.AddModelError("", "Invalid or expired verification code.");
             ViewBag.MfaMethod = user.MfaMethod ?? "Email";
             ViewBag.EmailHint = MaskContactInfo(user.Email);
             return View("VerifyMFA");
         }
 
-        private bool ValidateMfaCode(string username, User user, string code)
+        private static int? ReadPendingMfaUserId(HttpSessionStateBase session)
+        {
+            if (session == null)
+            {
+                return null;
+            }
+
+            var raw = session["PendingMfaUserId"];
+            if (raw is int userId)
+            {
+                return userId;
+            }
+
+            if (raw != null && int.TryParse(Convert.ToString(raw, System.Globalization.CultureInfo.InvariantCulture), out userId) && userId > 0)
+            {
+                return userId;
+            }
+
+            return null;
+        }
+
+        private int? ReadPendingMfaUserId()
+        {
+            return ReadPendingMfaUserId(Session);
+        }
+
+        private User ResolvePendingMfaUser(string username, int? pendingUserId)
+        {
+            if (pendingUserId.HasValue)
+            {
+                var userById = _uow.Users.Get(pendingUserId.Value);
+                if (userById != null)
+                {
+                    return userById;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(username))
+            {
+                var userByUsername = FindUserByUsername(username);
+                if (userByUsername != null)
+                {
+                    return userByUsername;
+                }
+
+                if (username.Contains("@"))
+                {
+                    return FindUserByEmail(username);
+                }
+            }
+
+            return null;
+        }
+
+        private User FindUserByEmail(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return null;
+            }
+
+            var lowerEmail = email.Trim().ToLower();
+            var matches = _uow.Context.Users
+                .Where(u => u.Email != null && u.Email.ToLower() == lowerEmail)
+                .ToList();
+
+            var companyId = LegalConsentSession.TryReadCompanyId(Session);
+            if (companyId.HasValue)
+            {
+                var tenantUser = matches.FirstOrDefault(u => u.CompanyId == companyId.Value);
+                if (tenantUser != null)
+                {
+                    return tenantUser;
+                }
+            }
+
+            return matches.FirstOrDefault();
+        }
+
+        private string ResolveSubmittedMfaCode(string code)
+        {
+            if (!string.IsNullOrWhiteSpace(code))
+            {
+                return code.Trim();
+            }
+
+            var formCode = Request != null ? Request.Form["code"] : null;
+            return string.IsNullOrWhiteSpace(formCode) ? string.Empty : formCode.Trim();
+        }
+
+        private bool ValidateMfaCode(string username, int userId, string code)
         {
             try
             {
-                return SecuritySvc.ValidateTemporaryCode(user, code);
+                return SecuritySvc.ValidateTemporaryCodeForUserId(userId, code);
             }
             catch (Exception ex)
             {
-                AuditSvc.LogAction(username, "MFA_VERIFY_ERROR", "Account", user.Id.ToString(), ex.Message);
+                AuditSvc.LogAction(username, "MFA_VERIFY_ERROR", "Account", userId.ToString(), ex.Message);
                 return false;
             }
         }

@@ -187,31 +187,6 @@
         color: var(--app-ink);
     }
 
-    .passmark-control {
-        max-width: 520px;
-        margin-top: 1rem;
-        padding: 1rem 1.1rem;
-        background: var(--app-surface);
-        border-radius: var(--app-radius);
-        border: 1px solid var(--app-border);
-    }
-
-    .passmark-control label {
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--app-muted);
-    }
-
-    .passmark-control .custom-range::-webkit-slider-thumb {
-        background: var(--app-accent-deep);
-    }
-
-    .passmark-control .position-passmark-label {
-        font-variant-numeric: tabular-nums;
-    }
-
     .needs-review-toggle {
         border-radius: 999px;
         font-weight: 600;
@@ -465,7 +440,7 @@
         <p class="app-page-hero__lead applications-hero__lead">
             @if (canManageApplications)
             {
-                @:Review scored candidates by role, adjust passmarks, and move top talent toward interviews.
+                @:Review scored candidates by role and move top talent toward interviews.
             }
             else if (isManagementApplicationsView)
             {
@@ -496,7 +471,7 @@
 
 @if (canManageApplications)
 {
-    <div class="applications-toolbar">
+    <div class="applications-toolbar d-flex flex-wrap align-items-end justify-content-between">
         <div>
             <label for="sortBy">Sort candidates</label>
             <select id="sortBy" class="form-control">
@@ -505,14 +480,19 @@
                 <option value="name">Name (A-Z)</option>
             </select>
         </div>
+        <div class="mt-2 mt-md-0">
+            @using (Html.BeginForm("RepairApplicationScores", "Applications", FormMethod.Post, new { @class = "d-inline" }))
+            {
+                @Html.AntiForgeryToken()
+                <button type="submit"
+                        class="btn btn-outline-warning"
+                        onclick="return confirm('Recalculate scores for applications showing scoring errors or missing scores?');">
+                    <i class="fas fa-sync-alt"></i> Repair Scoring Errors
+                </button>
+            }
+        </div>
     </div>
 
-    using (Html.BeginForm("UpdatePositionPassMark", "Applications", FormMethod.Post, new { id = "positionPassMarkTokenForm", @class = "d-none" }))
-    {
-        @Html.AntiForgeryToken()
-    }
-
-    <div id="passmarkUpdateError" class="alert applications-flash applications-flash--error d-none" role="alert"></div>
 }
 
 @if (TempData["ApplicationEmailSuccess"] != null)
@@ -547,8 +527,6 @@ else
         var position = positionGroup.Key;
         panelIndex++;
         var passMark = position.PassMark;
-        var passMarkRounded = (int)Math.Round(passMark, MidpointRounding.AwayFromZero);
-        passMarkRounded = Math.Max(0, Math.Min(100, passMarkRounded));
         const int compactRecordLimit = 5;
 
         var positionApplications = canViewApplicationScores
@@ -591,37 +569,6 @@ else
                     }
                 </div>
 
-                @if (canManageApplications)
-                {
-                    <div class="passmark-control mt-3"
-                         data-position-id="@position.Id">
-                        <label class="font-weight-bold mb-1 d-block">
-                            <i class="fas fa-sliders-h"></i> Passmark Midpoint
-                        </label>
-                        <div class="d-flex align-items-center flex-wrap">
-                            <input type="range"
-                                   class="custom-range mr-3 position-passmark-slider"
-                                   min="0"
-                                   max="100"
-                                   step="1"
-                                   value="@passMarkRounded"
-                                   style="max-width: 240px;" />
-                            <input type="number"
-                                   class="form-control form-control-sm position-passmark-number"
-                                   min="0"
-                                   max="100"
-                                   step="1"
-                                   value="@passMarkRounded"
-                                   style="width: 90px;" />
-                            <span class="badge badge-dark ml-2">
-                                <span class="position-passmark-label">@passMarkRounded</span>%
-                            </span>
-                        </div>
-                        <small class="text-muted">
-                            Top candidates at or above the passmark are shown first. Use &quot;Show Needs Review&quot; to view applicants below the passmark.
-                        </small>
-                    </div>
-                }
             </div>
 
             @if (canManageApplications)
@@ -726,6 +673,7 @@ else
                                                                 </div>
                                                             }
                                                             else if (canViewApplicationScores
+                                                                     && !item.Score.HasValue
                                                                      && !string.IsNullOrEmpty(item.ScoreReason)
                                                                      && item.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase))
                                                             {
@@ -889,7 +837,6 @@ else
                                 }
                                 else
                                 {
-                                    var rank = 1;
                                     var failedCardIndex = 0;
                                     foreach (var item in failedApplications)
                                     {
@@ -910,10 +857,6 @@ else
                                                     <div class="d-flex justify-content-between mb-2">
                                                         <div>
                                                             <div class="d-flex align-items-center">
-                                                                @if (canViewApplicationScores && item.Score.HasValue)
-                                                                {
-                                                                    <span class="rank-pill mr-2" style="background:#5a6b7d;">#@rank</span>
-                                                                }
                                                                 <h5 class="mb-0 force-capitalize">
                                                                     @applicantName
                                                                 </h5>
@@ -936,12 +879,21 @@ else
                                                                 </div>
                                                             }
                                                             else if (canViewApplicationScores
+                                                                     && !item.Score.HasValue
                                                                      && !string.IsNullOrEmpty(item.ScoreReason)
                                                                      && item.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase))
                                                             {
                                                                 <div class="mt-1">
                                                                     <span class="badge badge-danger" title="@item.ScoreReason">
                                                                         Scoring error
+                                                                    </span>
+                                                                </div>
+                                                            }
+                                                            else if (canViewApplicationScores)
+                                                            {
+                                                                <div class="mt-1">
+                                                                    <span class="score-pill">
+                                                                        Score @score.ToString("F1")
                                                                     </span>
                                                                 </div>
                                                             }
@@ -1055,7 +1007,6 @@ else
                                             </div>
                                         </div>
                                         failedCardIndex++;
-                                        rank++;
                                     }
                                 }
                             </div>
@@ -1116,20 +1067,13 @@ else
                                             <span class="position-chip">@item.Status</span>
                                         }
                                     </div>
-                                    @if (canViewApplicationScores && item.Score.HasValue)
+                                    @if (item.PendingQuestionnaireStage.HasValue)
                                     {
-                                        <div class="mt-auto">
-                                            <span class="score-pill">Score @item.Score.Value.ToString("F1")</span>
-                                        </div>
-                                    }
-                                    else if (canViewApplicationScores
-                                             && !string.IsNullOrEmpty(item.ScoreReason)
-                                             && item.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        <div class="mt-auto">
-                                            <span class="badge badge-danger" title="@item.ScoreReason">
-                                                Scoring error
-                                            </span>
+                                        <div class="mt-auto pt-2">
+                                            <a href="@Url.Action("Questionnaire", "Applications", new { positionId = item.PositionId, tenant = tenantToken })"
+                                               class="btn btn-sm btn-primary mb-1">
+                                                <i class="fas fa-clipboard-list"></i> Continue to next stage
+                                            </a>
                                         </div>
                                     }
                                 </div>
@@ -1166,7 +1110,7 @@ else
                     <div class="d-flex flex-column flex-md-row justify-content-center align-items-stretch mx-auto" style="gap: 1rem; max-width: 820px;">
                         <div class="email-choice-card flex-fill" style="max-width: 400px; margin-left: auto; margin-right: auto;">
                             <h6 class="font-weight-bold mb-2 text-center">Use Template</h6>
-                            <p class="text-muted small mb-3 text-center">Load the wording from <strong>Admin &rarr; Email wording</strong> (already filled in for this candidate), edit in the same style as there, then send.</p>
+                            <p class="text-muted small mb-3 text-center">Load your company's saved email template (already filled in for this candidate), edit it, then send.</p>
                             <div class="text-center">
                                 <button type="button" class="btn btn-outline-primary px-4" data-failed-email-action="template">
                                     <i class="fas fa-file-alt mr-2"></i>Use Template
@@ -1211,12 +1155,12 @@ else
 
                         <div class="mb-3 d-none" id="failedEmailTemplateSelectorSection">
                             <label class="font-weight-bold mb-1">Template</label>
-                            <div class="form-control bg-light">Failed candidate - standard (from Email wording)</div>
+                            <div class="form-control bg-light">Failed candidate - standard (saved template)</div>
                         </div>
 
                         <div class="mb-3 failed-email-template-compose p-3">
                             <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Compose this email</h6>
-                            <p class="small text-muted mb-3">Editor matches <strong>Admin &rarr; Email wording</strong> (toolbar and formatting). Scroll this window to reach CC options and <strong>Send</strong>.</p>
+                            <p class="small text-muted mb-3">Use the toolbar for formatting. Scroll this window to reach CC options and <strong>Send</strong>.</p>
                             <label class="font-weight-bold mb-1" for="failedEmailEditorSubject">Subject line</label>
                             <input type="text" id="failedEmailEditorSubject" name="subject" class="form-control mb-3" maxlength="255" />
                             <label class="font-weight-bold mb-1" for="failedEmailEditorBody">Message</label>
@@ -1277,7 +1221,7 @@ else
                     <div class="d-flex flex-column flex-md-row justify-content-center align-items-stretch mx-auto" style="gap: 1rem; max-width: 820px;">
                         <div class="email-choice-card flex-fill" style="max-width: 400px; margin-left: auto; margin-right: auto;">
                             <h6 class="font-weight-bold mb-2 text-center">Use Template</h6>
-                            <p class="text-muted small mb-3 text-center">Load the wording from <strong>Admin &rarr; Email wording</strong>, edit like there, then send to every failed candidate for this position.</p>
+                            <p class="text-muted small mb-3 text-center">Load your company's saved email template, edit it, then send to every failed candidate for this position.</p>
                             <div class="text-center">
                                 <button type="button" class="btn btn-outline-primary px-4" data-failed-bulk-email-action="template">
                                     <i class="fas fa-file-alt mr-2"></i>Use Template
@@ -1322,12 +1266,12 @@ else
 
                         <div class="mb-3 d-none" id="failedBulkTemplateSelectorSection">
                             <label class="font-weight-bold mb-1">Template</label>
-                            <div class="form-control bg-light">Failed candidate - standard (from Email wording)</div>
+                            <div class="form-control bg-light">Failed candidate - standard (saved template)</div>
                         </div>
 
                         <div class="mb-3 failed-email-template-compose p-3">
                             <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Compose this email</h6>
-                            <p class="small text-muted mb-3">Editor matches <strong>Admin &rarr; Email wording</strong>. For bulk sends, each candidate's name is merged when the message is sent. Scroll to CC and <strong>Send to All Failed</strong>.</p>
+                            <p class="small text-muted mb-3">For bulk sends, each candidate's name is merged when the message is sent. Scroll to CC and <strong>Send to All Failed</strong>.</p>
                             <label class="font-weight-bold mb-1" for="failedBulkEmailEditorSubject">Subject line</label>
                             <input type="text" id="failedBulkEmailEditorSubject" name="subject" class="form-control mb-3" maxlength="255" />
                             <label class="font-weight-bold mb-1" for="failedBulkEmailEditorBody">Message</label>
@@ -1378,7 +1322,7 @@ else
     @if (canManageApplications)
     {
         <script src="@Url.Content("~/Scripts/email-workflow-modals.js")"></script>
-        <script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.4/tinymce.min.js" referrerpolicy="origin"></script>
+        <script src="@Url.Content("~/Scripts/tinymce-loader.js")"></script>
         <script>
             function fetchJsonWithTimeout(url, timeoutMs) {
                 var timeout = timeoutMs || 15000;
@@ -1455,72 +1399,83 @@ else
             }
 
             function ensureFailedSingleTinyMce(done) {
-                if (typeof tinymce === 'undefined') {
+                var loader = window.HrTinyMceLoader;
+                if (!loader) {
                     if (done) done();
                     return;
                 }
-                if (tinymce.get('failedBulkEmailEditorBody')) {
-                    tinymce.remove(tinymce.get('failedBulkEmailEditorBody'));
-                }
-                if (tinymce.get('failedEmailEditorBody')) {
+                loader.removeExcept('failedEmailEditorBody');
+                if (loader.get('failedEmailEditorBody')) {
                     if (done) done();
                     return;
                 }
                 var finish = window.HrEmailWorkflow && window.HrEmailWorkflow.withCallbackTimeout
                     ? window.HrEmailWorkflow.withCallbackTimeout(done, 10000)
                     : done;
-                tinymce.init({
-                    selector: '#failedEmailEditorBody',
-                    height: 320,
-                    menubar: false,
-                    plugins: 'link lists autoresize',
-                    toolbar: 'undo redo | styles | bold italic underline | bullist numlist | link removeformat',
-                    branding: false,
-                    license_key: 'gpl',
-                    setup: function (editor) {
-                        editor.on('init', function () {
-                            if (finish) finish();
-                        });
+                loader.whenReady(function (tinymce, error) {
+                    if (!tinymce || error) {
+                        if (finish) finish();
+                        return;
                     }
+                    loader.init({
+                        selector: '#failedEmailEditorBody',
+                        height: 320,
+                        plugins: 'link lists autoresize',
+                        toolbar: 'undo redo | styles | bold italic underline | bullist numlist | link removeformat',
+                        setup: function (editor) {
+                            editor.on('init', function () {
+                                if (finish) finish();
+                            });
+                        }
+                    }).catch(function () {
+                        if (finish) finish();
+                    });
                 });
             }
 
             function ensureFailedBulkTinyMce(done) {
-                if (typeof tinymce === 'undefined') {
+                var loader = window.HrTinyMceLoader;
+                if (!loader) {
                     if (done) done();
                     return;
                 }
-                if (tinymce.get('failedEmailEditorBody')) {
-                    tinymce.remove(tinymce.get('failedEmailEditorBody'));
-                }
-                if (tinymce.get('failedBulkEmailEditorBody')) {
+                loader.removeExcept('failedBulkEmailEditorBody');
+                if (loader.get('failedBulkEmailEditorBody')) {
                     if (done) done();
                     return;
                 }
                 var finish = window.HrEmailWorkflow && window.HrEmailWorkflow.withCallbackTimeout
                     ? window.HrEmailWorkflow.withCallbackTimeout(done, 10000)
                     : done;
-                tinymce.init({
-                    selector: '#failedBulkEmailEditorBody',
-                    height: 320,
-                    menubar: false,
-                    plugins: 'link lists autoresize',
-                    toolbar: 'undo redo | styles | bold italic underline | bullist numlist | link removeformat',
-                    branding: false,
-                    license_key: 'gpl',
-                    setup: function (editor) {
-                        editor.on('init', function () {
-                            if (finish) finish();
-                        });
+                loader.whenReady(function (tinymce, error) {
+                    if (!tinymce || error) {
+                        if (finish) finish();
+                        return;
                     }
+                    loader.init({
+                        selector: '#failedBulkEmailEditorBody',
+                        height: 320,
+                        plugins: 'link lists autoresize',
+                        toolbar: 'undo redo | styles | bold italic underline | bullist numlist | link removeformat',
+                        setup: function (editor) {
+                            editor.on('init', function () {
+                                if (finish) finish();
+                            });
+                        }
+                    }).catch(function () {
+                        if (finish) finish();
+                    });
                 });
             }
 
-            function syncFailedSingleDraftToForm(showAck) {
-                var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedEmailEditorBody') : null;
-                if (ed) {
-                    ed.save();
+            function syncFailedEmailEditorsToForm() {
+                if (typeof tinymce !== 'undefined') {
+                    tinymce.triggerSave();
                 }
+            }
+
+            function syncFailedSingleDraftToForm(showAck) {
+                syncFailedEmailEditorsToForm();
                 var ack = document.getElementById('failedSingleTemplateSaveAck');
                 if (showAck && ack) {
                     ack.classList.remove('d-none');
@@ -1528,10 +1483,7 @@ else
             }
 
             function syncFailedBulkDraftToForm(showAck) {
-                var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedBulkEmailEditorBody') : null;
-                if (ed) {
-                    ed.save();
-                }
+                syncFailedEmailEditorsToForm();
                 var ack = document.getElementById('failedBulkTemplateSaveAck');
                 if (showAck && ack) {
                     ack.classList.remove('d-none');
@@ -1714,10 +1666,7 @@ else
                     });
                 }
                 $('#failedEmailEditorForm').on('submit', function () {
-                    var ed = typeof tinymce !== 'undefined' ? tinymce.get('failedEmailEditorBody') : null;
-                    if (ed) {
-                        ed.save();
-                    }
+                    syncFailedEmailEditorsToForm();
                     var ta = document.getElementById('failedEmailEditorBody');
                     if (ta && ta.value && ta.value.length > 20000) {
                         alert('Email body is too long (maximum 20000 characters).');
@@ -1778,10 +1727,7 @@ else
                     });
                 }
                 $('#failedBulkEmailEditorForm').on('submit', function () {
-                    var bulkEdSubmit = typeof tinymce !== 'undefined' ? tinymce.get('failedBulkEmailEditorBody') : null;
-                    if (bulkEdSubmit) {
-                        bulkEdSubmit.save();
-                    }
+                    syncFailedEmailEditorsToForm();
                     var bulkTaSubmit = document.getElementById('failedBulkEmailEditorBody');
                     if (bulkTaSubmit && bulkTaSubmit.value && bulkTaSubmit.value.length > 20000) {
                         alert('Email body is too long (maximum 20000 characters).');
@@ -2245,158 +2191,5 @@ else
 
         initializeCompactContainers(document);
         initializeNeedsReviewColumns(document);
-
-        (function () {
-            var tokenInput = document.querySelector('#positionPassMarkTokenForm input[name="__RequestVerificationToken"]');
-            var antiForgeryToken = tokenInput ? tokenInput.value : '';
-            var errorBanner = document.getElementById('passmarkUpdateError');
-            var updateUrl = '@Url.Action("UpdatePositionPassMark", "Applications")';
-            var savingByPosition = {};
-
-            function clamp(rawValue) {
-                var parsed = parseInt(rawValue, 10);
-                if (isNaN(parsed)) return 0;
-                return Math.max(0, Math.min(100, parsed));
-            }
-
-            function setError(message) {
-                if (!errorBanner) return;
-                if (!message) {
-                    errorBanner.classList.add('d-none');
-                    errorBanner.textContent = '';
-                    return;
-                }
-
-                errorBanner.textContent = message;
-                errorBanner.classList.remove('d-none');
-            }
-
-            function postPassmark(positionId, passMark) {
-                var payload = '__RequestVerificationToken=' + encodeURIComponent(antiForgeryToken)
-                    + '&positionId=' + encodeURIComponent(positionId)
-                    + '&passMark=' + encodeURIComponent(passMark);
-
-                return fetch(updateUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: payload,
-                    credentials: 'same-origin'
-                }).then(function (response) {
-                    if (!response.ok) {
-                        throw new Error('Unable to update passmark.');
-                    }
-                    return response.json();
-                });
-            }
-
-            function refreshPositionContainer(positionId) {
-                var currentContainer = document.querySelector('[data-position-container-id="' + positionId + '"]');
-                if (!currentContainer) {
-                    return Promise.resolve();
-                }
-
-                var refreshUrl = window.location.pathname + window.location.search;
-                return fetch(refreshUrl, {
-                    method: 'GET',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                    credentials: 'same-origin'
-                })
-                    .then(function (response) {
-                        if (!response.ok) {
-                            throw new Error('Unable to refresh applicant columns.');
-                        }
-                        return response.text();
-                    })
-                    .then(function (html) {
-                        var parser = new DOMParser();
-                        var doc = parser.parseFromString(html, 'text/html');
-                        var replacement = doc.querySelector('[data-position-container-id="' + positionId + '"]');
-                        if (!replacement) {
-                            throw new Error('Unable to refresh applicant columns.');
-                        }
-
-                        currentContainer.replaceWith(replacement);
-                        bindPassmarkControl(replacement.querySelector('.passmark-control'));
-                        initializeCompactContainers(replacement);
-                        initializeNeedsReviewColumns(replacement);
-                        applyApplicationsSort();
-                    });
-            }
-
-            function bindPassmarkControl(control) {
-                if (!control || control.dataset.passmarkBound === '1') {
-                    return;
-                }
-
-                var positionId = control.getAttribute('data-position-id');
-                var slider = control.querySelector('.position-passmark-slider');
-                var number = control.querySelector('.position-passmark-number');
-                var label = control.querySelector('.position-passmark-label');
-
-                if (!positionId || !slider || !number || !label) {
-                    return;
-                }
-
-                control.dataset.passmarkBound = '1';
-
-                function sync(rawValue) {
-                    var value = clamp(rawValue);
-                    slider.value = value;
-                    number.value = value;
-                    label.textContent = value;
-                    return value;
-                }
-
-                function setSaving(isSaving) {
-                    slider.disabled = isSaving;
-                    number.disabled = isSaving;
-                }
-
-                function persist() {
-                    var value = sync(slider.value);
-                    if (savingByPosition[positionId] === true) return;
-
-                    savingByPosition[positionId] = true;
-                    setSaving(true);
-                    setError(null);
-
-                    postPassmark(positionId, value)
-                        .then(function (result) {
-                            if (!result || result.success !== true) {
-                                throw new Error(result && result.message ? result.message : 'Unable to update passmark.');
-                            }
-
-                            return refreshPositionContainer(positionId);
-                        })
-                        .catch(function (error) {
-                            setError(error && error.message ? error.message : 'Unable to update passmark.');
-                        })
-                        .then(function () {
-                            savingByPosition[positionId] = false;
-                            setSaving(false);
-                        });
-                }
-
-                slider.addEventListener('input', function () {
-                    sync(slider.value);
-                });
-
-                slider.addEventListener('change', persist);
-
-                number.addEventListener('input', function () {
-                    sync(number.value);
-                });
-
-                number.addEventListener('change', function () {
-                    sync(number.value);
-                    persist();
-                });
-            }
-
-            document.querySelectorAll('.passmark-control').forEach(bindPassmarkControl);
-        })();
     </script>
 }

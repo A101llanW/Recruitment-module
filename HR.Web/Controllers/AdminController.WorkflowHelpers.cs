@@ -6,6 +6,7 @@ using System.Web.Mvc;
 using HR.Web.Helpers;
 using HR.Web.Data;
 using HR.Web.Models;
+using HR.Web.Services;
 using HR.Web.ViewModels;
 using Newtonsoft.Json;
 
@@ -121,12 +122,22 @@ namespace HR.Web.Controllers
                 return RedirectToAction("Questions");
             }
 
+            var isUpdate = model.Id.HasValue;
+            if (!_rolePermissionService.CanCurrentUserEditQuestions())
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            if (!isUpdate && !_rolePermissionService.CanCurrentUserManageQuestionBank())
+            {
+                return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
             if (!ModelState.IsValid)
             {
                 return View(model);
             }
 
-            var isUpdate = model.Id.HasValue;
             try
             {
                 Question question;

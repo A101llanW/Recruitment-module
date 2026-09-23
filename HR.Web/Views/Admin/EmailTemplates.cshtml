@@ -1,24 +1,42 @@
 @model HR.Web.ViewModels.EmailTemplateManagementViewModel
 @using System
-@using System.Web
-@using Newtonsoft.Json
+@using System.Collections.Generic
+@using HR.Web.Helpers
+@using HR.Web.Services
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Email Templates";
     ViewBag.SuppressPageHero = true;
+    var templates = Model != null && Model.Templates != null
+        ? Model.Templates
+        : new List<HR.Web.ViewModels.EmailTemplateEditorItemViewModel>();
 }
 <style>
-    /* Keep footer above editor chrome on this full-page editor screen. */
-    .tox-tinymce { z-index: 10 !important; }
-    .tox-silver-sink, .tox-tinymce-aux { z-index: 950 !important; }
-    .tox .tox-dialog-wrap {
-        inset: 0 0 88px 0 !important;
+    .email-template-storage {
+        position: absolute;
+        left: -9999px;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        overflow: hidden;
     }
-    .tox .tox-dialog {
-        max-height: calc(100vh - 120px) !important;
+    .email-subject-compose,
+    .email-body-compose {
+        cursor: text;
+        background: #fff;
     }
-    .email-subject-compose { cursor: text; -webkit-user-modify: read-write; }
-
+    .email-subject-compose {
+        min-height: 3.25rem;
+        white-space: pre-wrap;
+    }
+    .email-body-compose {
+        min-height: 280px;
+        overflow-y: auto;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-size: 15px;
+        line-height: 1.6;
+    }
+    .email-body-compose p { margin: 0 0 0.75rem; }
     .email-template-compose {
         transition: box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
     }
@@ -34,116 +52,26 @@
     .email-template-compose.email-template-editing .email-template-editing-banner {
         display: block;
     }
+    .email-template-format-toolbar .btn {
+        min-width: 2.1rem;
+    }
+    .hr-email-token {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        vertical-align: middle;
+        margin: 0 2px;
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: #e8f0fe;
+        border: 1px solid #c6dafc;
+        font-size: 13px;
+        color: #1a3a5c;
+        white-space: nowrap;
+    }
 </style>
 
-@functions
-{
-    /// <summary>Razor-local copies of chip markup (must match HR.Web.Helpers.EmailTemplateTokenChipSerializer for save/load).</summary>
-    private string EmailChipShortLabel(string tokenName)
-    {
-        if (string.IsNullOrEmpty(tokenName))
-        {
-            return "Field";
-        }
-
-        switch (tokenName.Trim())
-        {
-            case "CandidateName":
-                return "Candidate name";
-            case "PositionTitle":
-                return "Job title";
-            case "CompanyName":
-                return "Company name";
-            case "CustomMessageBlock":
-                return "Custom message";
-            case "InterviewDateTime":
-                return "Interview date & time";
-            case "InterviewMode":
-                return "Interview mode";
-            case "InterviewerName":
-                return "Interviewer name";
-            case "QuestionnaireStageLink":
-            case "StageTwoLink":
-                return "Questionnaire stage link";
-            case "ResetLink":
-                return "Reset link";
-            case "SecurityCode":
-                return "Security code";
-            default:
-                return tokenName;
-        }
-    }
-
-    private string EmailChipIconClass(string tokenName)
-    {
-        if (string.IsNullOrEmpty(tokenName))
-        {
-            return "fa-tag";
-        }
-
-        switch (tokenName.Trim())
-        {
-            case "CandidateName":
-                return "fa-user";
-            case "PositionTitle":
-                return "fa-briefcase";
-            case "CompanyName":
-                return "fa-link";
-            case "CustomMessageBlock":
-                return "fa-comment-alt";
-            case "InterviewDateTime":
-                return "fa-clock";
-            case "InterviewMode":
-                return "fa-video";
-            case "InterviewerName":
-                return "fa-user-tie";
-            case "QuestionnaireStageLink":
-            case "StageTwoLink":
-                return "fa-link";
-            case "ResetLink":
-                return "fa-key";
-            case "SecurityCode":
-                return "fa-shield-alt";
-            default:
-                return "fa-tag";
-        }
-    }
-
-    private string EmailChipHelp(string tokenName)
-    {
-        if (string.IsNullOrEmpty(tokenName))
-        {
-            return "Filled in automatically when the email is sent.";
-        }
-
-        switch (tokenName.Trim())
-        {
-            case "CandidateName":
-                return "The applicant's name.";
-            case "PositionTitle":
-                return "The role title.";
-            case "CompanyName":
-                return "Your company name.";
-            case "CustomMessageBlock":
-                return "Extra wording from the send screen, if provided.";
-            case "InterviewDateTime":
-                return "Interview date and time.";
-            case "InterviewMode":
-                return "How the interview is held.";
-            case "InterviewerName":
-                return "The interviewer's name.";
-            case "QuestionnaireStageLink":
-            case "StageTwoLink":
-                return "Link to the questionnaire stage HR opened for you.";
-            case "ResetLink":
-                return "Password reset link (filled in by the system).";
-            case "SecurityCode":
-                return "One-time code (filled in by the system).";
-            default:
-                return "Filled in automatically when the email is sent.";
-        }
-    }
-
+@functions {
     private bool ShouldShowTemplateTokenShortcut(string templateKey, string tokenName)
     {
         if (string.IsNullOrWhiteSpace(tokenName))
@@ -151,47 +79,15 @@
             return false;
         }
 
-        var normalizedTemplateKey = HR.Web.Services.EmailTemplateCatalog.NormalizeTemplateKey(templateKey);
-        if (string.Equals(normalizedTemplateKey, HR.Web.Services.EmailTemplateCatalog.SecondaryStageInvitation, StringComparison.OrdinalIgnoreCase) &&
-            (string.Equals(tokenName.Trim(), HR.Web.Services.EmailTemplateCatalog.QuestionnaireStageLinkToken, StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(tokenName.Trim(), HR.Web.Services.EmailTemplateCatalog.StageTwoLinkToken, StringComparison.OrdinalIgnoreCase)))
+        var normalizedTemplateKey = EmailTemplateCatalog.NormalizeTemplateKey(templateKey);
+        if (string.Equals(normalizedTemplateKey, EmailTemplateCatalog.SecondaryStageInvitation, StringComparison.OrdinalIgnoreCase) &&
+            (string.Equals(tokenName.Trim(), EmailTemplateCatalog.QuestionnaireStageLinkToken, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(tokenName.Trim(), EmailTemplateCatalog.StageTwoLinkToken, StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }
 
         return true;
-    }
-
-    /// <summary>
-    /// Embed JSON inside an HTML &lt;script&gt; block without the parser treating &lt;/script&gt; in string values as end-of-script.
-    /// </summary>
-    private static string JsonForInlineScript(string value)
-    {
-        var json = JsonConvert.SerializeObject(value ?? string.Empty);
-        return json
-            .Replace("<", "\\u003c")
-            .Replace("\u2028", "\\u2028")
-            .Replace("\u2029", "\\u2029");
-    }
-
-    private string EmailChipBuildHtml(string tokenName)
-    {
-        if (string.IsNullOrWhiteSpace(tokenName))
-        {
-            return string.Empty;
-        }
-
-        var name = tokenName.Trim();
-        var label = HttpUtility.HtmlEncode(EmailChipShortLabel(name));
-        var icon = HttpUtility.HtmlAttributeEncode(EmailChipIconClass(name));
-        var safeName = HttpUtility.HtmlAttributeEncode(name);
-
-        return string.Format(
-            "<span class=\"hr-email-token mceNonEditable\" data-hr-token=\"{0}\" contenteditable=\"false\" style=\"display:inline-flex;align-items:center;gap:4px;vertical-align:middle;margin:0 2px;padding:2px 8px;border-radius:6px;background:#e8f0fe;border:1px solid #c6dafc;font-size:13px;color:#1a3a5c;white-space:nowrap;\">" +
-            "<i class=\"fas {1}\" aria-hidden=\"true\"></i> {2}</span>",
-            safeName,
-            icon,
-            label);
     }
 }
 
@@ -200,25 +96,26 @@
         <div>
             <h2 class="mb-1">Email wording</h2>
             <p class="text-muted mb-0">
-                Compose each email in one place. The message area works like a word processor - paragraphs, bold, and lists - not HTML tags. Personalized fields are icon pills, not code.
+                Edit each template's subject and message here. Personalized fields are icon pills, not code.
+                Use the formatting toolbar for bold and lists.
             </p>
         </div>
         <div class="mt-2 mt-md-0 d-flex flex-wrap align-items-center" style="gap:8px;">
             <a href="@Url.Action("RoleManagement", "Admin")" class="btn btn-outline-secondary">
                 <i class="fas fa-user-tag mr-2"></i>Role Templates
             </a>
-            @using (Html.BeginForm("SaveEmailTemplates", "Admin", new { tenant = ViewContext.RouteData.Values["tenant"] }, FormMethod.Post, new { @class = "d-inline", id = "resetEmailTemplatesForm", onsubmit = "return confirm('Reset every email template to the built-in defaults? Your current custom wording will be removed (you can edit again afterwards).');" }))
+            @using (Html.BeginForm("SaveEmailTemplates", "Admin", new { tenant = ViewContext.RouteData.Values["tenant"] }, FormMethod.Post, new { @class = "d-inline", id = "resetEmailTemplatesForm" }))
             {
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="resetAllEmailTemplatesToDefaults" value="true" />
-                <button type="submit" class="btn btn-outline-danger" id="resetEmailTemplatesBtn" aria-describedby="resetEmailTemplatesHelp">
+                <button type="button" class="btn btn-outline-danger" id="resetEmailTemplatesBtn" aria-describedby="resetEmailTemplatesHelp" aria-haspopup="dialog">
                     <i class="fas fa-undo-alt mr-2"></i>Reset all to built-in defaults
                 </button>
             }
         </div>
     </div>
     <p id="resetEmailTemplatesHelp" class="small text-muted mb-4">
-        Use reset to discard every saved customization and reload the system's default subjects and bodies (with the new field icons in the editor). This cannot be undone, but you can edit templates again after resetting.
+        Use reset to discard every saved customization and reload the system's default subjects and bodies. This cannot be undone, but you can edit templates again after resetting.
     </p>
 
     <div class="alert alert-light border mb-4">
@@ -227,31 +124,37 @@
             <li>Use the <strong>round icon buttons</strong> to drop a field into the subject line or the message (hover for a short explanation).</li>
             <li>Fields look like <strong>pills</strong> in the editor - do not delete the pill if you still want that information in the sent email.</li>
             <li><strong>CC</strong> is chosen when someone sends the email, not in this screen.</li>
-            <li>Use <strong>Edit</strong> to load the rich message editor for a template; <strong>Save</strong> stores all templates on this page.</li>
+            <li>Use <strong>Edit</strong> to focus the message editor; <strong>Save</strong> stores all templates on this page.</li>
             <li>While you work, the template shows a blue <strong>Edit mode</strong> banner and border so you always know which one is active.</li>
         </ul>
     </div>
-
-    <div id="emailTemplatesEditorStatus" class="alert alert-warning d-none mb-4" role="alert"></div>
 
     @using (Html.BeginForm("SaveEmailTemplates", "Admin", new { tenant = ViewContext.RouteData.Values["tenant"] }, FormMethod.Post, new { id = "emailTemplatesForm" }))
     {
         @Html.AntiForgeryToken()
 
-        for (var i = 0; i < Model.Templates.Count; i++)
+        if (templates.Count == 0)
+        {
+            <div class="alert alert-info">No email templates are available.</div>
+        }
+
+        for (var i = 0; i < templates.Count; i++)
         {
             var defaultSubjectId = "defaultSubjectTemplate_" + i;
             var defaultBodyId = "defaultBodyTemplate_" + i;
-            var bodyPreviewFrameId = "defaultBodyTemplatePreview_" + i;
             var subjectComposeId = "subjectCompose_" + i;
+            var bodyComposeId = "bodyCompose_" + i;
+            var tokenSegments = string.IsNullOrWhiteSpace(templates[i].TokenHint)
+                ? new string[0]
+                : templates[i].TokenHint.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
 
-            <div class="card mb-4 shadow-sm">
+            <div class="card mb-4 shadow-sm email-template-card">
                 <div class="card-header bg-light">
                     <div class="d-flex justify-content-between align-items-start flex-wrap">
                         <div>
-                            <h5 class="mb-1">@Model.Templates[i].DisplayName</h5>
-                            <div class="small text-muted">@Model.Templates[i].Category</div>
-                            <div class="small text-muted mt-1">@Model.Templates[i].Description</div>
+                            <h5 class="mb-1">@templates[i].DisplayName</h5>
+                            <div class="small text-muted">@templates[i].Category</div>
+                            <div class="small text-muted mt-1">@templates[i].Description</div>
                         </div>
                     </div>
                 </div>
@@ -262,9 +165,10 @@
                     @Html.HiddenFor(m => m.Templates[i].Category)
 
                     <div class="email-template-compose border rounded p-3 bg-white"
-                         data-template-index="@i"
                          data-subject-compose-id="@subjectComposeId"
                          data-subject-storage-id="@defaultSubjectId"
+                         data-body-compose-id="@bodyComposeId"
+                         data-body-storage-id="@defaultBodyId"
                          data-body-id="@defaultBodyId">
 
                         <div class="email-template-editing-banner alert alert-primary mb-3 py-2 px-3" role="status" aria-live="polite">
@@ -278,42 +182,37 @@
                             <label class="font-weight-bold d-block mb-1" for="@subjectComposeId">Subject line</label>
                             @Html.TextAreaFor(
                                 m => m.Templates[i].DefaultSubjectTemplate,
-                                new { id = defaultSubjectId, @class = "email-subject-storage", rows = 3, style = "position:absolute;left:-9999px;width:1px;height:1px;opacity:0;overflow:hidden;", autocomplete = "off" })
+                                new { id = defaultSubjectId, @class = "email-subject-storage email-template-storage", rows = 3, autocomplete = "off" })
                             <div id="@subjectComposeId"
                                  class="email-subject-compose form-control"
                                  contenteditable="true"
                                  role="textbox"
                                  aria-multiline="true"
-                                 data-subject-storage-id="@defaultSubjectId"
-                                 style="min-height:3.25rem;white-space:pre-wrap;"></div>
+                                 data-subject-storage-id="@defaultSubjectId"></div>
                         </div>
 
-                        @if (!string.IsNullOrWhiteSpace(Model.Templates[i].TokenHint))
+                        @if (tokenSegments.Length > 0)
                         {
                             <div class="mb-3">
                                 <span class="d-block small font-weight-bold text-muted mb-2">Insert into subject</span>
                                 <div class="d-flex flex-wrap align-items-center" style="gap:6px;">
-                                    @foreach (var segment in Model.Templates[i].TokenHint.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                                    @foreach (var segment in tokenSegments)
                                     {
                                         var tokenName = segment.Trim();
-                                        if (tokenName.Length == 0)
-                                        {
-                                            continue;
-                                        }
-                                        if (!ShouldShowTemplateTokenShortcut(Model.Templates[i].TemplateKey, tokenName))
+                                        if (tokenName.Length == 0 || !ShouldShowTemplateTokenShortcut(templates[i].TemplateKey, tokenName))
                                         {
                                             continue;
                                         }
 
-                                        var iconClass = EmailChipIconClass(tokenName);
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-secondary email-template-token-subj rounded-circle p-0 d-inline-flex align-items-center justify-content-center"
                                                 style="width:2.35rem;height:2.35rem;"
-                                                title="@EmailChipHelp(tokenName)"
-                                                aria-label="Insert @EmailChipShortLabel(tokenName) into subject">
-                                            <i class="fas @iconClass" aria-hidden="true"></i>
+                                                data-token-name="@tokenName"
+                                                title="@EmailTemplateTokenChipSerializer.AdminTokenHelpText(tokenName)"
+                                                aria-label="Insert @EmailTemplateTokenChipSerializer.AdminTokenShortLabel(tokenName) into subject">
+                                            <i class="fas @EmailTemplateTokenChipSerializer.AdminTokenIconClass(tokenName)" aria-hidden="true"></i>
                                         </button>
-                                        <template class="hr-email-chip-source" data-token-name="@tokenName">@Html.Raw(EmailChipBuildHtml(tokenName))</template>
+                                        <template class="hr-email-chip-source" data-token-name="@tokenName">@Html.Raw(EmailTemplateTokenChipSerializer.BuildChipHtml(tokenName))</template>
                                     }
                                 </div>
                             </div>
@@ -321,27 +220,23 @@
                             <div class="mb-3">
                                 <span class="d-block small font-weight-bold text-muted mb-2">Insert into message</span>
                                 <div class="d-flex flex-wrap align-items-center" style="gap:6px;">
-                                    @foreach (var segment in Model.Templates[i].TokenHint.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                                    @foreach (var segment in tokenSegments)
                                     {
                                         var tokenName = segment.Trim();
-                                        if (tokenName.Length == 0)
-                                        {
-                                            continue;
-                                        }
-                                        if (!ShouldShowTemplateTokenShortcut(Model.Templates[i].TemplateKey, tokenName))
+                                        if (tokenName.Length == 0 || !ShouldShowTemplateTokenShortcut(templates[i].TemplateKey, tokenName))
                                         {
                                             continue;
                                         }
 
-                                        var iconClass = EmailChipIconClass(tokenName);
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-primary email-template-token-body rounded-circle p-0 d-inline-flex align-items-center justify-content-center"
                                                 style="width:2.35rem;height:2.35rem;"
-                                                title="@EmailChipHelp(tokenName)"
-                                                aria-label="Insert @EmailChipShortLabel(tokenName) into message">
-                                            <i class="fas @iconClass" aria-hidden="true"></i>
+                                                data-token-name="@tokenName"
+                                                title="@EmailTemplateTokenChipSerializer.AdminTokenHelpText(tokenName)"
+                                                aria-label="Insert @EmailTemplateTokenChipSerializer.AdminTokenShortLabel(tokenName) into message">
+                                            <i class="fas @EmailTemplateTokenChipSerializer.AdminTokenIconClass(tokenName)" aria-hidden="true"></i>
                                         </button>
-                                        <template class="hr-email-chip-source" data-token-name="@tokenName">@Html.Raw(EmailChipBuildHtml(tokenName))</template>
+                                        <template class="hr-email-chip-source" data-token-name="@tokenName">@Html.Raw(EmailTemplateTokenChipSerializer.BuildChipHtml(tokenName))</template>
                                     }
                                 </div>
                             </div>
@@ -352,17 +247,16 @@
                         </p>
 
                         <div class="form-group mb-0">
-                            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                            <div class="d-flex flex-wrap justify-content-between align-items-start" style="gap:8px;">
                                 <div class="flex-grow-1">
-                                    <label class="font-weight-bold d-block mb-1" for="@defaultBodyId">Message</label>
+                                    <label class="font-weight-bold d-block mb-1" for="@bodyComposeId">Message</label>
                                     <small class="text-muted d-block">What you see here is what recipients get - use Enter for paragraphs; field pills match the sent email.</small>
                                 </div>
                                 <div class="d-flex flex-shrink-0 align-items-center" style="gap:8px;">
                                     <button type="button"
                                             class="btn btn-outline-primary btn-sm email-template-edit-btn"
                                             data-body-id="@defaultBodyId"
-                                            data-template-index="@i"
-                                            title="Load the rich message editor for this template">
+                                            title="Move focus to this message editor">
                                         <i class="fas fa-edit mr-1" aria-hidden="true"></i>Edit
                                     </button>
                                     <button type="submit"
@@ -373,14 +267,38 @@
                                     </button>
                                 </div>
                             </div>
-                            <textarea name="@Html.NameFor(m => m.Templates[i].DefaultBodyTemplate)"
-                                      id="@defaultBodyId"
-                                      class="email-template-body-html"
-                                      data-template-index="@i"
-                                      autocomplete="off"
-                                      style="width:100%;min-height:280px;resize:vertical;"
-                                      maxlength="200000"></textarea>
-                            <script type="application/json" id="emailBodyInitialJson_@i">@Html.Raw(JsonForInlineScript(Model.Templates[i].DefaultBodyTemplate))</script>
+
+                            <div class="btn-toolbar email-template-format-toolbar flex-wrap mb-2 mt-2" role="toolbar" aria-label="Message formatting">
+                                <div class="btn-group btn-group-sm mr-2 mb-1" role="group">
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="undo" title="Undo" aria-label="Undo"><i class="fas fa-undo" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="redo" title="Redo" aria-label="Redo"><i class="fas fa-redo" aria-hidden="true"></i></button>
+                                </div>
+                                <div class="btn-group btn-group-sm mr-2 mb-1" role="group">
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="bold" title="Bold" aria-label="Bold"><i class="fas fa-bold" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="italic" title="Italic" aria-label="Italic"><i class="fas fa-italic" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="underline" title="Underline" aria-label="Underline"><i class="fas fa-underline" aria-hidden="true"></i></button>
+                                </div>
+                                <div class="btn-group btn-group-sm mr-2 mb-1" role="group">
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="justifyLeft" title="Align left" aria-label="Align left"><i class="fas fa-align-left" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="justifyCenter" title="Align center" aria-label="Align center"><i class="fas fa-align-center" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="justifyRight" title="Align right" aria-label="Align right"><i class="fas fa-align-right" aria-hidden="true"></i></button>
+                                </div>
+                                <div class="btn-group btn-group-sm mb-1" role="group">
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="insertUnorderedList" title="Bulleted list" aria-label="Bulleted list"><i class="fas fa-list-ul" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="insertOrderedList" title="Numbered list" aria-label="Numbered list"><i class="fas fa-list-ol" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary email-template-format-btn" data-command="removeFormat" title="Clear formatting" aria-label="Clear formatting"><i class="fas fa-eraser" aria-hidden="true"></i></button>
+                                </div>
+                            </div>
+
+                            @Html.TextAreaFor(
+                                m => m.Templates[i].DefaultBodyTemplate,
+                                new { id = defaultBodyId, @class = "email-template-body-html email-template-storage", rows = 8, autocomplete = "off", maxlength = "200000" })
+                            <div id="@bodyComposeId"
+                                 class="email-body-compose form-control"
+                                 contenteditable="true"
+                                 role="textbox"
+                                 aria-multiline="true"
+                                 data-body-storage-id="@defaultBodyId"></div>
                         </div>
                     </div>
                 </div>
@@ -395,591 +313,434 @@
     }
 </div>
 
+<div class="modal fade" id="resetEmailTemplatesModal" tabindex="-1" role="dialog" aria-labelledby="resetEmailTemplatesModalLabel" aria-describedby="resetEmailTemplatesModalText" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resetEmailTemplatesModalLabel">Reset all templates?</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="resetEmailTemplatesModalText" class="mb-0">Reset every email template to the built-in defaults? Your current custom wording will be removed. You can edit the templates again afterwards.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="resetEmailTemplatesConfirm">Reset templates</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
 <script>
-    (function () {
-        var editorInitState = {};
-        var editorInitWaiters = {};
-        var tinymceScriptPromise = null;
-        var tinymceCdnUrl = 'https://cdn.jsdelivr.net/npm/tinymce@6.8.3/tinymce.min.js';
+(function () {
+    var selectionRanges = {};
 
-        function showEditorUnavailable(message) {
-            var status = document.getElementById('emailTemplatesEditorStatus');
-            if (!status) {
-                return;
-            }
-            status.textContent = message || 'The rich text editor could not be loaded. Check your network connection or try again later. Subject lines can still be edited.';
-            status.classList.remove('d-none');
+    function closest(el, selector) {
+        if (!el) {
+            return el;
         }
-
-        function loadTinyMceScript() {
-            if (typeof tinymce !== 'undefined') {
-                return Promise.resolve();
-            }
-            if (tinymceScriptPromise) {
-                return tinymceScriptPromise;
-            }
-
-            tinymceScriptPromise = new Promise(function (resolve, reject) {
-                var script = document.createElement('script');
-                script.src = tinymceCdnUrl;
-                script.referrerPolicy = 'origin';
-                script.async = true;
-                script.onload = function () {
-                    if (typeof tinymce !== 'undefined') {
-                        resolve();
-                    } else {
-                        reject(new Error('tinymce unavailable after load'));
-                    }
-                };
-                script.onerror = function () {
-                    reject(new Error('tinymce script failed to load'));
-                };
-                document.head.appendChild(script);
-            });
-
-            return tinymceScriptPromise;
+        if (el.closest) {
+            return el.closest(selector);
         }
+        return el;
+    }
 
-        function whenTinyMceReady(callback) {
-            if (typeof tinymce !== 'undefined') {
-                callback();
-                return;
-            }
-
-            loadTinyMceScript()
-                .then(function () {
-                    callback();
-                })
-                .catch(function () {
-                    showEditorUnavailable('The rich text editor script failed to load. Subject lines can still be edited.');
-                });
+    function markEmailComposeEditing(compose) {
+        if (!compose) {
+            return;
         }
-
-        function readInitialBodyHtml(idx, bid) {
-            var jsonEl = document.getElementById('emailBodyInitialJson_' + idx);
-            var html = '';
-            try {
-                if (jsonEl && jsonEl.textContent && jsonEl.textContent.trim()) {
-                    html = JSON.parse(jsonEl.textContent);
-                }
-            } catch (parseErr) {
-                if (typeof console !== 'undefined' && console.warn) {
-                    console.warn('email template body JSON parse failed', parseErr);
-                }
-                html = '';
-            }
-            if (typeof html !== 'string') {
-                html = '';
-            }
-            if (!html || !html.length) {
-                var ta = document.getElementById(bid);
-                if (ta && ta.value && ta.value.length) {
-                    html = ta.value;
-                }
-            }
-            return html && html.length ? html : '<p></p>';
+        var cards = document.querySelectorAll('.email-template-compose');
+        for (var i = 0; i < cards.length; i++) {
+            cards[i].classList.toggle('email-template-editing', cards[i] === compose);
         }
+    }
 
-        function queueEditorWaiter(bid, callback) {
-            if (!editorInitWaiters[bid]) {
-                editorInitWaiters[bid] = [];
-            }
-            if (callback) {
-                editorInitWaiters[bid].push(callback);
-            }
+    function clearEmailComposeEditing() {
+        var editing = document.querySelectorAll('.email-template-compose.email-template-editing');
+        for (var i = 0; i < editing.length; i++) {
+            editing[i].classList.remove('email-template-editing');
         }
+    }
 
-        function flushEditorWaiters(bid, editor) {
-            var waiters = editorInitWaiters[bid] || [];
-            editorInitWaiters[bid] = [];
-            waiters.forEach(function (cb) {
-                try {
-                    cb(editor);
-                } catch (err) { /* ignore */ }
-            });
+    function enableTemplateStorages() {
+        var fields = document.querySelectorAll('#emailTemplatesForm textarea.email-template-storage');
+        for (var i = 0; i < fields.length; i++) {
+            fields[i].removeAttribute('disabled');
+            fields[i].readOnly = false;
+            fields[i].classList.remove('readonly-module-disabled');
+            fields[i].style.pointerEvents = '';
+            fields[i].style.opacity = '';
         }
+    }
 
-        function ensureEmailTemplateTinyMce(idx, bid, compose, done) {
-            if (!bid) {
-                if (done) done(null);
-                return;
-            }
-
-            var existing = getTinyMceEditorForTextareaId(bid);
-            if (existing) {
-                if (done) done(existing);
-                return;
-            }
-
-            if (editorInitState[bid] === 'initializing') {
-                queueEditorWaiter(bid, done);
-                return;
-            }
-
-            whenTinyMceReady(function () {
-                existing = getTinyMceEditorForTextareaId(bid);
-                if (existing) {
-                    if (done) done(existing);
-                    return;
-                }
-
-                editorInitState[bid] = 'initializing';
-                queueEditorWaiter(bid, done);
-
-                tinymce.init({
-                    selector: '#' + bid,
-                    height: 340,
-                    menubar: false,
-                    branding: false,
-                    plugins: 'link lists autoresize noneditable',
-                    noneditable_class: 'mceNonEditable',
-                    toolbar: 'undo redo | styles | bold italic underline | alignleft aligncenter alignright | bullist numlist | link removeformat',
-                    content_style: 'body { font-family: Segoe UI, Arial, sans-serif; font-size: 15px; line-height: 1.6; }',
-                    entity_encoding: 'raw',
-                    valid_elements: '*[*]',
-                    verify_html: false,
-                    convert_urls: false,
-                    setup: function (editor) {
-                        editor.on('focus', function () {
-                            markEmailComposeEditing(compose);
-                            saveBodySelection(editor);
-                        });
-                        editor.on('NodeChange keyup mouseup', function () {
-                            saveBodySelection(editor);
-                        });
-                        editor.on('change keyup SetContent Undo Redo', function () {
-                            editor.save();
-                        });
-                    },
-                    init_instance_callback: function (editor) {
-                        editor.setContent(readInitialBodyHtml(idx, bid), { format: 'html' });
-                        editor.save();
-                        editorInitState[bid] = 'ready';
-                        flushEditorWaiters(bid, editor);
-                    }
-                }).catch(function () {
-                    editorInitState[bid] = 'failed';
-                    showEditorUnavailable();
-                    flushEditorWaiters(bid, null);
-                });
-            });
+    function saveSelection(el) {
+        if (!el || !el.id) {
+            return;
         }
-
-        function markEmailComposeEditing(compose) {
-            if (!compose) {
-                return;
-            }
-            document.querySelectorAll('.email-template-compose').forEach(function (c) {
-                c.classList.toggle('email-template-editing', c === compose);
-            });
+        var sel = window.getSelection ? window.getSelection() : null;
+        if (!sel || sel.rangeCount === 0) {
+            return;
         }
-
-        function clearEmailComposeEditing() {
-            document.querySelectorAll('.email-template-compose.email-template-editing').forEach(function (c) {
-                c.classList.remove('email-template-editing');
-            });
+        var range = sel.getRangeAt(0);
+        if (!range) {
+            return;
         }
-
-        var subjectSelectionRanges = {};
-        var bodySelectionBookmarks = {};
-
-        function saveSubjectSelection(div) {
-            if (!div || !div.id) {
-                return;
-            }
-            var sel = window.getSelection ? window.getSelection() : null;
-            if (!sel || sel.rangeCount === 0) {
-                return;
-            }
-            var range = sel.getRangeAt(0);
-            if (!range) {
-                return;
-            }
-            var container = range.commonAncestorContainer;
-            if (container && container.nodeType === 3) {
-                container = container.parentNode;
-            }
-            if (!container || !div.contains(container)) {
-                return;
-            }
-            subjectSelectionRanges[div.id] = range.cloneRange();
+        var container = range.commonAncestorContainer;
+        if (container && container.nodeType === 3) {
+            container = container.parentNode;
         }
+        if (!container || !el.contains(container)) {
+            return;
+        }
+        selectionRanges[el.id] = range.cloneRange();
+    }
 
-        function restoreSubjectSelection(div) {
-            if (!div || !div.id) {
-                return false;
-            }
-            var range = subjectSelectionRanges[div.id];
-            var sel = window.getSelection ? window.getSelection() : null;
-            if (!range || !sel) {
-                return false;
-            }
-            try {
-                sel.removeAllRanges();
-                sel.addRange(range);
-                return true;
-            } catch (err) {
-                return false;
+    function restoreSelection(el) {
+        if (!el || !el.id) {
+            return false;
+        }
+        var range = selectionRanges[el.id];
+        var sel = window.getSelection ? window.getSelection() : null;
+        if (!range || !sel) {
+            return false;
+        }
+        try {
+            sel.removeAllRanges();
+            sel.addRange(range);
+            return true;
+        } catch (restoreErr) {
+            return false;
+        }
+    }
+
+    function clearElement(el) {
+        while (el && el.firstChild) {
+            el.removeChild(el.firstChild);
+        }
+    }
+
+    function writeComposeHtml(div, html) {
+        clearElement(div);
+        if (!html) {
+            return;
+        }
+        var parser = new DOMParser();
+        var doc = parser.parseFromString('<div>' + html + '</div>', 'text/html');
+        var wrapper = doc.body ? doc.body.firstChild : null;
+        if (!wrapper) {
+            return;
+        }
+        var imported = div.ownerDocument.importNode(wrapper, true);
+        while (imported.firstChild) {
+            div.appendChild(imported.firstChild);
+        }
+    }
+
+    function readComposeHtml(div) {
+        if (!div) {
+            return '';
+        }
+        var html = '';
+        for (var i = 0; i < div.childNodes.length; i++) {
+            var node = div.childNodes[i];
+            if (node.nodeType === 1) {
+                html += node.outerHTML;
+            } else if (node.nodeType === 3) {
+                html += node.textContent || '';
             }
         }
+        return html;
+    }
 
-        function saveBodySelection(editor) {
-            if (!editor || !editor.id || !editor.selection) {
-                return;
-            }
-            try {
-                bodySelectionBookmarks[editor.id] = editor.selection.getBookmark(2, true);
-            } catch (err) { /* ignore */ }
+    function markComposeDirty(composeEl) {
+        if (composeEl) {
+            composeEl.classList.add('is-dirty');
         }
+    }
 
-        document.addEventListener('focusin', function (ev) {
-            var t = ev.target;
-            if (!t || !t.closest) {
-                return;
-            }
-            var compose = t.closest('.email-template-compose');
-            if (compose) {
-                markEmailComposeEditing(compose);
-            }
-        }, true);
-
-        document.addEventListener('mousedown', function (ev) {
-            var t = ev.target;
-            if (!t || !t.closest) {
-                return;
-            }
-            if (t.closest('.email-template-compose') ||
-                t.closest('.tox-tinymce-aux') ||
-                t.closest('.tox-dialog-wrap') ||
-                t.closest('.tox-collection')) {
-                return;
-            }
-            clearEmailComposeEditing();
-        }, true);
-
-        function clearElement(el) {
-            while (el && el.firstChild) {
-                el.removeChild(el.firstChild);
-            }
+    function syncComposeToStorage(composeEl) {
+        if (!composeEl) {
+            return;
         }
+        var subjectDiv = document.getElementById(composeEl.getAttribute('data-subject-compose-id'));
+        var subjectTa = document.getElementById(composeEl.getAttribute('data-subject-storage-id'));
+        if (subjectDiv && subjectTa) {
+            subjectTa.value = readComposeHtml(subjectDiv);
+        }
+        var bodyDiv = document.getElementById(composeEl.getAttribute('data-body-compose-id'));
+        var bodyTa = document.getElementById(composeEl.getAttribute('data-body-storage-id'));
+        if (bodyDiv && bodyTa) {
+            bodyTa.value = readComposeHtml(bodyDiv);
+        }
+    }
 
-        function cloneChipNodeFromButton(btn) {
-            if (!btn) {
-                return null;
+    function syncAllStorages() {
+        enableTemplateStorages();
+        var composeCards = document.querySelectorAll('.email-template-compose');
+        for (var i = 0; i < composeCards.length; i++) {
+            if (!composeCards[i].classList.contains('is-dirty')) {
+                continue;
             }
-            var tpl = btn.nextElementSibling;
-            if (!tpl || !tpl.tagName || tpl.tagName.toUpperCase() !== 'TEMPLATE') {
-                return null;
-            }
-            if (!tpl.content || !tpl.content.firstElementChild) {
-                return null;
-            }
+            syncComposeToStorage(composeCards[i]);
+        }
+    }
+
+    function cloneChipNodeFromButton(btn) {
+        if (!btn) {
+            return btn;
+        }
+        var tpl = btn.nextElementSibling;
+        if (tpl && tpl.tagName && tpl.tagName.toUpperCase() === 'TEMPLATE' && tpl.content && tpl.content.firstElementChild) {
             return tpl.content.firstElementChild.cloneNode(true);
         }
-
-        function readComposeHtml(div) {
-            if (!div) {
-                return '';
-            }
-            var html = '';
-            for (var i = 0; i < div.childNodes.length; i++) {
-                var node = div.childNodes[i];
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    html += node.outerHTML;
-                } else if (node.nodeType === Node.TEXT_NODE) {
-                    html += node.textContent;
-                }
-            }
-            return html;
-        }
-
-        function writeComposeHtml(div, html) {
-            clearElement(div);
-            if (!html) {
-                return;
-            }
-            var parser = new DOMParser();
-            var doc = parser.parseFromString('<div>' + html + '</div>', 'text/html');
-            var wrapper = doc.body.firstChild;
-            if (!wrapper) {
-                return;
-            }
-            while (wrapper.firstChild) {
-                div.appendChild(document.importNode(wrapper.firstChild, true));
-            }
-        }
-
-        function getChipHtmlFromButton(btn) {
-            var chipNode = cloneChipNodeFromButton(btn);
-            return chipNode ? chipNode.outerHTML : '';
-        }
-
-        function getTinyMceEditorForTextareaId(textareaId) {
-            if (typeof tinymce === 'undefined' || !textareaId) {
-                return null;
-            }
-            var ed = tinymce.get(textareaId);
-            if (ed) {
-                return ed;
-            }
-            var list = tinymce.editors;
-            if (!list || !list.length) {
-                return null;
-            }
-            for (var i = 0; i < list.length; i++) {
-                var cand = list[i];
-                if (cand && cand.id === textareaId) {
-                    return cand;
-                }
-            }
-            for (var j = 0; j < list.length; j++) {
-                var c2 = list[j];
-                try {
-                    var el = c2.getElement && c2.getElement();
-                    if (el && el.id === textareaId) {
-                        return c2;
-                    }
-                } catch (ex) { /* ignore */ }
-            }
+        var tokenName = btn.getAttribute('data-token-name');
+        var compose = closest(btn, '.email-template-compose');
+        if (!tokenName || !compose) {
             return null;
         }
-
-        function insertChipIntoSubject(compose, btn) {
-            var chipNode = cloneChipNodeFromButton(btn);
-            if (!chipNode) {
-                return;
+        var templates = compose.querySelectorAll('template.hr-email-chip-source');
+        for (var i = 0; i < templates.length; i++) {
+            if (templates[i].getAttribute('data-token-name') === tokenName &&
+                templates[i].content &&
+                templates[i].content.firstElementChild) {
+                return templates[i].content.firstElementChild.cloneNode(true);
             }
-            var id = compose.getAttribute('data-subject-compose-id');
-            var div = document.getElementById(id);
-            var ta = document.getElementById(compose.getAttribute('data-subject-storage-id'));
-            if (!div) {
-                return;
-            }
-            div.focus();
-            restoreSubjectSelection(div);
-            try {
-                document.execCommand('insertHTML', false, chipNode.outerHTML);
-            } catch (e) {
-                var sel = window.getSelection ? window.getSelection() : null;
-                if (sel && sel.rangeCount > 0) {
-                    var range = sel.getRangeAt(0);
-                    range.deleteContents();
-                    range.insertNode(chipNode.cloneNode(true));
-                    range.collapse(false);
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                } else {
-                    div.appendChild(chipNode.cloneNode(true));
-                }
-            }
-            if (ta) {
-                ta.value = readComposeHtml(div);
-            }
-            saveSubjectSelection(div);
         }
+        return null;
+    }
 
-        function insertChipIntoBody(compose, chipHtml, textareaId) {
-            if (!chipHtml || !textareaId || !compose) {
+    function insertNodeAtSelection(container, node) {
+        container.focus();
+        restoreSelection(container);
+        var sel = window.getSelection ? window.getSelection() : null;
+        if (sel && sel.rangeCount > 0) {
+            var range = sel.getRangeAt(0);
+            if (container.contains(range.commonAncestorContainer) || container === range.commonAncestorContainer) {
+                range.deleteContents();
+                range.insertNode(node);
+                range.setStartAfter(node);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
                 return;
             }
-            function runInsert(ed) {
-                if (!ed || !ed.getBody) {
-                    return;
-                }
-                ed.focus();
-                var bookmark = bodySelectionBookmarks[ed.id];
-                if (bookmark && ed.selection) {
-                    try {
-                        ed.selection.moveToBookmark(bookmark);
-                    } catch (bmErr) { /* ignore */ }
-                }
-                var body = ed.getBody();
-                if (!body) {
-                    return;
-                }
-                if (!body.hasChildNodes()) {
-                    ed.setContent('<p>' + chipHtml + '</p>', { format: 'html' });
-                    ed.save();
-                    return;
-                }
-                try {
-                    ed.insertContent(chipHtml, { format: 'html' });
-                } catch (insEx) {
-                    try {
-                        ed.execCommand('mceInsertContent', false, chipHtml);
-                    } catch (cmdEx) {
-                        ed.selection.setContent(chipHtml, { format: 'html' });
+        }
+        container.appendChild(node);
+    }
+
+    function insertChipIntoEditor(compose, btn, targetAttr) {
+        var chipNode = cloneChipNodeFromButton(btn);
+        if (!chipNode || !compose) {
+            return;
+        }
+        var editor = document.getElementById(compose.getAttribute(targetAttr));
+        if (!editor) {
+            return;
+        }
+        markEmailComposeEditing(compose);
+        markComposeDirty(compose);
+        editor.focus();
+        restoreSelection(editor);
+        var inserted = false;
+        try {
+            inserted = document.execCommand('insertHTML', false, chipNode.outerHTML);
+        } catch (insertErr) {
+            inserted = false;
+        }
+        if (!inserted) {
+            insertNodeAtSelection(editor, chipNode.cloneNode(true));
+        }
+        saveSelection(editor);
+        syncComposeToStorage(compose);
+    }
+
+    function applyBodyCommand(compose, command, value) {
+        var body = document.getElementById(compose.getAttribute('data-body-compose-id'));
+        if (!body) {
+            return;
+        }
+        markEmailComposeEditing(compose);
+        markComposeDirty(compose);
+        body.focus();
+        restoreSelection(body);
+        try {
+            document.execCommand(command, false, value || null);
+        } catch (commandErr) {
+            return;
+        }
+        saveSelection(body);
+        syncComposeToStorage(compose);
+    }
+
+    function bindEditorEvents(div, compose) {
+        if (!div) {
+            return;
+        }
+        var events = ['input', 'keyup', 'mouseup', 'focus', 'blur'];
+        for (var i = 0; i < events.length; i++) {
+            (function (evt) {
+                div.addEventListener(evt, function () {
+                    saveSelection(div);
+                    if (evt === 'input' || evt === 'keyup') {
+                        markComposeDirty(compose);
+                        syncComposeToStorage(compose);
                     }
-                }
-                ed.save();
-                saveBodySelection(ed);
-            }
-
-            var idx = compose.getAttribute('data-template-index');
-            var editor = getTinyMceEditorForTextareaId(textareaId);
-            if (editor) {
-                runInsert(editor);
-                return;
-            }
-
-            ensureEmailTemplateTinyMce(idx, textareaId, compose, function (ed) {
-                if (ed) {
-                    runInsert(ed);
-                }
-            });
-        }
-
-        document.addEventListener('click', function (ev) {
-            var subBtn = ev.target.closest('.email-template-token-subj');
-            if (subBtn) {
-                ev.preventDefault();
-                var compose = subBtn.closest('.email-template-compose');
-                if (!compose) {
-                    return;
-                }
-                if (getChipHtmlFromButton(subBtn)) {
-                    insertChipIntoSubject(compose, subBtn);
-                }
-                return;
-            }
-            var bodyBtn = ev.target.closest('.email-template-token-body');
-            if (bodyBtn) {
-                ev.preventDefault();
-                var composeB = bodyBtn.closest('.email-template-compose');
-                if (!composeB) {
-                    return;
-                }
-                var html = getChipHtmlFromButton(bodyBtn);
-                var bid = composeB.getAttribute('data-body-id');
-                if (html && bid) {
-                    insertChipIntoBody(composeB, html, bid);
-                }
-            }
-        });
-
-        document.addEventListener('mousedown', function (ev) {
-            var tokenBtn = ev.target.closest('.email-template-token-subj, .email-template-token-body');
-            if (tokenBtn) {
-                ev.preventDefault();
-            }
-        });
-
-        function syncSubjectStorages() {
-            document.querySelectorAll('.email-subject-compose').forEach(function (div) {
-                var sid = div.getAttribute('data-subject-storage-id');
-                var ta = document.getElementById(sid);
-                if (ta) {
-                    ta.value = readComposeHtml(div);
-                }
-            });
-        }
-
-        function syncAllBodyStorages() {
-            document.querySelectorAll('#emailTemplatesForm textarea.email-template-body-html').forEach(function (ta) {
-                if (!ta || !ta.id) {
-                    return;
-                }
-                var ed = getTinyMceEditorForTextareaId(ta.id);
-                if (ed) {
-                    ed.save();
-                    return;
-                }
-                var idx = ta.getAttribute('data-template-index');
-                if (idx === null || idx === '') {
-                    return;
-                }
-                ta.value = readInitialBodyHtml(idx, ta.id);
-            });
-        }
-
-        function primeBodyTextareaPreviews() {
-            document.querySelectorAll('#emailTemplatesForm textarea.email-template-body-html').forEach(function (ta) {
-                if (!ta) {
-                    return;
-                }
-                ta.placeholder = 'Click Edit to load the rich message editor for this template.';
-            });
-        }
-
-        function scheduleIdleWork(callback) {
-            if (!callback) {
-                return;
-            }
-            if (window.requestIdleCallback) {
-                window.requestIdleCallback(function () { callback(); }, { timeout: 2000 });
-            } else {
-                window.setTimeout(callback, 0);
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', function () {
-            /* Layout may disable POST textareas for module read-only before this runs; editors need enabled targets. */
-            document.querySelectorAll('#emailTemplatesForm textarea.email-template-body-html, #emailTemplatesForm textarea.email-subject-storage').forEach(function (ta) {
-                ta.removeAttribute('disabled');
-                ta.readOnly = false;
-                ta.classList.remove('readonly-module-disabled');
-                ta.style.pointerEvents = '';
-                ta.style.opacity = '';
-            });
-
-            scheduleIdleWork(function () {
-                document.querySelectorAll('.email-subject-compose').forEach(function (div) {
-                    var sid = div.getAttribute('data-subject-storage-id');
-                    var ta = document.getElementById(sid);
-                    if (ta && div) {
-                        writeComposeHtml(div, ta.value);
-                    }
-                    div.addEventListener('input', function () {
-                        if (ta) {
-                            ta.value = readComposeHtml(div);
-                        }
-                        saveSubjectSelection(div);
-                    });
-                    div.addEventListener('keyup', function () { saveSubjectSelection(div); });
-                    div.addEventListener('mouseup', function () { saveSubjectSelection(div); });
-                    div.addEventListener('focus', function () { saveSubjectSelection(div); });
-                    div.addEventListener('blur', function () { saveSubjectSelection(div); });
-                });
-            });
-
-            document.querySelectorAll('.email-template-edit-btn').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var composeEl = btn.closest('.email-template-compose');
-                    if (composeEl) {
-                        markEmailComposeEditing(composeEl);
-                    }
-                    var bid = btn.getAttribute('data-body-id');
-                    var idx = btn.getAttribute('data-template-index');
-                    if (!bid || idx === null || idx === '') {
-                        return;
-                    }
-                    btn.disabled = true;
-                    ensureEmailTemplateTinyMce(idx, bid, composeEl, function (ed) {
-                        btn.disabled = false;
-                        if (!ed) {
-                            return;
-                        }
-                        ed.focus();
-                        var host = ed.getContainer();
-                        if (host && host.scrollIntoView) {
-                            host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                        }
-                    });
-                });
-            });
-
-            var form = document.getElementById('emailTemplatesForm');
-            if (form) {
-                form.addEventListener('submit', function () {
-                    syncSubjectStorages();
-                    syncAllBodyStorages();
-                    if (typeof tinymce !== 'undefined') {
-                        tinymce.triggerSave();
+                    if (evt === 'focus') {
+                        markEmailComposeEditing(compose);
                     }
                 });
-            }
+            })(events[i]);
+        }
+    }
 
-            primeBodyTextareaPreviews();
-        });
-    })();
+    function hydrateEditors() {
+        var composeCards = document.querySelectorAll('.email-template-compose');
+        for (var i = 0; i < composeCards.length; i++) {
+            var compose = composeCards[i];
+            var subjectDiv = document.getElementById(compose.getAttribute('data-subject-compose-id'));
+            var subjectTa = document.getElementById(compose.getAttribute('data-subject-storage-id'));
+            if (subjectDiv && subjectTa) {
+                writeComposeHtml(subjectDiv, subjectTa.value);
+                bindEditorEvents(subjectDiv, compose);
+            }
+            var bodyDiv = document.getElementById(compose.getAttribute('data-body-compose-id'));
+            var bodyTa = document.getElementById(compose.getAttribute('data-body-storage-id'));
+            if (bodyDiv && bodyTa) {
+                writeComposeHtml(bodyDiv, bodyTa.value);
+                if (!bodyDiv.childNodes.length) {
+                    var emptyPara = document.createElement('p');
+                    emptyPara.appendChild(document.createElement('br'));
+                    bodyDiv.appendChild(emptyPara);
+                }
+                bindEditorEvents(bodyDiv, compose);
+            }
+        }
+    }
+
+    document.addEventListener('focusin', function (ev) {
+        var compose = closest(ev.target, '.email-template-compose');
+        if (compose) {
+            markEmailComposeEditing(compose);
+        }
+    }, true);
+
+    document.addEventListener('mousedown', function (ev) {
+        if (closest(ev.target, '.email-template-compose')) {
+            return;
+        }
+        clearEmailComposeEditing();
+    }, true);
+
+    document.addEventListener('mousedown', function (ev) {
+        if (closest(ev.target, '.email-template-token-subj, .email-template-token-body, .email-template-format-btn')) {
+            ev.preventDefault();
+        }
+    });
+
+    document.addEventListener('click', function (ev) {
+        var subBtn = closest(ev.target, '.email-template-token-subj');
+        if (subBtn) {
+            ev.preventDefault();
+            insertChipIntoEditor(closest(subBtn, '.email-template-compose'), subBtn, 'data-subject-compose-id');
+            return;
+        }
+
+        var bodyBtn = closest(ev.target, '.email-template-token-body');
+        if (bodyBtn) {
+            ev.preventDefault();
+            insertChipIntoEditor(closest(bodyBtn, '.email-template-compose'), bodyBtn, 'data-body-compose-id');
+            return;
+        }
+
+        var formatBtn = closest(ev.target, '.email-template-format-btn');
+        if (formatBtn) {
+            ev.preventDefault();
+            var composeFmt = closest(formatBtn, '.email-template-compose');
+            if (!composeFmt) {
+                return;
+            }
+            var command = formatBtn.getAttribute('data-command');
+            applyBodyCommand(composeFmt, command, formatBtn.getAttribute('data-command-value'));
+            return;
+        }
+
+        var editBtn = closest(ev.target, '.email-template-edit-btn');
+        if (editBtn) {
+            ev.preventDefault();
+            var composeEdit = closest(editBtn, '.email-template-compose');
+            if (!composeEdit) {
+                return;
+            }
+            markEmailComposeEditing(composeEdit);
+            var body = document.getElementById(composeEdit.getAttribute('data-body-compose-id'));
+            if (body) {
+                body.focus();
+                if (body.scrollIntoView) {
+                    body.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        }
+    });
+
+    function showBootstrapModal(id) {
+        var el = document.getElementById(id);
+        if (!el || !window.jQuery || !window.jQuery.fn || !window.jQuery.fn.modal) {
+            return;
+        }
+        window.jQuery(el).modal('show');
+    }
+
+    function hideBootstrapModal(id) {
+        var el = document.getElementById(id);
+        if (!el || !window.jQuery || !window.jQuery.fn || !window.jQuery.fn.modal) {
+            return;
+        }
+        window.jQuery(el).modal('hide');
+    }
+
+    function bindDialogs() {
+        var resetBtn = document.getElementById('resetEmailTemplatesBtn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                showBootstrapModal('resetEmailTemplatesModal');
+            });
+        }
+
+        var resetConfirm = document.getElementById('resetEmailTemplatesConfirm');
+        if (resetConfirm) {
+            resetConfirm.addEventListener('click', function () {
+                var resetForm = document.getElementById('resetEmailTemplatesForm');
+                if (!resetForm) {
+                    return;
+                }
+                hideBootstrapModal('resetEmailTemplatesModal');
+                resetForm.submit();
+            });
+        }
+    }
+
+    function init() {
+        enableTemplateStorages();
+        hydrateEditors();
+        bindDialogs();
+
+        var form = document.getElementById('emailTemplatesForm');
+        if (form) {
+            form.addEventListener('submit', function () {
+                syncAllStorages();
+            }, true);
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
 </script>
+}

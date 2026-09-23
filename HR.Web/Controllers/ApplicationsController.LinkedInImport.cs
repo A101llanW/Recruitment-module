@@ -182,21 +182,7 @@ namespace HR.Web.Controllers
         private Uri BuildLinkedInImportCallbackUri(string tenantToken)
         {
             var callbackPath = Url.Action("LinkedInImportCallback", "Applications", new { tenant = tenantToken }) ?? string.Empty;
-            var baseUri = ExternalUrlHelper.GetBaseUri(Request);
-            var normalizedBase = new Uri(EnsureTrailingSlash(baseUri.ToString()), UriKind.Absolute);
-            return new Uri(normalizedBase, callbackPath.TrimStart('/'));
-        }
-
-        private static string EnsureTrailingSlash(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return "http://localhost/";
-            }
-
-            return value.EndsWith("/", StringComparison.Ordinal)
-                ? value
-                : value + "/";
+            return new Uri(ExternalUrlHelper.ToAbsoluteUrl(Request, callbackPath), UriKind.Absolute);
         }
 
         private static string BuildLinkedInImportErrorMessage(string error, string errorDescription)

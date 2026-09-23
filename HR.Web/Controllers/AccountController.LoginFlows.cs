@@ -493,17 +493,18 @@ namespace HR.Web.Controllers
 
         private ActionResult ValidateUserPassword(LoginRequestModel request, User user)
         {
-            if (IsPasswordValid(user, request.Password))
+            var freshUser = _uow.Users.Get(user.Id) ?? user;
+            if (IsPasswordValid(freshUser, request.Password))
             {
                 return null;
             }
 
-            var remainingAttempts = SecuritySvc.GetRemainingAttempts(request.Username, user.CompanyId);
+            var remainingAttempts = SecuritySvc.GetRemainingAttempts(request.Username, freshUser.CompanyId);
             var warningMessage = BuildInvalidPasswordMessage(remainingAttempts);
 
             if (!request.IsGlobalSuperAdmin)
             {
-                SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, user.CompanyId, "Invalid password");
+                SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, freshUser.CompanyId, "Invalid password");
             }
 
             ModelState.AddModelError("", warningMessage);
@@ -705,6 +706,30 @@ namespace HR.Web.Controllers
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, true, user.CompanyId);
             SecuritySvc.ClearFailedAttempts(request.Username, user.CompanyId);
             AuditSvc.LogLogin(request.Username, true);
+            IncrementCandidateLoginCount(user);
+        }
+
+        private static bool IsCandidateAccount(User user)
+        {
+            return user != null &&
+                (string.IsNullOrWhiteSpace(user.Role) ||
+                 string.Equals(user.Role, "Client", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void IncrementCandidateLoginCount(User user)
+        {
+            if (!IsCandidateAccount(user))
+            {
+                return;
+            }
+
+            user.SuccessfulLoginCount = user.SuccessfulLoginCount + 1;
+            if (_uow.Context.Entry(user).State == System.Data.EntityState.Detached)
+            {
+                _uow.Users.Update(user);
+            }
+
+            _uow.Complete();
         }
 
         private void EnsureLoginAccessToken(User user, string username)
@@ -734,7 +759,7 @@ namespace HR.Web.Controllers
 
             AuditSvc.LogAction(username, "LOGIN_REDIRECT_EMAIL_VERIFY", "Account", user.Id.ToString(), true, "Redirecting to email verification");
             var otpCode = GenerateAndStoreEmailVerificationCode(user);
-            QueueEmailVerificationDelivery(user.Email, otpCode);
+            QueueEmailVerificationDelivery(user.Email, otpCode, user.CompanyId);
             return RedirectToAction("VerifyEmail", "Account", new { tenant = tenantSlug });
         }
 
@@ -748,11 +773,11 @@ namespace HR.Web.Controllers
             return otpCode;
         }
 
-        private void QueueEmailVerificationDelivery(string userEmail, string securityToken)
+        private void QueueEmailVerificationDelivery(string userEmail, string securityToken, int? companyId)
         {
             try
             {
-                EmailSvc.SendEmailVerificationOtpAsync(userEmail, securityToken).GetAwaiter().GetResult();
+                EmailSvc.SendEmailVerificationOtpAsync(userEmail, securityToken, companyId).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -770,11 +795,26 @@ namespace HR.Web.Controllers
             if (!user.IsTwoFactorEnabled)
             {
                 Session["ForcedMfaSetup"] = user.UserName;
+                TempData["InfoMessage"] = "Your password was accepted. Complete two-factor setup to finish signing in.";
                 return RedirectToAction("SetupMFA", "Account", new { tenant = tenantSlug });
+            }
+
+            if (UsesEmailMfa(user))
+            {
+                if (!SendMfaCode(user))
+                {
+                    TempData["MfaSendError"] =
+                        "Your password was accepted, but we could not send a verification email. Use Resend on the next screen or check SMTP settings.";
+                }
+                else
+                {
+                    TempData["InfoMessage"] = "Your password was accepted. Enter the verification code sent to your email.";
+                }
             }
 
             AuditSvc.LogAction(username, "LOGIN_REDIRECT_MFA", "Account", user.Id.ToString(), true, "Redirecting to MFA challenge");
             Session["PendingMfaUsername"] = user.UserName;
+            Session["PendingMfaUserId"] = user.Id;
             Session.Remove(LegalConsentSession.PendingCompanyIdSession);
             if (user.CompanyId.HasValue)
             {

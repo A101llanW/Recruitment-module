@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Web.Hosting;
 using HR.Web.Data;
 using HR.Web.Models;
 
@@ -29,8 +30,8 @@ namespace HR.Web.Services
             }
 
             var normalizedType = reportType.ToLower();
-            var normalizedFormat = (format ?? "csv").ToLower();
-            var filePath = BuildReportFilePath(normalizedType, normalizedFormat);
+            var normalizedFormat = NormalizeReportFormat(format);
+            var filePath = BuildReportFilePath(normalizedType, GetReportFileExtension(normalizedFormat));
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
 
             string html;
@@ -39,7 +40,7 @@ namespace HR.Web.Services
                 throw new ArgumentException("Unsupported report type: " + reportType);
             }
 
-            if (normalizedFormat == "pdf" && !string.IsNullOrEmpty(html))
+            if (normalizedFormat == "html" && !string.IsNullOrEmpty(html))
             {
                 File.WriteAllText(filePath, html);
             }
@@ -47,10 +48,38 @@ namespace HR.Web.Services
             return filePath;
         }
 
-        private static string BuildReportFilePath(string reportType, string format)
+        private static string NormalizeReportFormat(string format)
         {
-            var fileName = string.Format("{0}_{1:yyyyMMdd_HHmmss}.{2}", reportType, DateTime.Now, format);
-            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Reports", fileName);
+            var normalized = (format ?? "csv").ToLower();
+            // Legacy clients still send "pdf"; reports are styled HTML, not binary PDF.
+            if (normalized == "pdf")
+            {
+                return "html";
+            }
+
+            return normalized;
+        }
+
+        private static string GetReportFileExtension(string normalizedFormat)
+        {
+            if (normalizedFormat == "html")
+            {
+                return "html";
+            }
+
+            return normalizedFormat;
+        }
+
+        private static string BuildReportFilePath(string reportType, string fileExtension)
+        {
+            var fileName = string.Format("{0}_{1:yyyyMMdd_HHmmss}.{2}", reportType, DateTime.Now, fileExtension);
+            var reportsDir = HostingEnvironment.MapPath("~/Reports");
+            if (string.IsNullOrEmpty(reportsDir))
+            {
+                reportsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Reports");
+            }
+
+            return Path.Combine(reportsDir, fileName);
         }
 
         private bool TryGenerateReport(string reportType, string format, string generatedBy, string filePath, out string html)
@@ -89,7 +118,7 @@ namespace HR.Web.Services
                 return false;
             }
 
-            if (format == "pdf")
+            if (format == "html")
             {
                 html = pdfGenerator(generatedBy);
                 return true;
@@ -325,7 +354,8 @@ namespace HR.Web.Services
 
         private static string GetReportStyles(string themeColor = "#3498db", string secondaryColor = "#2980b9")
         {
-            return string.Format(ReportStylesTemplate, themeColor);
+            // CSS uses literal { } — do not pass this template through string.Format.
+            return ReportStylesTemplate.Replace("{0}", themeColor ?? "#3498db");
         }
 
         private string GetReportHeader(string title, string subtitle, string themeColor = "#3498db", string secondaryColor = "#2980b9")

@@ -24,7 +24,10 @@ namespace HR.Web.Helpers
             }
 
             var positionId = position.Id;
-            var coverLetterUrl = url.Action("CoverLetter", "Applications", new { positionId = positionId });
+            var tenantSlug = position.Company != null && !string.IsNullOrWhiteSpace(position.Company.Slug)
+                ? position.Company.Slug.Trim()
+                : null;
+            var coverLetterUrl = url.Action("CoverLetter", "Applications", new { tenant = tenantSlug, positionId = positionId });
 
             if (!isAuthenticated)
             {
@@ -46,22 +49,71 @@ namespace HR.Web.Helpers
                 };
             }
 
+            PositionCandidateActionViewModel action;
             if (existingApplication.PendingQuestionnaireStage.HasValue)
             {
-                return new PositionCandidateActionViewModel
+                action = new PositionCandidateActionViewModel
                 {
                     Label = "Open Questionnaire",
-                    Url = url.Action("Questionnaire", "Applications", new { positionId = positionId }),
+                    Url = url.Action("Questionnaire", "Applications", new { tenant = tenantSlug, positionId = positionId }),
                     IconClass = "fas fa-clipboard-list"
                 };
             }
-
-            return new PositionCandidateActionViewModel
+            else
             {
-                Label = "View Application",
-                Url = url.Action("Details", "Applications", new { id = existingApplication.Id }),
-                IconClass = "fas fa-file-alt"
-            };
+                action = new PositionCandidateActionViewModel
+                {
+                    Label = "View Application",
+                    Url = url.Action("Details", "Applications", new { id = existingApplication.Id }),
+                    IconClass = "fas fa-file-alt"
+                };
+            }
+
+            ApplyApplicationBadge(existingApplication, action);
+            return action;
+        }
+
+        private static void ApplyApplicationBadge(Application application, PositionCandidateActionViewModel action)
+        {
+            if (application == null || action == null)
+            {
+                return;
+            }
+
+            action.HasApplied = true;
+            action.AppliedOn = application.AppliedOn;
+
+            if (application.PendingQuestionnaireStage.HasValue)
+            {
+                action.BadgeLabel = "Questionnaire due";
+                action.BadgeCssClass = "position-applied-badge--action";
+                return;
+            }
+
+            var status = (application.Status ?? string.Empty).Trim();
+            switch (status.ToLowerInvariant())
+            {
+                case "hired":
+                    action.BadgeLabel = "Hired";
+                    action.BadgeCssClass = "position-applied-badge--hired";
+                    break;
+                case "offer":
+                    action.BadgeLabel = "Offer received";
+                    action.BadgeCssClass = "position-applied-badge--offer";
+                    break;
+                case "rejected":
+                    action.BadgeLabel = "Not selected";
+                    action.BadgeCssClass = "position-applied-badge--closed";
+                    break;
+                case "interviewing":
+                    action.BadgeLabel = "In review";
+                    action.BadgeCssClass = "position-applied-badge--review";
+                    break;
+                default:
+                    action.BadgeLabel = "Applied";
+                    action.BadgeCssClass = "position-applied-badge--applied";
+                    break;
+            }
         }
     }
 }

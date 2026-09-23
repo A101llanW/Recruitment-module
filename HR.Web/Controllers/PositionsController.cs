@@ -90,6 +90,7 @@ namespace HR.Web.Controllers
             
             var result = query.OrderByDescending(p => p.PostedOn).ToList();
             PopulateCandidatePositionActions(result, canManagePositions, isReadOnly);
+            ApplyRecentlyViewedFlags(result);
             return View(result);
         }
 
@@ -120,7 +121,8 @@ namespace HR.Web.Controllers
                 !(bool)ViewBag.CanManagePositions;
 
             ViewBag.CandidateAction = ResolveCandidatePositionAction(position);
-            
+            RecordCandidatePositionView(position);
+
             return View(position);
         }
 
@@ -155,6 +157,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Create(Position model, int[] selectedQuestions, string questionWeightValues, string questionStagesPayload)
@@ -210,6 +213,7 @@ namespace HR.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [ValidateInput(false)]
         [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult Edit(Position model, int[] selectedQuestions, string questionWeightValues, string questionStagesPayload)
@@ -586,6 +590,7 @@ namespace HR.Web.Controllers
         {
             return HandleDeletePosition(id);
         }
+
         [HttpPost]
         [TenantAuthorize]
         [ValidateAntiForgeryToken]

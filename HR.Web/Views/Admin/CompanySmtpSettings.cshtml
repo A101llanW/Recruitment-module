@@ -1,0 +1,142 @@
+@model HR.Web.ViewModels.CompanySmtpSettingsPageViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Company email (SMTP)";
+}
+
+<div class="container mt-4">
+    <h2 class="mb-3">Company email (SMTP)</h2>
+
+    <p class="text-muted">
+        Configure outbound email for your company. When enabled, candidate-facing messages (applications, interviews, questionnaires, and similar)
+        are sent using your SMTP server and <strong>From</strong> address. If disabled or incomplete, the system uses the global platform SMTP settings.
+    </p>
+
+    @if (Model.IsSuperAdmin && Model.CompanyChoices != null && Model.CompanyChoices.Any())
+    {
+        using (Html.BeginForm("CompanySmtpSettings", "Admin", FormMethod.Get, new { @class = "mb-4" }))
+        {
+            <div class="form-row align-items-end">
+                <div class="form-group col-md-6 mb-0">
+                    <label for="companyPicker">Company</label>
+                    <select name="companyId" id="companyPicker" class="form-control" onchange="this.form.submit()">
+                        <option value="">-- Select company --</option>
+                        @foreach (var c in Model.CompanyChoices)
+                        {
+                            <option value="@c.Id" @(Model.CompanyId == c.Id ? "selected" : null)>@c.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        }
+    }
+
+    @if (!Model.CompanyId.HasValue)
+    {
+        <div class="alert alert-info">@Model.CompanyName</div>
+    }
+    else
+    {
+        if (Model.UsesGlobalFallback)
+        {
+            <div class="alert alert-secondary">
+                <i class="fas fa-info-circle mr-1"></i>
+                This company currently uses the <strong>global</strong> email configuration for outbound mail.
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle mr-1"></i>
+                Company SMTP is active. Outbound mail for this tenant uses the settings below.
+            </div>
+        }
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header font-weight-bold">
+                <i class="fas fa-envelope mr-2"></i>@Model.CompanyName
+            </div>
+            <div class="card-body">
+                @using (Html.BeginForm("SaveCompanySmtpSettings", "Admin", FormMethod.Post))
+                {
+                    @Html.AntiForgeryToken()
+                    @Html.HiddenFor(m => m.Form.CompanyId)
+                    <input type="hidden" name="Form.SmtpEnableSsl" value="true" />
+
+                    <div class="custom-control custom-checkbox mb-3">
+                        @Html.CheckBoxFor(m => m.Form.IsEnabled, new { @class = "custom-control-input", id = "smtpEnabled" })
+                        <label class="custom-control-label" for="smtpEnabled">Enable company SMTP for outbound email</label>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group col-md-8">
+                            @Html.LabelFor(m => m.Form.SmtpHost)
+                            @Html.TextBoxFor(m => m.Form.SmtpHost, new { @class = "form-control", placeholder = "smtp.example.com" })
+                        </div>
+                        <div class="form-group col-md-4">
+                            @Html.LabelFor(m => m.Form.SmtpPort)
+                            @Html.TextBoxFor(m => m.Form.SmtpPort, new { @class = "form-control", type = "number", min = "1", max = "65535" })
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            @Html.LabelFor(m => m.Form.SmtpUser)
+                            @Html.TextBoxFor(m => m.Form.SmtpUser, new { @class = "form-control", autocomplete = "off" })
+                        </div>
+                        <div class="form-group col-md-6">
+                            @Html.LabelFor(m => m.Form.SmtpPassword)
+                            @Html.PasswordFor(m => m.Form.SmtpPassword, new { @class = "form-control", autocomplete = "new-password" })
+                            @if (Model.HasStoredPassword)
+                            {
+                                <small class="form-text text-muted">A password is stored. Leave the field empty to keep it, or enter a new value to replace it.</small>
+                            }
+                            else
+                            {
+                                <small class="form-text text-muted">Required when enabling SMTP.</small>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            @Html.LabelFor(m => m.Form.FromEmail)
+                            @Html.TextBoxFor(m => m.Form.FromEmail, new { @class = "form-control", type = "email", placeholder = "recruiting@yourcompany.com" })
+                        </div>
+                        <div class="form-group col-md-6">
+                            @Html.LabelFor(m => m.Form.FromName)
+                            @Html.TextBoxFor(m => m.Form.FromName, new { @class = "form-control", placeholder = Model.CompanyName })
+                        </div>
+                    </div>
+
+                    if (Model.HasStoredPassword)
+                    {
+                        <div class="custom-control custom-checkbox mb-3">
+                            @Html.CheckBoxFor(m => m.Form.ClearStoredPassword, new { @class = "custom-control-input", id = "clearPassword" })
+                            <label class="custom-control-label text-danger" for="clearPassword">Remove stored SMTP password</label>
+                        </div>
+                    }
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save mr-1"></i> Save settings
+                    </button>
+                }
+
+                <hr class="my-4" />
+
+                <h5 class="mb-3">Send test email</h5>
+                <p class="text-muted small">Sends a test message using the saved company SMTP settings (not unsaved form values).</p>
+                @using (Html.BeginForm("SendCompanySmtpTestEmail", "Admin", FormMethod.Post, new { @class = "form-inline" }))
+                {
+                    @Html.AntiForgeryToken()
+                    @Html.Hidden("CompanyId", Model.CompanyId.Value)
+                    <label class="sr-only" for="testRecipient">Test recipient</label>
+                    <input type="email" name="TestRecipient" id="testRecipient" class="form-control mr-2 mb-2" style="min-width: 18rem;" placeholder="you@company.com" required />
+                    <button type="submit" class="btn btn-outline-secondary mb-2" @(Model.UsesGlobalFallback ? "disabled" : null)>
+                        <i class="fas fa-paper-plane mr-1"></i> Send test
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</div>

@@ -1,7 +1,8 @@
 using System;
 using System.Web.Mvc;
+using HR.Web.Helpers;
+using HR.Web.Models;
 using HR.Web.Services;
-using System.Linq;
 
 namespace HR.Web.Filters
 {
@@ -12,56 +13,164 @@ namespace HR.Web.Filters
     public class AuditLogAttribute : ActionFilterAttribute
     {
         private AuditService _auditService;
+        private SecurityService _securityService;
 
         private AuditService AuditService
         {
             get { return _auditService ?? (_auditService = new AuditService()); }
         }
 
+        private SecurityService SecurityService
+        {
+            get { return _securityService ?? (_securityService = new SecurityService()); }
+        }
+
         public override void OnActionExecuted(ActionExecutedContext filterContext)
         {
-            // Skip child actions to avoid duplicate logs for partial views
-            if (filterContext.IsChildAction) return;
+            if (filterContext.IsChildAction)
+            {
+                return;
+            }
 
             var request = filterContext.HttpContext.Request;
             var user = filterContext.HttpContext.User;
-            var username = user.Identity.IsAuthenticated ? user.Identity.Name : "Anonymous";
+            var isAuthenticated = user != null && user.Identity != null && user.Identity.IsAuthenticated;
+            var username = isAuthenticated ? user.Identity.Name : "Anonymous";
 
             var controller = filterContext.ActionDescriptor.ControllerDescriptor.ControllerName;
             var action = filterContext.ActionDescriptor.ActionName;
-            
-            // Determine the "Action Type" based on HTTP method or specific logic
-            string actionType = request.HttpMethod;
-            bool isSuccessful = filterContext.Exception == null;
-            string errorMsg = filterContext.Exception?.Message;
 
-            // We don't want to log the "SecurityLogs" page itself to avoid infinite growth when viewing logs
-            if (controller == "Admin" && action == "SecurityLogs") return;
-
-            // Exclude background polling requests for impersonation and elevation
-            if (controller == "Dashboard" && (action == "GetImpersonationStatus" || action == "GetPendingRequests" || action == "GetMyImpersonationStatus")) return;
-
-            // Optional: Filter out heavy GET requests that are just navigations if needed, 
-            // but for a full audit, we log them as "VIEW"
-            if (actionType == "GET")
+            if (controller == "Admin" && action == "SecurityLogs")
             {
-                actionType = "VIEW";
+                return;
             }
 
-            // Capture Entity ID if it's in the route data (common pattern in this app)
-            string entityId = filterContext.RouteData.Values["id"]?.ToString();
+            if (controller == "Dashboard" &&
+                (action == "GetImpersonationStatus" || action == "GetPendingRequests" || action == "GetMyImpersonationStatus"))
+            {
+                return;
+            }
 
-            // Log the action
+            var httpMethod = request.HttpMethod;
+            var actionType = string.Equals(httpMethod, "GET", StringComparison.OrdinalIgnoreCase) ? "VIEW" : httpMethod;
+            var actionCode = actionType + ":" + action;
+            var isSuccessful = filterContext.Exception == null;
+            var technicalError = filterContext.Exception != null ? filterContext.Exception.Message : null;
+            var entityId = filterContext.RouteData.Values["id"] != null
+                ? filterContext.RouteData.Values["id"].ToString()
+                : null;
+            var companyId = ResolveTenantCompanyId(filterContext);
+            var companyName = ResolveTenantCompanyName(filterContext);
+
+            string friendlySummary;
+            if (!isAuthenticated)
+            {
+                friendlySummary = SecurityLogTranslator.DescribeVisitorActivity(
+                    companyName,
+                    controller,
+                    action,
+                    filterContext.RouteData.Values,
+                    request);
+            }
+            else
+            {
+                friendlySummary = SecurityLogTranslator.DescribeAuditActivity(
+                    username,
+                    actionCode,
+                    controller,
+                    entityId,
+                    isSuccessful,
+                    null,
+                    technicalError);
+            }
+
             AuditService.LogAction(
-                username, 
-                actionType + ":" + action, 
-                controller, 
-                entityId, 
-                wasSuccessful: isSuccessful, 
-                errorMessage: errorMsg
-            );
+                username,
+                actionCode,
+                controller,
+                entityId,
+                wasSuccessful: isSuccessful,
+                errorMessage: friendlySummary,
+                companyId: companyId);
+
+            if (!isAuthenticated &&
+                companyId.HasValue &&
+                isSuccessful &&
+                string.Equals(httpMethod, "GET", StringComparison.OrdinalIgnoreCase) &&
+                ShouldLogVisitorAccess(controller, action))
+            {
+                SecurityService.RecordVisitorActivity(
+                    companyId.Value,
+                    request.UserHostAddress,
+                    friendlySummary);
+            }
 
             base.OnActionExecuted(filterContext);
+        }
+
+        private static int? ResolveTenantCompanyId(ActionExecutedContext filterContext)
+        {
+            var httpContext = filterContext != null ? filterContext.HttpContext : null;
+            if (httpContext == null || !httpContext.Items.Contains("TenantContext"))
+            {
+                return null;
+            }
+
+            var tenantContext = httpContext.Items["TenantContext"];
+            if (tenantContext is int companyId)
+            {
+                return companyId;
+            }
+
+            int parsedCompanyId;
+            if (tenantContext != null && int.TryParse(tenantContext.ToString(), out parsedCompanyId))
+            {
+                return parsedCompanyId;
+            }
+
+            return null;
+        }
+
+        private static string ResolveTenantCompanyName(ActionExecutedContext filterContext)
+        {
+            if (filterContext == null || filterContext.Controller == null)
+            {
+                return null;
+            }
+
+            var tenantCompany = filterContext.Controller.ViewBag.TenantContext as Company;
+            return tenantCompany != null && !string.IsNullOrWhiteSpace(tenantCompany.Name)
+                ? tenantCompany.Name.Trim()
+                : null;
+        }
+
+        private static bool ShouldLogVisitorAccess(string controller, string action)
+        {
+            if (string.Equals(controller, "Admin", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(action, "SecurityLogs", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (string.Equals(controller, "Error", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (string.Equals(controller, "Dashboard", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (string.Equals(controller, "Home", StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(action, "Error", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(action, "NotFound", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(action, "Forbidden", StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            return true;
         }
     }
 }

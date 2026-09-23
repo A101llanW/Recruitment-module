@@ -82,20 +82,52 @@ namespace HR.Web.Controllers
                 return false;
             }
 
-            if (actionSegment.Equals("Questionnaire", StringComparison.OrdinalIgnoreCase) ||
-                actionSegment.Equals("CoverLetter", StringComparison.OrdinalIgnoreCase))
+            var tenant = ResolveApplicationReturnTenant(resolvedTenant, positionId);
+
+            if (actionSegment.Equals("CoverLetter", StringComparison.OrdinalIgnoreCase))
             {
-                redirectResult = RedirectToAction("CoverLetter", "Applications", new { tenant = resolvedTenant, positionId = positionId });
+                redirectResult = RedirectToAction("CoverLetter", "Applications", new { tenant = tenant, positionId = positionId });
+                return true;
+            }
+
+            if (actionSegment.Equals("ProfileDetails", StringComparison.OrdinalIgnoreCase))
+            {
+                redirectResult = RedirectToAction("ProfileDetails", "Applications", new { tenant = tenant, positionId = positionId });
+                return true;
+            }
+
+            if (actionSegment.Equals("Questionnaire", StringComparison.OrdinalIgnoreCase))
+            {
+                redirectResult = RedirectToAction("Questionnaire", "Applications", new { tenant = tenant, positionId = positionId });
                 return true;
             }
 
             if (actionSegment.Equals("Apply", StringComparison.OrdinalIgnoreCase))
             {
-                redirectResult = RedirectToAction("Apply", "Applications", new { tenant = resolvedTenant, positionId = positionId });
+                redirectResult = RedirectToAction("Apply", "Applications", new { tenant = tenant, positionId = positionId });
                 return true;
             }
 
             return false;
+        }
+
+        private string ResolveApplicationReturnTenant(string resolvedTenant, int positionId)
+        {
+            if (!string.IsNullOrWhiteSpace(resolvedTenant))
+            {
+                return resolvedTenant;
+            }
+
+            var position = _uow.Positions.Get(positionId);
+            if (position?.CompanyId == null)
+            {
+                return null;
+            }
+
+            var company = _uow.Companies.Get(position.CompanyId.Value);
+            return company != null && !string.IsNullOrWhiteSpace(company.Slug)
+                ? company.Slug.Trim()
+                : null;
         }
 
         private static bool IsPositionsIndexRoute(string controllerSegment, string actionSegment, int segmentLength)

@@ -3,7 +3,8 @@
 
 param(
     [switch]$SkipBuild,
-    [switch]$UpdateSecrets
+    [switch]$UpdateSecrets,
+    [switch]$ShowDetailedErrors
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,7 +26,13 @@ if (-not $SkipBuild) {
     Write-Host "Building Release..." -ForegroundColor Yellow
     Push-Location $repoRoot
     try {
-        $msbuild = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe"
+        $msbuild = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+        if (-not (Test-Path $msbuild)) {
+            $msbuild = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"
+        }
+        if (-not (Test-Path $msbuild)) {
+            $msbuild = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe"
+        }
         if (-not (Test-Path $msbuild)) {
             $msbuild = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
         }
@@ -55,7 +62,10 @@ if ((Test-Path $preserveSecretsPath) -and -not $UpdateSecrets) {
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
 function Set-ProductionWebConfig {
-    param([string]$WebConfigPath)
+    param(
+        [string]$WebConfigPath,
+        [bool]$DetailedErrors = $false
+    )
 
     if (-not (Test-Path $WebConfigPath)) {
         Write-Error "Web.config not found at $WebConfigPath"
@@ -64,7 +74,7 @@ function Set-ProductionWebConfig {
     [xml]$doc = Get-Content -Path $WebConfigPath
     foreach ($add in $doc.configuration.appSettings.add) {
         if ($add.key -eq "AppEnvironment") {
-            $add.SetAttribute("value", "Production")
+            $add.SetAttribute("value", $(if ($DetailedErrors) { "Remote/Dev" } else { "Production" }))
         }
         elseif ($add.key -eq "LastRestart") {
             $add.SetAttribute("value", (Get-Date -Format "yyyy-MM-dd") + "-prod")
@@ -73,23 +83,42 @@ function Set-ProductionWebConfig {
 
     $systemWeb = $doc.configuration."system.web"
     $customErrors = $doc.CreateElement("customErrors")
-    $customErrors.SetAttribute("mode", "Off")
-    $customErrors.SetAttribute("defaultRedirect", "~/Home/Error")
-    foreach ($status in @(
-            @{ code = "404"; redirect = "~/Account/Login" },
-            @{ code = "500"; redirect = "~/Home/Error" }
-        )) {
-        $errorNode = $doc.CreateElement("error")
-        $errorNode.SetAttribute("statusCode", $status.code)
-        $errorNode.SetAttribute("redirect", $status.redirect)
-        $null = $customErrors.AppendChild($errorNode)
+    if ($DetailedErrors) {
+        $customErrors.SetAttribute("mode", "Off")
+    }
+    else {
+        $customErrors.SetAttribute("mode", "On")
+        $customErrors.SetAttribute("redirectMode", "ResponseRewrite")
+        $customErrors.SetAttribute("defaultRedirect", "~/Home/Error")
+        foreach ($status in @(
+                @{ code = "404"; redirect = "~/Home/NotFound" },
+                @{ code = "500"; redirect = "~/Home/Error" }
+            )) {
+            $errorNode = $doc.CreateElement("error")
+            $errorNode.SetAttribute("statusCode", $status.code)
+            $errorNode.SetAttribute("redirect", $status.redirect)
+            $null = $customErrors.AppendChild($errorNode)
+        }
     }
     $null = $systemWeb.ReplaceChild($customErrors, $systemWeb.customErrors)
     $systemWeb.compilation.SetAttribute("debug", "true")
 
     $httpErrors = $doc.CreateElement("httpErrors")
     $httpErrors.SetAttribute("existingResponse", "PassThrough")
-    $httpErrors.SetAttribute("errorMode", "Detailed")
+    if ($DetailedErrors) {
+        $httpErrors.SetAttribute("errorMode", "Detailed")
+    }
+    else {
+        $httpErrors.SetAttribute("errorMode", "Custom")
+        $remove404 = $doc.CreateElement("remove")
+        $remove404.SetAttribute("statusCode", "404")
+        $null = $httpErrors.AppendChild($remove404)
+        $error404 = $doc.CreateElement("error")
+        $error404.SetAttribute("statusCode", "404")
+        $error404.SetAttribute("path", "/Home/NotFound")
+        $error404.SetAttribute("responseMode", "ExecuteURL")
+        $null = $httpErrors.AppendChild($error404)
+    }
     $webServer = $doc.configuration."system.webServer"
     $null = $webServer.ReplaceChild($httpErrors, $webServer.httpErrors)
 
@@ -106,7 +135,12 @@ function Set-ProductionWebConfig {
         $writer.Close()
     }
 
-    Write-Host "  Applied publish Web.config (AppEnvironment=Production, customErrors=Off, debug=true)" -ForegroundColor Green
+    if ($DetailedErrors) {
+        Write-Host "  Applied publish Web.config (AppEnvironment=Remote/Dev, customErrors=Off, httpErrors=Detailed, debug=true)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Applied publish Web.config (AppEnvironment=Production, customErrors=On+Rewrite, debug=true)" -ForegroundColor Green
+    }
 }
 
 function Invoke-RoboMirror {
@@ -158,7 +192,7 @@ foreach ($file in $rootFiles) {
 
 $publishWebConfig = Join-Path $dest "Web.config"
 if (Test-Path $publishWebConfig) {
-    Set-ProductionWebConfig -WebConfigPath $publishWebConfig
+    Set-ProductionWebConfig -WebConfigPath $publishWebConfig -DetailedErrors:$ShowDetailedErrors
 }
 
 if ($UpdateSecrets -and (Test-Path (Join-Path $source "secrets.config"))) {

@@ -17,7 +17,7 @@ namespace HR.Web.Services
 
         public void LogAction(string username, string action, string controller, 
             string entityId = null, object oldValues = null, object newValues = null, 
-            bool wasSuccessful = true, string errorMessage = null)
+            bool wasSuccessful = true, string errorMessage = null, int? companyId = null)
         {
             try
             {
@@ -26,7 +26,7 @@ namespace HR.Web.Services
                     var context = HttpContext.Current;
                     var auditLog = new AuditLog
                     {
-                        CompanyId = TenantService.GetCurrentUserCompanyId(), 
+                        CompanyId = companyId ?? TenantService.GetCurrentUserCompanyId(), 
                         Username = username ?? "Anonymous",
                         Action = action,
                         Controller = controller,

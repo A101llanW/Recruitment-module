@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Web.Mvc;
 using HR.Web.Data;
-using HR.Web.Services;
 
 namespace HR.Web.Helpers
 {
@@ -94,6 +93,13 @@ namespace HR.Web.Helpers
                                 var userCompany = uow.Context.Companies.FirstOrDefault(c => c.Id == dbUser.CompanyId.Value);
                                 if (userCompany != null && userCompany.IsActive)
                                 {
+                                    // Skip tenant re-injection on error pages to avoid redirect ping-pong with customErrors/IIS.
+                                    if (IsErrorPagePath(currentController, currentAction))
+                                    {
+                                        base.OnActionExecuting(filterContext);
+                                        return;
+                                    }
+
                                     // If the current URL is global OR it's the wrong company URL, redirect to the correct one
                                     if (string.IsNullOrEmpty(tenantToken) || !string.Equals(tenantToken, userCompany.Slug, StringComparison.OrdinalIgnoreCase))
                                     {
@@ -116,6 +122,23 @@ namespace HR.Web.Helpers
             }
 
             base.OnActionExecuting(filterContext);
+        }
+
+        private static bool IsErrorPagePath(string controller, string action)
+        {
+            if (string.Equals(controller, "Error", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.Equals(controller, "Home", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(action, "Error", StringComparison.OrdinalIgnoreCase) ||
+                       string.Equals(action, "NotFound", StringComparison.OrdinalIgnoreCase) ||
+                       string.Equals(action, "Forbidden", StringComparison.OrdinalIgnoreCase);
+            }
+
+            return false;
         }
 
         private static bool IsAllowedWithoutEmailVerification(string controller, string action, string role)

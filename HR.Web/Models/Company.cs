@@ -41,5 +41,7 @@ namespace HR.Web.Models
         public virtual ICollection<RoleDefinition> RoleDefinitions { get; set; }
         public virtual ICollection<AuditLog> AuditLogs { get; set; }
         public virtual ICollection<CompanyHrCcEmail> HrCcEmails { get; set; }
+        public virtual CompanySmtpSettings SmtpSettings { get; set; }
+        public virtual ICollection<CompanyApplicationNotifyRecipient> ApplicationNotifyRecipients { get; set; }
     }
 }

@@ -176,13 +176,14 @@ namespace HR.Web.Services
                     return true;
 
                 case "application_received_standard":
-                    subjectTemplate = "Application received for {{PositionTitle}}";
+                    subjectTemplate = "Application received - {{CompanyName}}";
                     bodyTemplate =
                         "<p>Dear {{CandidateName}},</p>" +
-                        "<p>We have received your application for <strong>{{PositionTitle}}</strong> at <strong>{{CompanyName}}</strong>.</p>" +
-                        "<p>Our recruitment team will review your submission and contact you with updates.</p>" +
-                        "{{CustomMessageBlock}}" +
-                        "<p>Thank you for your interest.<br/>{{CompanyName}} Recruitment Team</p>";
+                        "<p>Thank you for your interest in joining <strong>{{CompanyName}}</strong> and for considering our school as the next step in your professional journey.</p>" +
+                        "<p>We are pleased to confirm that your application has been received. We appreciate the time and thought you have invested in your application and your interest in becoming part of our diverse and dynamic school community.</p>" +
+                        "<p>Our recruitment team will review applications carefully against the requirements of the position. Only candidates who are shortlisted for the next stage of the recruitment process will be contacted. Please note that this is an automated acknowledgement receipt, so please do not reply.</p>" +
+                        "<p>Thank you.</p>" +
+                        "<p>Kind regards.</p>";
                     return true;
 
                 case "secondary_stage_invitation":
@@ -266,6 +267,34 @@ namespace HR.Web.Services
                 Subject = ReplaceTokens(subjectTemplate, effectiveTokens),
                 BodyHtml = ReplaceTokens(bodyTemplate, effectiveTokens)
             };
+        }
+
+        /// <summary>
+        /// Ensures the rendered secondary-stage invitation body contains a clickable questionnaire link.
+        /// Appends the default link paragraph when a customized template omitted the token.
+        /// </summary>
+        public static string EnsureQuestionnaireStageLinkInBody(string bodyHtml, string encodedStageLink)
+        {
+            var body = bodyHtml ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(encodedStageLink))
+            {
+                return body;
+            }
+
+            if (body.IndexOf(encodedStageLink, StringComparison.Ordinal) >= 0)
+            {
+                return body;
+            }
+
+            var decodedLink = System.Web.HttpUtility.HtmlDecode(encodedStageLink);
+            if (!string.IsNullOrWhiteSpace(decodedLink) &&
+                body.IndexOf(decodedLink, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return body;
+            }
+
+            return body +
+                "<p><a href='" + encodedStageLink + "'>Open questionnaire stage</a></p>";
         }
 
         /// <summary>

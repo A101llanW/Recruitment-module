@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Linq;
 using System.Net;
 using System.Net.Mail;
-using System.Net.Mime;
 using System.Threading.Tasks;
 using HR.Web.Helpers;
 
@@ -13,81 +11,67 @@ namespace HR.Web.Services
     public interface IEmailService
     {
         Task SendAsync(string to, string subject, string body);
-
+        Task SendAsync(string to, string subject, string body, int? companyId);
         Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients);
-
-        /// <summary>
-        /// Sends email and propagates SMTP failures (for flows that must surface delivery errors to the caller).
-        /// </summary>
-        Task SendCriticalAsync(string to, string subject, string body);
+        Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId);
+        Task SendRequiredAsync(string to, string subject, string body, int? companyId);
         Task SendPasswordResetEmailAsync(string to, string resetLink);
+        Task SendPasswordResetEmailAsync(string to, string resetLink, int? companyId);
         Task SendMfaCodeEmailAsync(string to, string code);
+        Task SendMfaCodeEmailAsync(string to, string code, int? companyId);
         Task SendEmailVerificationOtpAsync(string to, string code);
+        Task SendEmailVerificationOtpAsync(string to, string code, int? companyId);
     }
 
     public class EmailService : IEmailService
     {
-        private readonly ISettingsService _settingsService;
-        private readonly string _smtpHost;
-        private readonly int _smtpPort;
-        private readonly string _smtpUser;
-        private readonly string _smtpPass;
-        private readonly bool _enableSsl;
-        private readonly string _fromEmail;
-        private readonly string _fromName;
+        private readonly ICompanySmtpSettingsService _companySmtpSettingsService;
 
-        public EmailService() : this(new SettingsService()) { }
+        public EmailService()
+            : this(new CompanySmtpSettingsService())
+        {
+        }
 
         public EmailService(ISettingsService settingsService)
+            : this(new CompanySmtpSettingsService())
         {
             if (settingsService == null)
             {
-                throw new ArgumentNullException("settingsService");
+                throw new ArgumentNullException(nameof(settingsService));
             }
-
-            _settingsService = settingsService;
-
-            // Prioritize Database Settings, fall back to Web.config
-            _smtpHost = ResolveSetting("SmtpHost", "smtp.gmail.com");
-            _smtpPort = _settingsService.GetSetting<int>("SmtpPort", int.Parse(ConfigurationManager.AppSettings["SmtpPort"] ?? "587"));
-            _smtpUser = ResolveSetting("SmtpUser", string.Empty);
-            _smtpPass = ResolveSetting("SmtpPassword", string.Empty);
-            _enableSsl = _settingsService.GetSetting<bool>("SmtpEnableSsl", bool.Parse(ConfigurationManager.AppSettings["SmtpEnableSsl"] ?? "true"));
-            _fromEmail = ResolveSetting("FromEmail", "noreply@nanosoft.com");
-            _fromName = ResolveSetting("FromName", AppConfig.ProductName);
         }
 
-        private string ResolveSetting(string key, string fallback)
+        public EmailService(ICompanySmtpSettingsService companySmtpSettingsService)
         {
-            var dbValue = _settingsService.GetSetting(key);
-            if (!string.IsNullOrWhiteSpace(dbValue))
+            _companySmtpSettingsService = companySmtpSettingsService ?? throw new ArgumentNullException(nameof(companySmtpSettingsService));
+        }
+
+        public EmailService(ISettingsService settingsService, ICompanySmtpSettingsService companySmtpSettingsService)
+            : this(companySmtpSettingsService)
+        {
+            if (settingsService == null)
             {
-                return dbValue.Trim();
+                throw new ArgumentNullException(nameof(settingsService));
             }
-
-            var configValue = ConfigurationManager.AppSettings[key];
-            return string.IsNullOrWhiteSpace(configValue) ? fallback : configValue.Trim();
-        }
-
-        private string DescribeSmtpConfig()
-        {
-            return string.Format(
-                "host={0}; port={1}; ssl={2}; user={3}; password={4}; from={5}",
-                _smtpHost ?? "(null)",
-                _smtpPort,
-                _enableSsl,
-                string.IsNullOrWhiteSpace(_smtpUser) ? "MISSING" : "set",
-                string.IsNullOrWhiteSpace(_smtpPass) ? "MISSING" : "set",
-                _fromEmail ?? "(null)");
         }
 
         public async Task SendAsync(string to, string subject, string body)
         {
-            await SendAsync(to, subject, body, null).ConfigureAwait(false);
+            await SendAsync(to, subject, body, null, null).ConfigureAwait(false);
+        }
+
+        public async Task SendAsync(string to, string subject, string body, int? companyId)
+        {
+            await SendAsync(to, subject, body, null, companyId).ConfigureAwait(false);
         }
 
         public async Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients)
         {
+            await SendAsync(to, subject, body, ccRecipients, null).ConfigureAwait(false);
+        }
+
+        public async Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId)
+        {
             if (string.IsNullOrWhiteSpace(to))
             {
                 return;
@@ -95,86 +79,72 @@ namespace HR.Web.Services
 
             try
             {
-                await SendMailCoreAsync(to, subject, body, ccRecipients).ConfigureAwait(false);
+                await SendRequiredAsync(to, subject, body, ccRecipients, companyId).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                LogEmailFailure(to, ex);
+                LogEmailFailure(to, ex, companyId);
             }
         }
 
-        private void LogEmailFailure(string to, Exception ex)
+        public Task SendRequiredAsync(string to, string subject, string body, int? companyId)
         {
-            var recipient = to ?? string.Empty;
-            var smtpConfig = DescribeSmtpConfig();
-            if (ex == null)
+            return SendRequiredAsync(to, subject, body, null, companyId);
+        }
+
+        private async Task SendRequiredAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId)
+        {
+            if (string.IsNullOrWhiteSpace(to))
             {
-                System.Diagnostics.Debug.WriteLine("Email sending failed to " + recipient + ": unknown error. SMTP: " + smtpConfig);
-                System.Diagnostics.Trace.WriteLine("Email sending failed to " + recipient + ": unknown error. SMTP: " + smtpConfig);
-                return;
+                throw new ArgumentException("A recipient email address is required.");
             }
 
-            var error = ex;
             try
             {
-                string logPath = AppDomain.CurrentDomain.BaseDirectory + "email_errors.txt";
-                string logMessage = string.Format("[{0}] ERROR sending to {1}: {2}{3}SMTP: {4}{3}Stack: {5}{3}",
-                    DateTime.Now, recipient, error.Message, Environment.NewLine, smtpConfig, error.StackTrace);
-                System.IO.File.AppendAllText(logPath, logMessage);
+                var smtpConfig = _companySmtpSettingsService.ResolveForCompany(companyId);
+                await SendMailCoreAsync(to, subject, body, ccRecipients, smtpConfig).ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Best-effort local log write only; email failure is already traced below.
+                LogEmailFailure(to, ex, companyId);
+                throw;
             }
-
-            System.Diagnostics.Debug.WriteLine("Email sending failed: " + error.Message + " SMTP: " + smtpConfig);
-            System.Diagnostics.Trace.WriteLine("Email sending failed: " + error.Message + " SMTP: " + smtpConfig);
         }
 
-        private async Task SendMailCoreAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, string plainTextBody = null)
+        private async Task SendMailCoreAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, SmtpConfiguration smtpConfig)
         {
             if (string.IsNullOrWhiteSpace(to))
             {
                 return;
+            }
+
+            if (smtpConfig == null || !smtpConfig.IsUsable())
+            {
+                smtpConfig = _companySmtpSettingsService.ResolveGlobal();
             }
 
             var recipient = to.Trim();
             var messageSubject = subject ?? string.Empty;
             var messageBody = body ?? string.Empty;
 
-            ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; // TLS 1.2
-
-            using (var client = new SmtpClient(_smtpHost, _smtpPort))
+            using (var client = new SmtpClient(smtpConfig.Host, smtpConfig.Port))
             {
-                client.EnableSsl = _enableSsl;
+                client.EnableSsl = smtpConfig.EnableSsl;
                 client.UseDefaultCredentials = false;
                 client.Timeout = 10000;
 
-                if (!string.IsNullOrEmpty(_smtpUser) || !string.IsNullOrEmpty(_smtpPass))
+                if (!string.IsNullOrEmpty(smtpConfig.User) || !string.IsNullOrEmpty(smtpConfig.Password))
                 {
-                    client.Credentials = new NetworkCredential(_smtpUser, _smtpPass);
+                    client.Credentials = new NetworkCredential(smtpConfig.User, smtpConfig.Password);
                 }
 
                 var mailMessage = new MailMessage
                 {
-                    From = new MailAddress(_fromEmail, _fromName),
-                    Subject = messageSubject
+                    From = new MailAddress(smtpConfig.FromEmail, smtpConfig.FromName),
+                    Subject = messageSubject,
+                    Body = messageBody,
+                    IsBodyHtml = true
                 };
-
-                if (!string.IsNullOrWhiteSpace(plainTextBody))
-                {
-                    // Explicit multipart/alternative parts — mixing Body + AlternateViews can render HTML as raw text in some clients.
-                    mailMessage.AlternateViews.Add(
-                        AlternateView.CreateAlternateViewFromString(plainTextBody, null, MediaTypeNames.Text.Plain));
-                    mailMessage.AlternateViews.Add(
-                        AlternateView.CreateAlternateViewFromString(messageBody, null, MediaTypeNames.Text.Html));
-                }
-                else
-                {
-                    mailMessage.Body = messageBody;
-                    mailMessage.IsBodyHtml = true;
-                }
-
                 mailMessage.To.Add(recipient);
 
                 if (ccRecipients != null)
@@ -185,45 +155,58 @@ namespace HR.Web.Services
                     }
                 }
 
-                client.Send(mailMessage);
-                LogEmailSuccess(recipient, messageSubject);
+                await Task.Factory.StartNew(() => client.Send(mailMessage)).ConfigureAwait(false);
             }
         }
 
-        public async Task SendCriticalAsync(string to, string subject, string body)
-        {
-            await SendCriticalAsync(to, subject, body, null).ConfigureAwait(false);
-        }
-
-        private async Task SendCriticalAsync(string to, string subject, string body, string plainTextBody)
+        private async Task SendCriticalAsync(string to, string subject, string body, int? companyId)
         {
             try
             {
-                await SendMailCoreAsync(to, subject, body, null, plainTextBody).ConfigureAwait(false);
+                var smtpConfig = _companySmtpSettingsService.ResolveForCompany(companyId);
+                await SendMailCoreAsync(to, subject, body, null, smtpConfig).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                LogEmailFailure(to, ex);
+                LogEmailFailure(to, ex, companyId);
                 throw;
             }
         }
 
-        private static void LogEmailSuccess(string to, string subject)
+        private static void LogEmailFailure(string to, Exception ex, int? companyId = null)
         {
+            var recipient = to ?? string.Empty;
+            var companyLabel = companyId.HasValue ? companyId.Value.ToString() : "global";
+            if (ex == null)
+            {
+                System.Diagnostics.Debug.WriteLine("Email sending failed to " + recipient + " company " + companyLabel + ": unknown error");
+                System.Diagnostics.Trace.WriteLine("Email sending failed to " + recipient + " company " + companyLabel + ": unknown error");
+                return;
+            }
+
+            var error = ex;
             try
             {
-                string logPath = AppDomain.CurrentDomain.BaseDirectory + "email_sent.log";
-                string logMessage = string.Format("[{0}] SENT to {1}: {2}{3}",
-                    DateTime.Now, to ?? string.Empty, subject ?? string.Empty, Environment.NewLine);
+                string logPath = AppDomain.CurrentDomain.BaseDirectory + "email_errors.txt";
+                string logMessage = string.Format("[{0}] ERROR sending to {1} company {2}: {3}{4}Stack: {5}{4}",
+                    DateTime.Now, recipient, companyLabel, error.Message, Environment.NewLine, error.StackTrace);
                 System.IO.File.AppendAllText(logPath, logMessage);
             }
             catch (Exception)
             {
-                // Best-effort local log write only.
+                // Best-effort local log write only; email failure is already traced below.
             }
+
+            System.Diagnostics.Debug.WriteLine("Email sending failed: " + error.Message);
+            System.Diagnostics.Trace.WriteLine("Email sending failed: " + error.Message);
         }
 
         public async Task SendPasswordResetEmailAsync(string to, string resetLink)
+        {
+            await SendPasswordResetEmailAsync(to, resetLink, null).ConfigureAwait(false);
+        }
+
+        public async Task SendPasswordResetEmailAsync(string to, string resetLink, int? companyId)
         {
             if (string.IsNullOrWhiteSpace(to))
             {
@@ -279,9 +262,15 @@ namespace HR.Web.Services
 </body>
 </html>", link, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
-            await SendAsync(to, subject, body).ConfigureAwait(false);
+            await SendAsync(to, subject, body, companyId).ConfigureAwait(false);
         }
+
         public async Task SendMfaCodeEmailAsync(string to, string code)
+        {
+            await SendMfaCodeEmailAsync(to, code, null).ConfigureAwait(false);
+        }
+
+        public async Task SendMfaCodeEmailAsync(string to, string code, int? companyId)
         {
             if (string.IsNullOrWhiteSpace(to))
             {
@@ -289,12 +278,7 @@ namespace HR.Web.Services
             }
 
             var verificationCode = code ?? string.Empty;
-            var subject = "Sign-in verification - " + AppConfig.ProductName;
-            var plainTextBody = string.Format(
-                "Your {0} sign-in verification code is: {1}{2}{2}This code expires in 10 minutes.{2}{2}If you did not attempt to sign in, please ignore this email.",
-                AppConfig.ProductName,
-                verificationCode,
-                Environment.NewLine);
+            var subject = "Your Verification Code - " + AppConfig.ProductName;
             var body = string.Format(@"
 <!DOCTYPE html>
 <html>
@@ -333,10 +317,17 @@ namespace HR.Web.Services
 </body>
 </html>", verificationCode, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
-            await SendCriticalAsync(to, subject, body, plainTextBody).ConfigureAwait(false);
+            LogSensitiveCodeForDevelopment("MFA CODE", to, verificationCode, "mfa_codes.txt");
+
+            await SendCriticalAsync(to, subject, body, companyId).ConfigureAwait(false);
         }
 
         public async Task SendEmailVerificationOtpAsync(string to, string code)
+        {
+            await SendEmailVerificationOtpAsync(to, code, null).ConfigureAwait(false);
+        }
+
+        public async Task SendEmailVerificationOtpAsync(string to, string code, int? companyId)
         {
             if (string.IsNullOrWhiteSpace(to))
             {
@@ -383,7 +374,7 @@ namespace HR.Web.Services
 
             LogSensitiveCodeForDevelopment("EMAIL VERIFICATION OTP", to, verificationCode, "verification_codes.txt");
 
-            await SendCriticalAsync(to, subject, body).ConfigureAwait(false);
+            await SendCriticalAsync(to, subject, body, companyId).ConfigureAwait(false);
         }
 
         private static void LogSensitiveCodeForDevelopment(string label, string to, string code, string fileName)
@@ -410,13 +401,3 @@ namespace HR.Web.Services
         }
     }
 }
-
-
-
-
-
-
-
-
-
-

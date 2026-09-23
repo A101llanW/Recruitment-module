@@ -121,7 +121,7 @@ namespace HR.Web.Controllers
         
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [TenantAuthorize(Roles = "Admin, SuperAdmin")]
+        [Authorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
         public ActionResult BookInterview(int applicationId, int interviewerId, DateTime scheduledAt, string mode, string returnTo = null, int? resumeEmailApplicationId = null)
         {
@@ -173,15 +173,6 @@ namespace HR.Web.Controllers
             });
 
             return interview;
-        }
-
-        private void NotifyInterviewerOfBooking(int interviewerId, int interviewId, int applicationId, DateTime scheduledAt, string mode)
-        {
-            var interviewer = _uow.Users.Get(interviewerId);
-            if (interviewer != null)
-            {
-                _email.SendAsync(interviewer.Email, "Interview scheduled", "You have a new interview scheduled.");
-            }
         }
 
         private ActionResult GetBookInterviewSuccessRedirect(string returnTo, int? resumeEmailApplicationId, int applicationId)
@@ -260,7 +251,7 @@ namespace HR.Web.Controllers
             return RedirectToAction("Index");
         }
 
-        [TenantAuthorize]
+        [Authorize]
         public ActionResult Details(int id)
         {
             var interview = _uow.Interviews.GetAll(i => i.Application.Applicant, i => i.Application.Position, i => i.Interviewer)
@@ -280,7 +271,7 @@ namespace HR.Web.Controllers
             return View(interview);
         }
 
-        [TenantAuthorize]
+        [Authorize]
         public ActionResult Create(int? applicationId)
         {
             LoadLookups();
@@ -293,7 +284,7 @@ namespace HR.Web.Controllers
             return View(interview);
         }
 
-        [TenantAuthorize]
+        [Authorize]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public ActionResult Create(Interview model)
@@ -318,12 +309,11 @@ namespace HR.Web.Controllers
 
             _uow.Interviews.Add(interviewModel);
             _uow.Complete();
-            var interviewerEmail = interviewModel.Interviewer != null ? interviewModel.Interviewer.Email : null;
-            _email.SendAsync(interviewerEmail, "Interview scheduled", "Please attend.");
+            TryNotifyInterviewerAfterInterviewCreated(interviewModel);
             return RedirectToAction("Index");
         }
 
-        [TenantAuthorize]
+        [Authorize]
         public ActionResult Edit(int id)
         {
             var interview = _uow.Interviews.GetAll(
@@ -347,7 +337,7 @@ namespace HR.Web.Controllers
             return View(interview);
         }
 
-        [TenantAuthorize]
+        [Authorize]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public ActionResult Edit(Interview model)
@@ -383,7 +373,7 @@ namespace HR.Web.Controllers
             return RedirectToAction("Index");
         }
 
-        [TenantAuthorize]
+        [Authorize]
         public ActionResult Delete(int id)
         {
             var interview = _uow.Interviews.GetAll(
@@ -405,7 +395,7 @@ namespace HR.Web.Controllers
             return View(interview);
         }
 
-        [TenantAuthorize]
+        [Authorize]
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public ActionResult DeleteConfirmed(int id)

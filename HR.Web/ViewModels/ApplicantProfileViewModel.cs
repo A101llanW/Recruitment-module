@@ -26,10 +26,12 @@ namespace HR.Web.ViewModels
 
         [Required, Range(0, 60)]
         [Display(Name = "Total Years Experience")]
+        [DisplayFormat(DataFormatString = "{0:0.##}", ApplyFormatInEditMode = true)]
         public decimal? TotalYearsExperience { get; set; }
 
         [Range(0, 60)]
         [Display(Name = "Relevant Years Experience (Technical)")]
+        [DisplayFormat(DataFormatString = "{0:0.##}", ApplyFormatInEditMode = true)]
         public decimal? RelevantYearsExperience { get; set; }
 
         [Display(Name = "Most Recent Company")]

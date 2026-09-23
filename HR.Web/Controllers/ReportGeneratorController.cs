@@ -80,29 +80,64 @@ namespace HR.Web.Controllers
         {
             try
             {
-                if (string.IsNullOrEmpty(fileName))
+                if (string.IsNullOrEmpty(fileName) || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
                 {
                     return HttpNotFound();
                 }
 
-                var filePath = Path.Combine(Server.MapPath("~/Reports"), fileName);
-                if (!System.IO.File.Exists(filePath))
+                var reportsDirectory = Path.GetFullPath(Server.MapPath("~/Reports"));
+                var filePath = Path.GetFullPath(Path.Combine(reportsDirectory, fileName));
+                var reportsRoot = reportsDirectory.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                    ? reportsDirectory
+                    : reportsDirectory + Path.DirectorySeparatorChar;
+                if (!filePath.StartsWith(reportsRoot, StringComparison.OrdinalIgnoreCase)
+                    || !System.IO.File.Exists(filePath))
                 {
                     return HttpNotFound();
                 }
 
-                string extension = Path.GetExtension(fileName).ToLower();
-                string contentType = "application/octet-stream";
-                
-                if (extension == ".csv") contentType = "text/csv";
-                else if (extension == ".pdf") contentType = "application/pdf";
-                else if (extension == ".html") contentType = "text/html";
+                string extension = Path.GetExtension(fileName).ToLowerInvariant();
+                string contentType;
+                string downloadName = fileName;
 
-                return File(filePath, contentType, fileName);
+                if (extension == ".csv")
+                {
+                    contentType = "text/csv";
+                }
+                else if (extension == ".html")
+                {
+                    contentType = "text/html; charset=utf-8";
+                }
+                else if (extension == ".pdf" && ReportFileLooksLikeHtml(filePath))
+                {
+                    // Legacy reports were HTML saved with a .pdf extension.
+                    contentType = "text/html; charset=utf-8";
+                    downloadName = Path.ChangeExtension(fileName, ".html");
+                }
+                else if (extension == ".pdf")
+                {
+                    contentType = "application/pdf";
+                }
+                else
+                {
+                    contentType = "application/octet-stream";
+                }
+
+                return File(filePath, contentType, downloadName);
             }
             catch
             {
                 return HttpNotFound();
+            }
+        }
+
+        private static bool ReportFileLooksLikeHtml(string filePath)
+        {
+            using (var reader = new StreamReader(filePath, detectEncodingFromByteOrderMarks: true))
+            {
+                var sample = (reader.ReadLine() ?? string.Empty).TrimStart();
+                return sample.StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase)
+                    || sample.StartsWith("<html", StringComparison.OrdinalIgnoreCase);
             }
         }
     }

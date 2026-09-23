@@ -1,0 +1,26 @@
+
+
+
+name         : Hirehub
+state        : Started
+physicalPath : C:\inetpub\wwwroot\Hirehub
+Bindings     : *:5002:
+
+
+
+
+
+Value  
+-----  
+Started
+
+
+
+LOCAL_ERROR=Unable to connect to the remote server
+FIREWALL=exists
+ADDED_BINDING_8080
+*:5002:
+*:8080:
+
+LOCAL8080=200
+TITLE=Login - NanoHireHub

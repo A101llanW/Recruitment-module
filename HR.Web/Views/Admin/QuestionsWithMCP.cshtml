@@ -2,7 +2,10 @@
 @{
     ViewBag.Title = "Question Bank";
     Layout = "~/Views/Shared/_Layout.cshtml";
+    var canEditQuestions = ViewBag.CanEditQuestions != null && (bool)ViewBag.CanEditQuestions;
     var canManageQuestions = ViewBag.CanManageQuestions != null && (bool)ViewBag.CanManageQuestions;
+    var showQuestionActions = canEditQuestions || canManageQuestions;
+    var tenantToken = ViewBag.TenantToken as string;
 }
 
 <div class="container mt-4 mb-5">
@@ -23,7 +26,7 @@
             }
             @if (canManageQuestions)
             {
-            <a class="btn btn-success shadow-sm" href="@Url.Action("EditQuestion", "Admin")">
+            <a class="btn btn-success shadow-sm" href="@Url.Action("EditQuestion", "Admin", new { tenant = tenantToken })">
                 <i class="fas fa-plus mr-1"></i> Add New Question
             </a>
             }
@@ -81,7 +84,7 @@
                             }
                             <th>Question Details</th>
                             <th>Choices & Weights</th>
-                            @if (canManageQuestions)
+                            @if (showQuestionActions)
                             {
                             <th class="text-right pr-4">Actions</th>
                             }
@@ -122,20 +125,26 @@
                                     }
                                     </div>
                                 </td>
-                                @if (canManageQuestions)
+                                @if (showQuestionActions)
                                 {
                                 <td class="text-right pr-4 align-middle">
                                     <div class="btn-group">
-                                        <a class="btn btn-sm btn-outline-primary" href="@Url.Action("EditQuestion", "Admin", new { id = q.Id })" title="Edit question">
+                                        @if (canEditQuestions)
+                                        {
+                                        <a class="btn btn-sm btn-outline-primary" href="@Url.Action("EditQuestion", "Admin", new { tenant = tenantToken, id = q.Id })" title="Edit question">
                                             <i class="fas fa-edit mr-1"></i> Edit
                                         </a>
-                                        <form method="post" action="@Url.Action("DeleteQuestion", "Admin")" style="display:inline;" onsubmit="return confirm('Permanently delete this question?');">
+                                        }
+                                        @if (canManageQuestions)
+                                        {
+                                        <form method="post" action="@Url.Action("DeleteQuestion", "Admin", new { tenant = tenantToken })" style="display:inline;" onsubmit="return confirm('Permanently delete this question?');">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="id" value="@q.Id" />
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete question">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         </form>
+                                        }
                                     </div>
                                 </td>
                                 }
@@ -143,7 +152,7 @@
                         }
                         @if (!Model.Any()) {
                             <tr>
-                                <td colspan="@(canManageQuestions ? 4 : 2)" class="text-center py-5 text-muted bg-white">
+                                <td colspan="@(canManageQuestions ? 4 : showQuestionActions ? 3 : 2)" class="text-center py-5 text-muted bg-white">
                                     <div class="opacity-25 mb-3">
                                         <i class="fas fa-question-circle fa-4x"></i>
                                     </div>

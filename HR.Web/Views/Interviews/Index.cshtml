@@ -325,7 +325,7 @@
                     <div class="d-flex flex-column flex-md-row justify-content-center align-items-stretch mx-auto" style="gap: 1rem; max-width: 820px;">
                         <div class="email-choice-card flex-fill" style="max-width: 400px; margin-left: auto; margin-right: auto;">
                             <h6 class="font-weight-bold mb-2 text-center">Use Template</h6>
-                            <p class="text-muted small mb-3 text-center">Load wording from <strong>Admin &rarr; Email wording</strong> (merged with this candidate's interview details), edit, then send.</p>
+                            <p class="text-muted small mb-3 text-center">Load your company's saved email template (merged with this candidate's interview details), edit it, then send.</p>
                             <div class="text-center">
                                 <button type="button" class="btn btn-outline-primary px-4" data-interview-email-action="template">
                                     <i class="fas fa-file-alt mr-2"></i>Use Template
@@ -370,12 +370,12 @@
 
                         <div class="mb-3" id="interviewEmailTemplateSelectorSection">
                             <label class="font-weight-bold mb-1">Template</label>
-                            <div class="form-control bg-light">Interview candidate - standard (from Email wording)</div>
+                            <div class="form-control bg-light">Interview candidate - standard (saved template)</div>
                         </div>
 
                         <div class="mb-3 interview-email-template-compose p-3">
                             <h6 class="text-uppercase text-muted small font-weight-bold mb-2">Compose this email</h6>
-                            <p class="small text-muted mb-3">Editor matches <strong>Admin &rarr; Email wording</strong>. Scroll to CC options and <strong>Send</strong>.</p>
+                            <p class="small text-muted mb-3">Scroll to CC options and <strong>Send</strong>.</p>
                             <label class="font-weight-bold mb-1" for="interviewEmailEditorSubject">Subject line</label>
                             <input type="text" id="interviewEmailEditorSubject" name="subject" class="form-control mb-3" maxlength="255" />
                             <label class="font-weight-bold mb-1" for="interviewEmailEditorBody">Message</label>
@@ -424,7 +424,7 @@
                     <div class="d-flex flex-column flex-md-row justify-content-center align-items-stretch mx-auto" style="gap: 1rem; max-width: 820px;">
                         <div class="email-choice-card flex-fill" style="max-width: 400px; margin-left: auto; margin-right: auto;">
                             <h6 class="font-weight-bold mb-2 text-center">Use Template</h6>
-                            <p class="text-muted small mb-3 text-center">Load wording from <strong>Admin &rarr; Email wording</strong> (sample merge), edit, then send to all scheduled candidates.</p>
+                            <p class="text-muted small mb-3 text-center">Load your company's saved email template (sample merge), edit it, then send to all scheduled candidates.</p>
                             <div class="text-center">
                                 <button type="button" class="btn btn-outline-primary px-4" data-interview-bulk-email-action="template">
                                     <i class="fas fa-file-alt mr-2"></i>Use Template
@@ -468,7 +468,7 @@
 
                         <div class="mb-3 d-none" id="interviewBulkTemplateSelectorSection">
                             <label class="font-weight-bold mb-1">Template</label>
-                            <div class="form-control bg-light">Interview candidate - standard (from Email wording)</div>
+                            <div class="form-control bg-light">Interview candidate - standard (saved template)</div>
                         </div>
 
                         <div class="mb-3 interview-email-template-compose p-3">
@@ -511,8 +511,14 @@
     @if (canManageInterviews)
     {
         <script src="@Url.Content("~/Scripts/email-workflow-modals.js")"></script>
-        <script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.4/tinymce.min.js" referrerpolicy="origin"></script>
+        <script src="@Url.Content("~/Scripts/tinymce-loader.js")"></script>
         <script>
+            function syncInterviewEmailEditorToForm() {
+                if (typeof tinymce !== 'undefined') {
+                    tinymce.triggerSave();
+                }
+            }
+
             function setInterviewSingleEditorHtml(html) {
                 var ed = typeof tinymce !== 'undefined' ? tinymce.get('interviewEmailEditorBody') : null;
                 if (ed) {
@@ -534,64 +540,72 @@
             }
 
             function ensureInterviewSingleTinyMce(done) {
-                if (typeof tinymce === 'undefined') {
+                var loader = window.HrTinyMceLoader;
+                if (!loader) {
                     if (done) done();
                     return;
                 }
-                if (tinymce.get('interviewBulkEmailEditorBody')) {
-                    tinymce.remove(tinymce.get('interviewBulkEmailEditorBody'));
-                }
-                if (tinymce.get('interviewEmailEditorBody')) {
+                loader.removeExcept('interviewEmailEditorBody');
+                if (loader.get('interviewEmailEditorBody')) {
                     if (done) done();
                     return;
                 }
                 var finish = window.HrEmailWorkflow && window.HrEmailWorkflow.withCallbackTimeout
                     ? window.HrEmailWorkflow.withCallbackTimeout(done, 10000)
                     : done;
-                tinymce.init({
-                    selector: '#interviewEmailEditorBody',
-                    height: 320,
-                    menubar: false,
-                    plugins: 'link lists autoresize',
-                    toolbar: 'undo redo | styles | bold italic underline | bullist numlist | link removeformat',
-                    branding: false,
-                    license_key: 'gpl',
-                    setup: function (editor) {
-                        editor.on('init', function () {
-                            if (finish) finish();
-                        });
+                loader.whenReady(function (tinymce, error) {
+                    if (!tinymce || error) {
+                        if (finish) finish();
+                        return;
                     }
+                    loader.init({
+                        selector: '#interviewEmailEditorBody',
+                        height: 320,
+                        plugins: 'link lists autoresize',
+                        toolbar: 'undo redo | styles | bold italic underline | bullist numlist | link removeformat',
+                        setup: function (editor) {
+                            editor.on('init', function () {
+                                if (finish) finish();
+                            });
+                        }
+                    }).catch(function () {
+                        if (finish) finish();
+                    });
                 });
             }
 
             function ensureInterviewBulkTinyMce(done) {
-                if (typeof tinymce === 'undefined') {
+                var loader = window.HrTinyMceLoader;
+                if (!loader) {
                     if (done) done();
                     return;
                 }
-                if (tinymce.get('interviewEmailEditorBody')) {
-                    tinymce.remove(tinymce.get('interviewEmailEditorBody'));
-                }
-                if (tinymce.get('interviewBulkEmailEditorBody')) {
+                loader.removeExcept('interviewBulkEmailEditorBody');
+                if (loader.get('interviewBulkEmailEditorBody')) {
                     if (done) done();
                     return;
                 }
                 var finish = window.HrEmailWorkflow && window.HrEmailWorkflow.withCallbackTimeout
                     ? window.HrEmailWorkflow.withCallbackTimeout(done, 10000)
                     : done;
-                tinymce.init({
-                    selector: '#interviewBulkEmailEditorBody',
-                    height: 320,
-                    menubar: false,
-                    plugins: 'link lists autoresize',
-                    toolbar: 'undo redo | styles | bold italic underline | bullist numlist | link removeformat',
-                    branding: false,
-                    license_key: 'gpl',
-                    setup: function (editor) {
-                        editor.on('init', function () {
-                            if (finish) finish();
-                        });
+                loader.whenReady(function (tinymce, error) {
+                    if (!tinymce || error) {
+                        if (finish) finish();
+                        return;
                     }
+                    loader.init({
+                        selector: '#interviewBulkEmailEditorBody',
+                        height: 320,
+                        plugins: 'link lists autoresize',
+                        toolbar: 'undo redo | styles | bold italic underline | bullist numlist | link removeformat',
+                        setup: function (editor) {
+                            editor.on('init', function () {
+                                if (finish) finish();
+                            });
+                        }
+                    }).catch(function () {
+                        if (finish) finish();
+                    });
                 });
             }
 
@@ -847,6 +861,16 @@
                         if (loadPreview) {
                             $('#interviewEmailEditorModal').data('interviewSingleLoadPreview', false);
                             reloadInterviewCandidateTemplatePreview();
+                        } else {
+                            var ed = typeof tinymce !== 'undefined' ? tinymce.get('interviewEmailEditorBody') : null;
+                            if (ed) {
+                                var ta = document.getElementById('interviewEmailEditorBody');
+                                var starter = (ta && ta.value) ? ta.value : '';
+                                if (!starter || !starter.trim()) {
+                                    starter = '<p></p>';
+                                }
+                                ed.setContent(starter);
+                            }
                         }
                     });
                 });
@@ -857,8 +881,7 @@
                     }
                 });
                 $('#interviewEmailEditorForm').on('submit', function () {
-                    var ed = typeof tinymce !== 'undefined' ? tinymce.get('interviewEmailEditorBody') : null;
-                    if (ed) ed.save();
+                    syncInterviewEmailEditorToForm();
                     var ta = document.getElementById('interviewEmailEditorBody');
                     if (ta && ta.value && ta.value.length > 20000) {
                         alert('Email body is too long (maximum 20000 characters).');
@@ -872,6 +895,16 @@
                         if (loadPreview) {
                             $('#interviewBulkEmailEditorModal').data('interviewBulkLoadPreview', false);
                             reloadInterviewBulkTemplatePreview();
+                        } else {
+                            var ed = typeof tinymce !== 'undefined' ? tinymce.get('interviewBulkEmailEditorBody') : null;
+                            if (ed) {
+                                var ta = document.getElementById('interviewBulkEmailEditorBody');
+                                var starter = (ta && ta.value) ? ta.value : '';
+                                if (!starter || !starter.trim()) {
+                                    starter = '<p></p>';
+                                }
+                                ed.setContent(starter);
+                            }
                         }
                     });
                 });
@@ -882,8 +915,7 @@
                     }
                 });
                 $('#interviewBulkEmailEditorForm').on('submit', function () {
-                    var ed = typeof tinymce !== 'undefined' ? tinymce.get('interviewBulkEmailEditorBody') : null;
-                    if (ed) ed.save();
+                    syncInterviewEmailEditorToForm();
                     var ta = document.getElementById('interviewBulkEmailEditorBody');
                     if (ta && ta.value && ta.value.length > 20000) {
                         alert('Email body is too long (maximum 20000 characters).');

@@ -43,6 +43,10 @@ namespace HR.Web.Data
         public DbSet<SystemSetting> SystemSettings { get; set; }
         public DbSet<TemporaryCredential> TemporaryCredentials { get; set; }
         public DbSet<CompanyHrCcEmail> CompanyHrCcEmails { get; set; }
+        public DbSet<CompanySmtpSettings> CompanySmtpSettings { get; set; }
+        public DbSet<CompanyApplicationNotifyRecipient> CompanyApplicationNotifyRecipients { get; set; }
+        public DbSet<ApplicationNotificationAccessToken> ApplicationNotificationAccessTokens { get; set; }
+        public DbSet<PositionView> PositionViews { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
@@ -172,6 +176,41 @@ namespace HR.Web.Data
                 .WithMany(c => c.HrCcEmails)
                 .HasForeignKey(e => e.CompanyId)
                 .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<CompanySmtpSettings>()
+                .HasRequired(s => s.Company)
+                .WithOptional(c => c.SmtpSettings)
+                .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<CompanyApplicationNotifyRecipient>()
+                .HasRequired(r => r.Company)
+                .WithMany(c => c.ApplicationNotifyRecipients)
+                .HasForeignKey(r => r.CompanyId)
+                .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<ApplicationNotificationAccessToken>()
+                .HasRequired(t => t.Application)
+                .WithMany()
+                .HasForeignKey(t => t.ApplicationId)
+                .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<ApplicationNotificationAccessToken>()
+                .HasRequired(t => t.Recipient)
+                .WithMany()
+                .HasForeignKey(t => t.RecipientId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<PositionView>()
+                .HasRequired(v => v.User)
+                .WithMany()
+                .HasForeignKey(v => v.UserId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<PositionView>()
+                .HasRequired(v => v.Position)
+                .WithMany()
+                .HasForeignKey(v => v.PositionId)
+                .WillCascadeOnDelete(false);
         }
 
         private static string ResolveConnectionNameOrString()

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Web;
@@ -9,6 +8,7 @@ using HR.Web.Filters;
 using HR.Web.Helpers;
 using HR.Web.Models;
 using HR.Web.Services;
+using HR.Web.ViewModels;
 
 namespace HR.Web.Controllers
 {
@@ -44,47 +44,14 @@ namespace HR.Web.Controllers
             }
         }
 
-        private static int ParsePostedInt32(string raw, int defaultValue)
+        private static int[] NormalizePostedIdArray(int[] ids)
         {
-            int v;
-            return int.TryParse(raw, out v) ? v : defaultValue;
-        }
-
-        private static bool ParsePostedCheckbox(NameValueCollection form, string key)
-        {
-            if (form == null)
-            {
-                return false;
-            }
-
-            var v = form[key];
-            return string.Equals(v, "true", StringComparison.OrdinalIgnoreCase) || string.Equals(v, "on", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static int[] ParsePostedInt32Array(NameValueCollection form, string key)
-        {
-            if (form == null)
+            if (ids == null || ids.Length == 0)
             {
                 return new int[0];
             }
 
-            var vals = form.GetValues(key);
-            if (vals == null || vals.Length == 0)
-            {
-                return new int[0];
-            }
-
-            var list = new List<int>();
-            foreach (var s in vals)
-            {
-                int id;
-                if (int.TryParse(s, out id) && id > 0)
-                {
-                    list.Add(id);
-                }
-            }
-
-            return list.ToArray();
+            return ids.Where(id => id > 0).ToArray();
         }
 
         private static string WrapCandidateEmailDocument(string innerHtml)
@@ -370,18 +337,18 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
-        public async Task<ActionResult> SendFailedCandidateEmail()
+        public async Task<ActionResult> SendFailedCandidateEmail(CandidateEmailSendForm form)
         {
-            var form = Request.Form;
-            var applicationId = ParsePostedInt32(form["applicationId"], 0);
-            var subject = form["subject"];
-            var body = form["body"];
-            var composeMode = form["composeMode"];
-            var templateKey = form["templateKey"];
-            var includePanelistCc = ParsePostedCheckbox(form, "includePanelistCc");
-            var includeHrCc = ParsePostedCheckbox(form, "includeHrCc");
-            var selectedPanelistIds = ParsePostedInt32Array(form, "selectedPanelistIds");
-            var selectedHrCcIds = ParsePostedInt32Array(form, "selectedHrCcIds");
+            form = form ?? new CandidateEmailSendForm();
+            var applicationId = form.ApplicationId;
+            var subject = form.Subject;
+            var body = form.Body;
+            var composeMode = form.ComposeMode;
+            var templateKey = form.TemplateKey;
+            var includePanelistCc = form.IncludePanelistCc;
+            var includeHrCc = form.IncludeHrCc;
+            var selectedPanelistIds = NormalizePostedIdArray(form.SelectedPanelistIds);
+            var selectedHrCcIds = NormalizePostedIdArray(form.SelectedHrCcIds);
 
             var app = _uow.Applications.GetAll(a => a.Applicant, a => a.Position)
                 .FirstOrDefault(a => a.Id == applicationId);
@@ -452,7 +419,7 @@ namespace HR.Web.Controllers
                 return RedirectWithEmailError("No CC recipients could be resolved. Check selected addresses.");
             }
 
-            await _email.SendAsync(recipientEmail.Trim(), emailContent.Subject, emailContent.BodyHtml, ccRecipients);
+            await _email.SendAsync(recipientEmail.Trim(), emailContent.Subject, emailContent.BodyHtml, ccRecipients, app.CompanyId);
 
             app.FailedCandidateEmailSentAt = DateTime.UtcNow;
             _uow.Applications.Update(app);
@@ -522,18 +489,18 @@ namespace HR.Web.Controllers
         [ValidateAntiForgeryToken]
         [TenantAuthorize(Roles = "Admin, SuperAdmin")]
         [RoleBasedAuthorization("Admin")]
-        public async Task<ActionResult> SendFailedCandidatesBulkEmail()
+        public async Task<ActionResult> SendFailedCandidatesBulkEmail(CandidateEmailSendForm form)
         {
-            var form = Request.Form;
-            var positionId = ParsePostedInt32(form["positionId"], 0);
-            var subject = form["subject"];
-            var body = form["body"];
-            var composeMode = form["composeMode"];
-            var templateKey = form["templateKey"];
-            var includePanelistCc = ParsePostedCheckbox(form, "includePanelistCc");
-            var includeHrCc = ParsePostedCheckbox(form, "includeHrCc");
-            var selectedPanelistIds = ParsePostedInt32Array(form, "selectedPanelistIds");
-            var selectedHrCcIds = ParsePostedInt32Array(form, "selectedHrCcIds");
+            form = form ?? new CandidateEmailSendForm();
+            var positionId = form.PositionId;
+            var subject = form.Subject;
+            var body = form.Body;
+            var composeMode = form.ComposeMode;
+            var templateKey = form.TemplateKey;
+            var includePanelistCc = form.IncludePanelistCc;
+            var includeHrCc = form.IncludeHrCc;
+            var selectedPanelistIds = NormalizePostedIdArray(form.SelectedPanelistIds);
+            var selectedHrCcIds = NormalizePostedIdArray(form.SelectedHrCcIds);
 
             if (positionId <= 0)
             {
@@ -610,7 +577,7 @@ namespace HR.Web.Controllers
                     selectedHrCcIds,
                     requireRecipientsWhenToggled: false);
 
-                return _email.SendAsync(recipientEmail, emailContent.Subject, emailContent.BodyHtml, ccRecipients);
+                return _email.SendAsync(recipientEmail, emailContent.Subject, emailContent.BodyHtml, ccRecipients, r.CompanyId ?? position.CompanyId);
             }).ToList();
 
             foreach (var emailTask in emailTasks)

@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Mvc;
-using HR.Web.Filters;
 using HR.Web.Helpers;
 using HR.Web.Models;
 using HR.Web.Services;
@@ -15,7 +14,7 @@ namespace HR.Web.Controllers
     public partial class ApplicationsController
     {
         [HttpPost]
-        [TenantAuthorize]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<ActionResult> InviteNextQuestionnaireStage(int applicationId)
         {
@@ -34,7 +33,7 @@ namespace HR.Web.Controllers
             if (applicationId <= 0)
             {
                 TempData["ErrorMessage"] = "Invalid application.";
-                return RedirectToApplicationsIndex();
+                return RedirectToAction("Index");
             }
 
             var application = _uow.Context.Applications
@@ -45,14 +44,14 @@ namespace HR.Web.Controllers
             if (application == null)
             {
                 TempData["ErrorMessage"] = "Application not found.";
-                return RedirectToApplicationsIndex();
+                return RedirectToAction("Index");
             }
 
             var position = application.Position;
             if (position == null)
             {
                 TempData["ErrorMessage"] = "Position not found.";
-                return RedirectToApplicationsIndex();
+                return RedirectToAction("Index");
             }
 
             var tenantValidationResult = ValidatePositionTenantAccess(position, "Access Denied");
@@ -65,25 +64,25 @@ namespace HR.Web.Controllers
             if (maxStages <= 1)
             {
                 TempData["ErrorMessage"] = "This position does not use multiple questionnaire stages.";
-                return RedirectToApplicationsIndex();
+                return RedirectToAction("Index");
             }
 
             if (application.LastCompletedQuestionnaireStage <= 0)
             {
                 TempData["ErrorMessage"] = "The candidate has not completed stage 1 yet.";
-                return RedirectToApplicationsIndex();
+                return RedirectToAction("Index");
             }
 
             if (application.LastCompletedQuestionnaireStage >= maxStages)
             {
                 TempData["ErrorMessage"] = "All questionnaire stages are already complete.";
-                return RedirectToApplicationsIndex();
+                return RedirectToAction("Index");
             }
 
             if (application.PendingQuestionnaireStage.HasValue)
             {
                 TempData["ErrorMessage"] = "The candidate already has an open questionnaire stage.";
-                return RedirectToApplicationsIndex();
+                return RedirectToAction("Index");
             }
 
             var nextStage = application.LastCompletedQuestionnaireStage + 1;
@@ -97,15 +96,18 @@ namespace HR.Web.Controllers
             _uow.Applications.Update(application);
             _uow.Complete();
 
-            var openedMsg = string.Format(
+            TempData["SuccessMessage"] = string.Format(
                 "Questionnaire stage {0} has been opened for the candidate.",
                 nextStage);
 
             var recipientEmail = application.Applicant != null ? application.Applicant.Email : null;
             if (string.IsNullOrWhiteSpace(recipientEmail))
             {
+                var openedMsg = string.Format(
+                    "Questionnaire stage {0} has been opened for the candidate.",
+                    nextStage);
                 TempData["SuccessMessage"] = openedMsg + " No invitation email was sent because the applicant has no email address on file.";
-                return RedirectToApplicationsIndex();
+                return RedirectToAction("Index");
             }
 
             var company = application.CompanyId.HasValue ? _uow.Companies.Get(application.CompanyId.Value) : null;
@@ -139,27 +141,25 @@ namespace HR.Web.Controllers
 
                 if (rendered == null)
                 {
-                    TempData["ApplicationEmailError"] = openedMsg + " However, the invitation email template could not be rendered.";
-                    return RedirectToApplicationsIndex();
+                    TempData["ApplicationEmailError"] = "The stage was opened, but the invitation email template could not be rendered.";
+                    return RedirectToAction("Index");
                 }
 
                 var emailContent = rendered;
-                await _email.SendCriticalAsync(
+                await _email.SendAsync(
                     recipientEmail.Trim(),
                     emailContent.Subject ?? "Questionnaire invitation",
-                    WrapCandidateEmailDocument(emailContent.BodyHtml ?? string.Empty));
-
-                TempData["SuccessMessage"] = openedMsg + " Invitation email sent.";
+                    WrapCandidateEmailDocument(emailContent.BodyHtml ?? string.Empty),
+                    application.CompanyId);
             }
             catch (Exception ex)
             {
                 TempData["ApplicationEmailError"] = string.Format(
-                    "{0} However, the invitation email could not be sent ({1}).",
-                    openedMsg,
+                    "The stage was opened, but the invitation email could not be sent ({0}).",
                     ex.Message);
             }
 
-            return RedirectToApplicationsIndex();
+            return RedirectToAction("Index");
         }
 
         private string BuildQuestionnaireInvitationPath(Company company, int positionId)
