@@ -126,20 +126,17 @@ namespace HR.Web.Controllers
 <p>If you received this email, outbound mail for your company is configured correctly.</p>",
                 AppConfig.ProductName);
 
-            try
-            {
-                await emailService.SendRequiredAsync(model.TestRecipient.Trim(), subject, body, targetCompanyId);
-                TempData["SuccessMessage"] = string.Format("Test email sent to {0}.", model.TestRecipient.Trim());
-            }
-            catch (Exception ex)
+            var sendResult = await emailService.TrySendAsync(model.TestRecipient.Trim(), subject, body, targetCompanyId);
+            if (!sendResult.Success)
             {
                 return RedirectWithCompanySmtpError(
                     isSuperAdmin,
                     actorCompanyId,
                     targetCompanyId,
-                    DescribeSmtpTestFailure(ex));
+                    "Test email could not be sent: " + (sendResult.ErrorMessage ?? "Check your SMTP settings and try again."));
             }
 
+            TempData["SuccessMessage"] = string.Format("Test email sent to {0}.", model.TestRecipient.Trim());
             return RedirectToCompanySmtpSettings(isSuperAdmin, isSuperAdmin ? (int?)targetCompanyId : null);
         }
 
@@ -205,28 +202,6 @@ namespace HR.Web.Controllers
         private ActionResult RedirectToCompanySmtpSettings(bool isSuperAdmin, int? companyId)
         {
             return RedirectToAction("CompanySmtpSettings", new { companyId = isSuperAdmin ? companyId : null });
-        }
-
-        private static string DescribeSmtpTestFailure(Exception ex)
-        {
-            var inner = ex;
-            while (inner != null && inner.InnerException != null)
-            {
-                inner = inner.InnerException;
-            }
-
-            var detail = inner != null ? inner.Message : null;
-            if (string.IsNullOrWhiteSpace(detail))
-            {
-                return "Test email could not be sent. Check the SMTP host, port, username, and password.";
-            }
-
-            if (detail.Length > 300)
-            {
-                detail = detail.Substring(0, 300);
-            }
-
-            return "Test email could not be sent. " + detail;
         }
 
         private ActionResult RedirectWithCompanySmtpError(bool isSuperAdmin, int? actorCompanyId, int? targetCompanyId, string message)

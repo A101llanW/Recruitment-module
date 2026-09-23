@@ -39,7 +39,7 @@ namespace HR.Web.Controllers
                 company != null ? (int?)company.Id : null);
         }
 
-        private void TryNotifyInterviewerByEmail(
+        private EmailSendResult TryNotifyInterviewerByEmail(
             string recipientEmail,
             Company company,
             string interviewerName,
@@ -50,7 +50,7 @@ namespace HR.Web.Controllers
         {
             if (string.IsNullOrWhiteSpace(recipientEmail))
             {
-                return;
+                return EmailSendResult.Skipped();
             }
 
             var rendered = RenderInterviewerAssignedTemplate(
@@ -62,21 +62,22 @@ namespace HR.Web.Controllers
                 mode);
             if (rendered == null)
             {
-                return;
+                return EmailSendResult.Skipped();
             }
 
-            _email.SendAsync(
+            return _email.TrySendAsync(
                 recipientEmail.Trim(),
                 rendered.Subject ?? "Interview assigned",
-                WrapCandidateEmailDocument(rendered.BodyHtml)).GetAwaiter().GetResult();
+                WrapCandidateEmailDocument(rendered.BodyHtml),
+                company != null ? (int?)company.Id : null).GetAwaiter().GetResult();
         }
 
-        private void NotifyInterviewerOfBooking(int interviewerId, int interviewId, int applicationId, DateTime scheduledAt, string mode)
+        private EmailSendResult NotifyInterviewerOfBooking(int interviewerId, int interviewId, int applicationId, DateTime scheduledAt, string mode)
         {
             var interviewer = _uow.Users.Get(interviewerId);
             if (interviewer == null)
             {
-                return;
+                return EmailSendResult.Skipped();
             }
 
             var application = LoadInterviewApplication(applicationId);
@@ -89,7 +90,7 @@ namespace HR.Web.Controllers
                 ? application.Position.Title
                 : null;
 
-            TryNotifyInterviewerByEmail(
+            return TryNotifyInterviewerByEmail(
                 interviewer.Email,
                 company,
                 interviewerName,
@@ -99,17 +100,17 @@ namespace HR.Web.Controllers
                 mode);
         }
 
-        private void TryNotifyInterviewerAfterInterviewCreated(Interview interview)
+        private EmailSendResult TryNotifyInterviewerAfterInterviewCreated(Interview interview)
         {
             if (interview == null)
             {
-                return;
+                return EmailSendResult.Skipped();
             }
 
             var interviewer = interview.InterviewerId > 0 ? _uow.Users.Get(interview.InterviewerId) : null;
             if (interviewer == null)
             {
-                return;
+                return EmailSendResult.Skipped();
             }
 
             var application = LoadInterviewApplication(interview.ApplicationId);
@@ -124,7 +125,7 @@ namespace HR.Web.Controllers
                 ? application.Position.Title
                 : null;
 
-            TryNotifyInterviewerByEmail(
+            return TryNotifyInterviewerByEmail(
                 interviewer.Email,
                 company,
                 interviewerName,

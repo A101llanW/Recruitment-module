@@ -146,11 +146,17 @@ namespace HR.Web.Controllers
                 }
 
                 var emailContent = rendered;
-                await _email.SendAsync(
+                var sendResult = await _email.TrySendAsync(
                     recipientEmail.Trim(),
                     emailContent.Subject ?? "Questionnaire invitation",
                     WrapCandidateEmailDocument(emailContent.BodyHtml ?? string.Empty),
                     application.CompanyId);
+                if (sendResult.Attempted && !sendResult.Success)
+                {
+                    TempData["ApplicationEmailError"] = string.Format(
+                        "The stage was opened, but the invitation email could not be sent ({0}).",
+                        sendResult.ErrorMessage ?? "Check SMTP settings and try again.");
+                }
             }
             catch (Exception ex)
             {

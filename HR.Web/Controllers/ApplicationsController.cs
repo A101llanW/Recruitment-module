@@ -502,10 +502,15 @@ namespace HR.Web.Controllers
                 persistedApplication.Applicant != null &&
                 persistedApplication.Position != null)
             {
-                SendApplicationReceivedStandardEmail(
+                var emailResult = SendApplicationReceivedStandardEmail(
                     persistedApplication,
                     persistedApplication.Applicant,
                     persistedApplication.Position);
+                if (emailResult.Attempted && !emailResult.Success)
+                {
+                    TempData["ApplicationEmailWarning"] =
+                        "Your application was submitted, but we could not send the confirmation email. Our team has your submission.";
+                }
             }
 
             NotifyCompanyOfNewApplication(applicationModel.Id);

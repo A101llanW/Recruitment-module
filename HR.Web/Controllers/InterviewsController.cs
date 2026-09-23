@@ -137,8 +137,8 @@ namespace HR.Web.Controllers
                 }
 
                 var interview = CreateScheduledInterview(applicationId, interviewerId, scheduledAt, mode);
-                NotifyInterviewerOfBooking(interviewerId, interview.Id, applicationId, scheduledAt, mode);
-                return GetBookInterviewSuccessRedirect(returnTo, resumeEmailApplicationId, applicationId);
+                var notifyResult = NotifyInterviewerOfBooking(interviewerId, interview.Id, applicationId, scheduledAt, mode);
+                return GetBookInterviewSuccessRedirect(returnTo, resumeEmailApplicationId, applicationId, notifyResult);
             }
             catch (Exception ex)
             {
@@ -175,8 +175,14 @@ namespace HR.Web.Controllers
             return interview;
         }
 
-        private ActionResult GetBookInterviewSuccessRedirect(string returnTo, int? resumeEmailApplicationId, int applicationId)
+        private ActionResult GetBookInterviewSuccessRedirect(string returnTo, int? resumeEmailApplicationId, int applicationId, EmailSendResult interviewerNotifyResult = null)
         {
+            if (interviewerNotifyResult != null && interviewerNotifyResult.Attempted && !interviewerNotifyResult.Success)
+            {
+                TempData["InterviewEmailWarning"] =
+                    "Interview booked, but the interviewer notification email could not be sent. Check SMTP settings.";
+            }
+
             if (!string.Equals(returnTo, "interviews", StringComparison.OrdinalIgnoreCase))
             {
                 return RedirectToAction("Index");
@@ -309,7 +315,13 @@ namespace HR.Web.Controllers
 
             _uow.Interviews.Add(interviewModel);
             _uow.Complete();
-            TryNotifyInterviewerAfterInterviewCreated(interviewModel);
+            var notifyResult = TryNotifyInterviewerAfterInterviewCreated(interviewModel);
+            if (notifyResult.Attempted && !notifyResult.Success)
+            {
+                TempData["InterviewEmailWarning"] =
+                    "Interview saved, but the interviewer notification email could not be sent. Check SMTP settings.";
+            }
+
             return RedirectToAction("Index");
         }
 

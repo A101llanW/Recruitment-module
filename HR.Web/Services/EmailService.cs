@@ -14,7 +14,10 @@ namespace HR.Web.Services
         Task SendAsync(string to, string subject, string body, int? companyId);
         Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients);
         Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId);
-        Task SendRequiredAsync(string to, string subject, string body, int? companyId);
+        Task<EmailSendResult> TrySendAsync(string to, string subject, string body);
+        Task<EmailSendResult> TrySendAsync(string to, string subject, string body, int? companyId);
+        Task<EmailSendResult> TrySendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients);
+        Task<EmailSendResult> TrySendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId);
         Task SendPasswordResetEmailAsync(string to, string resetLink);
         Task SendPasswordResetEmailAsync(string to, string resetLink, int? companyId);
         Task SendMfaCodeEmailAsync(string to, string code);
@@ -72,42 +75,41 @@ namespace HR.Web.Services
 
         public async Task SendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId)
         {
-            if (string.IsNullOrWhiteSpace(to))
-            {
-                return;
-            }
-
-            try
-            {
-                await SendRequiredAsync(to, subject, body, ccRecipients, companyId).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                LogEmailFailure(to, ex, companyId);
-            }
+            await TrySendAsync(to, subject, body, ccRecipients, companyId).ConfigureAwait(false);
         }
 
-        public Task SendRequiredAsync(string to, string subject, string body, int? companyId)
+        public Task<EmailSendResult> TrySendAsync(string to, string subject, string body)
         {
-            return SendRequiredAsync(to, subject, body, null, companyId);
+            return TrySendAsync(to, subject, body, null, null);
         }
 
-        private async Task SendRequiredAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId)
+        public Task<EmailSendResult> TrySendAsync(string to, string subject, string body, int? companyId)
+        {
+            return TrySendAsync(to, subject, body, null, companyId);
+        }
+
+        public Task<EmailSendResult> TrySendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients)
+        {
+            return TrySendAsync(to, subject, body, ccRecipients, null);
+        }
+
+        public async Task<EmailSendResult> TrySendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId)
         {
             if (string.IsNullOrWhiteSpace(to))
             {
-                throw new ArgumentException("A recipient email address is required.");
+                return EmailSendResult.Skipped();
             }
 
             try
             {
                 var smtpConfig = _companySmtpSettingsService.ResolveForCompany(companyId);
                 await SendMailCoreAsync(to, subject, body, ccRecipients, smtpConfig).ConfigureAwait(false);
+                return EmailSendResult.Succeeded();
             }
             catch (Exception ex)
             {
                 LogEmailFailure(to, ex, companyId);
-                throw;
+                return EmailSendResult.Failed(ex.Message);
             }
         }
 

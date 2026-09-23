@@ -597,15 +597,16 @@ namespace HR.Web.Controllers
             return RepairBrokenApplicationScores(appsQuery.ToList());
         }
 
-        private void ScoreQuestionnaireApplication(Application application)
+        private bool ScoreQuestionnaireApplication(Application application)
         {
             if (application == null)
             {
-                return;
+                return false;
             }
 
-            TryRecalculateAndPersistApplicationScore(application);
+            var scored = TryRecalculateAndPersistApplicationScore(application);
             _uow.Complete();
+            return scored;
         }
 
         private void ClearQuestionnaireSession()
@@ -1191,8 +1192,20 @@ namespace HR.Web.Controllers
             _uow.Applications.Update(application);
             _uow.Complete();
             ClearPendingCoverLetter();
-            ScoreQuestionnaireApplication(application);
-            SendApplicationReceivedStandardEmail(application, applicant, position);
+            if (!ScoreQuestionnaireApplication(application))
+            {
+                TempData["ErrorMessage"] =
+                    "Your application was saved, but we could not calculate your questionnaire score. Please contact support or try again later.";
+                return RedirectToAction("Index", "Positions");
+            }
+
+            var emailResult = SendApplicationReceivedStandardEmail(application, applicant, position);
+            if (emailResult.Attempted && !emailResult.Success)
+            {
+                TempData["QuestionnaireEmailWarning"] =
+                    "Your application was submitted, but we could not send the confirmation email. Our team has your submission.";
+            }
+
             NotifyCompanyOfNewApplication(application.Id);
             return null;
         }
@@ -1221,21 +1234,27 @@ namespace HR.Web.Controllers
             existingApplication.PendingQuestionnaireStage = null;
             _uow.Applications.Update(existingApplication);
             _uow.Complete();
-            ScoreQuestionnaireApplication(existingApplication);
+            if (!ScoreQuestionnaireApplication(existingApplication))
+            {
+                TempData["ErrorMessage"] =
+                    "Your questionnaire responses were saved, but we could not calculate your score. Please contact support or try again later.";
+                return RedirectToAction("Index", "Positions");
+            }
+
             return null;
         }
 
-        private void SendApplicationReceivedStandardEmail(Application application, Applicant applicant, Position position)
+        private EmailSendResult SendApplicationReceivedStandardEmail(Application application, Applicant applicant, Position position)
         {
             if (application == null || applicant == null || position == null)
             {
-                return;
+                return EmailSendResult.Skipped();
             }
 
             var recipientEmail = applicant.Email;
             if (string.IsNullOrWhiteSpace(recipientEmail))
             {
-                return;
+                return EmailSendResult.Skipped();
             }
 
             try
@@ -1268,18 +1287,20 @@ namespace HR.Web.Controllers
                 {
                     System.Diagnostics.Trace.WriteLine(
                         "ApplicationReceivedStandard template could not be rendered for application " + application.Id);
-                    return;
+                    return EmailSendResult.Failed("Application received template could not be rendered.");
                 }
 
-                _email.SendAsync(
+                return _email.TrySendAsync(
                     recipientEmail.Trim(),
                     rendered.Subject ?? "Application received",
-                    WrapApplicationReceivedEmailBody(rendered.BodyHtml ?? string.Empty)).GetAwaiter().GetResult();
+                    WrapApplicationReceivedEmailBody(rendered.BodyHtml ?? string.Empty),
+                    application.CompanyId).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Trace.WriteLine(
                     "ApplicationReceivedStandard email failed for application " + application.Id + ": " + ex.Message);
+                return EmailSendResult.Failed(ex.Message);
             }
         }
 
