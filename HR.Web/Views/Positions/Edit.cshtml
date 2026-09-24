@@ -152,6 +152,10 @@
         box-shadow: 0 2px 8px rgba(52, 152, 219, 0.22);
         background: #f0f8ff;
     }
+    .questionnaire-stage-switcher-btn--locked {
+        border-color: #ffc107;
+        background: #fffdf4;
+    }
 </style>
 
 <div class="container-fluid" style="margin-top: 1.2rem;">
@@ -173,6 +177,9 @@
             g => g.Key,
             g => g.Select(pq => pq.StageNumber <= 0 ? 1 : pq.StageNumber).Distinct().OrderBy(s => s).ToList())
         : new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>());
+    var questionnaireLockMessage = ViewBag.QuestionnaireLockMessage as string;
+    var questionnaireLockedStages = ViewBag.QuestionnaireLockedStages as System.Collections.Generic.IList<int> ?? new System.Collections.Generic.List<int>();
+    var questionnaireMinStageCount = ViewBag.QuestionnaireMinStageCount as int? ?? 1;
     Html.EnableClientValidation(false);
     Html.EnableUnobtrusiveJavaScript(false);
     var currencyProp = typeof(HR.Web.Models.Position).GetProperty("Currency");
@@ -192,6 +199,13 @@
                 <input type="hidden" id="questionStagesPayload" name="questionStagesPayload" value="" />
                 <div id="selectedQuestionsHiddenContainer" aria-hidden="true"></div>
                 @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+                @if (!string.IsNullOrWhiteSpace(questionnaireLockMessage))
+                {
+                    <div class="alert alert-warning mb-3" role="alert">
+                        <strong><i class="fas fa-lock mr-1"></i>Questionnaire locked.</strong>
+                        @questionnaireLockMessage
+                    </div>
+                }
                 <div class="form-group mb-3">
                     @Html.LabelFor(m => m.Title, "Position Title", htmlAttributes: new { @class = "font-weight-bold w-100" })
                     @Html.TextBoxFor(m => m.Title, new { @class = "form-control mx-auto", placeholder = "e.g., Senior Software Engineer" })
@@ -297,7 +311,7 @@
                 </div>
                 <div id="questionnaireStageCountSection" class="form-group mb-3 @(Model.QuestionnaireStageCount > 1 ? "" : "d-none")">
                     @Html.LabelFor(m => m.QuestionnaireStageCount, "Number of questionnaire stages", new { @class = "font-weight-bold d-block" })
-                    @Html.TextBoxFor(m => m.QuestionnaireStageCount, new { @class = "form-control", type = "number", min = "1", max = "10", style = "max-width:120px;", id = "questionnaireStageCountInput" })
+                    @Html.TextBoxFor(m => m.QuestionnaireStageCount, new { @class = "form-control", type = "number", min = questionnaireMinStageCount.ToString(), max = "10", style = "max-width:120px;", id = "questionnaireStageCountInput" })
                     <small class="form-text text-muted">Stage 1 runs when the candidate first applies. Stages 2 and above stay closed until you open them from the Applications screen.</small>
                 </div>
 
@@ -593,7 +607,9 @@
 
     function initQuestionWeightAllocator() {
         return initQuestionnaireAssignmentEditor({
-            formId: document.getElementById('positionCreateForm') ? 'positionCreateForm' : 'positionEditForm'
+            formId: document.getElementById('positionCreateForm') ? 'positionCreateForm' : 'positionEditForm',
+            lockedStages: [@string.Join(", ", questionnaireLockedStages)],
+            minStageCount: @questionnaireMinStageCount
         });
     }
 

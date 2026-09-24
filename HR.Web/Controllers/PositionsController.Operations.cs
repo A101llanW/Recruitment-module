@@ -256,7 +256,7 @@ namespace HR.Web.Controllers
             return View("Create", positionModel);
         }
 
-        private void LoadPositionFormLookups(int selectedDepartmentId, IEnumerable<int> selectedQuestionIds, IDictionary<int, decimal> selectedQuestionWeights = null, IDictionary<int, HashSet<int>> selectedQuestionStages = null)
+        private void LoadPositionFormLookups(int selectedDepartmentId, IEnumerable<int> selectedQuestionIds, IDictionary<int, decimal> selectedQuestionWeights = null, IDictionary<int, HashSet<int>> selectedQuestionStages = null, int positionId = 0)
         {
             var departments = _uow.Departments.GetAll().AsQueryable();
             departments = _tenantService.ApplyTenantFilter(departments);
@@ -271,6 +271,27 @@ namespace HR.Web.Controllers
                 : new Dictionary<int, decimal>();
             ViewBag.SelectedQuestionStages = QuestionStagePayloadHelper.ToOrderedLists(selectedQuestionStages);
             ViewBag.QuestionnaireTemplates = new QuestionnaireTemplateService().GetActiveTemplatesForCurrentTenant();
+            ApplyQuestionnaireLockViewBag(positionId);
+        }
+
+        private void ApplyQuestionnaireLockViewBag(int positionId)
+        {
+            if (positionId <= 0)
+            {
+                ViewBag.QuestionnaireLockInfo = null;
+                ViewBag.QuestionnaireLockedStages = new List<int>();
+                ViewBag.QuestionnaireLockMessage = null;
+                ViewBag.QuestionnaireMinStageCount = 1;
+                return;
+            }
+
+            var lockInfo = PositionQuestionnaireLockHelper.GetLockInfo(_uow.Context, positionId);
+            ViewBag.QuestionnaireLockInfo = lockInfo;
+            ViewBag.QuestionnaireLockedStages = lockInfo.LockedStageNumbers != null
+                ? lockInfo.LockedStageNumbers.OrderBy(s => s).ToList()
+                : new List<int>();
+            ViewBag.QuestionnaireLockMessage = lockInfo.BuildLockMessage();
+            ViewBag.QuestionnaireMinStageCount = lockInfo.MinAllowedStageCount;
         }
 
         private ActionResult TrySaveNewPosition(Position model, int[] selectedQuestions, IDictionary<int, decimal> questionWeights, IDictionary<int, HashSet<int>> questionStages)
@@ -416,6 +437,55 @@ namespace HR.Web.Controllers
                 ModelState.AddModelError("", stageConfigError);
             }
 
+            try
+            {
+                var existingPosition = _uow.Positions.Get(positionModel.Id);
+                if (existingPosition == null)
+                {
+                    return HttpNotFound();
+                }
+
+                var tenantResult = EnsurePositionTenantAccess(existingPosition);
+                if (tenantResult != null)
+                {
+                    return tenantResult;
+                }
+
+                var lockInfo = PositionQuestionnaireLockHelper.GetLockInfo(_uow.Context, positionModel.Id);
+                var stageCountError = PositionQuestionnaireLockHelper.ValidateStageCountChange(
+                    lockInfo,
+                    existingPosition.QuestionnaireStageCount,
+                    positionModel.QuestionnaireStageCount);
+                if (!string.IsNullOrEmpty(stageCountError))
+                {
+                    ModelState.AddModelError("", stageCountError);
+                }
+
+                var selectedQuestionIds = selectedQuestions != null
+                    ? selectedQuestions.Distinct().ToList()
+                    : new List<int>();
+                var normalizedWeights = NormalizeQuestionWeights(selectedQuestionIds, questionWeights);
+                var proposedAssignments = BuildQuestionStageAssignments(selectedQuestionIds, stagesDict);
+                var existingPositionQuestions = _uow.PositionQuestions.GetAll()
+                    .Where(pq => pq.PositionId == positionModel.Id)
+                    .ToList();
+                var questionSyncError = PositionQuestionnaireLockHelper.ValidateMultiStageQuestionSync(
+                    lockInfo,
+                    existingPositionQuestions,
+                    ToQuestionStageAssignments(proposedAssignments),
+                    normalizedWeights,
+                    existingPosition.QuestionnaireStageCount,
+                    positionModel.QuestionnaireStageCount);
+                if (!string.IsNullOrEmpty(questionSyncError))
+                {
+                    ModelState.AddModelError("", questionSyncError);
+                }
+            }
+            catch (Exception ex)
+            {
+                ModelState.AddModelError("", "Unable to validate questionnaire changes: " + ex.Message);
+            }
+
             if (!ModelState.IsValid)
             {
                 return ReturnEditValidationFailure(positionModel, selectedQuestions, questionWeights, stagesDict);
@@ -455,7 +525,7 @@ namespace HR.Web.Controllers
 
             var positionModel = model;
             var selectedIds = selectedQuestions != null ? selectedQuestions.ToList() : new List<int>();
-            LoadPositionFormLookups(positionModel.DepartmentId, selectedIds, questionWeights, questionStages);
+            LoadPositionFormLookups(positionModel.DepartmentId, selectedIds, questionWeights, questionStages, positionModel.Id);
             return View("Edit", positionModel);
         }
 
@@ -686,8 +756,19 @@ namespace HR.Web.Controllers
             ModelState.AddModelError("", "Unable to save position: " + msg);
 
             var selectedIds = selectedQuestions != null ? selectedQuestions.ToList() : new List<int>();
-            LoadPositionFormLookups(positionModel.DepartmentId, selectedIds, questionWeights, questionStages);
+            LoadPositionFormLookups(positionModel.DepartmentId, selectedIds, questionWeights, questionStages, positionModel.Id);
             return View("Edit", positionModel);
+        }
+
+        private static List<QuestionStageAssignment> ToQuestionStageAssignments(IEnumerable<PositionQuestionStageAssignment> assignments)
+        {
+            return (assignments ?? Enumerable.Empty<PositionQuestionStageAssignment>())
+                .Select(a => new QuestionStageAssignment
+                {
+                    QuestionId = a.QuestionId,
+                    StageNumber = a.StageNumber
+                })
+                .ToList();
         }
 
         private ActionResult HandleDeletePosition(int id)
