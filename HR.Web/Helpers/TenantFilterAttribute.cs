@@ -166,7 +166,8 @@ namespace HR.Web.Helpers
 
             if (string.Equals(controller, "Departments", StringComparison.OrdinalIgnoreCase))
             {
-                return string.Equals(action, "Index", StringComparison.OrdinalIgnoreCase);
+                return string.Equals(action, "Index", StringComparison.OrdinalIgnoreCase) ||
+                       string.Equals(action, "Details", StringComparison.OrdinalIgnoreCase);
             }
 
             if (string.Equals(controller, "Account", StringComparison.OrdinalIgnoreCase))

@@ -84,6 +84,7 @@ namespace HR.Web.Services
             "PositionQuestions",
             "ProcessDuplicateDecisions",
             "RecalculateScores",
+            "RepairApplicationScores",
             "SaveBuilder",
             "SavePositionQuestions",
             "UnlockUserAccount",
@@ -178,6 +179,17 @@ namespace HR.Web.Services
                     case "HrCcEmails":
                     case "AddHrCcEmail":
                     case "DeleteHrCcEmail":
+                        return UserManagement;
+
+                    case "CompanySmtpSettings":
+                    case "SaveCompanySmtpSettings":
+                    case "SendCompanySmtpTestEmail":
+                        return UserManagement;
+
+                    case "ApplicationNotifyRecipients":
+                    case "AddApplicationNotifyRecipient":
+                    case "UpdateApplicationNotifyRecipient":
+                    case "DeleteApplicationNotifyRecipient":
                         return UserManagement;
 
                     case "SecurityLogs":

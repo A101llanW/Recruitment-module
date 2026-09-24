@@ -99,10 +99,17 @@ namespace HR.Web.Filters
                 string.Equals(httpMethod, "GET", StringComparison.OrdinalIgnoreCase) &&
                 ShouldLogVisitorAccess(controller, action))
             {
-                SecurityService.RecordVisitorActivity(
-                    companyId.Value,
-                    request.UserHostAddress,
-                    friendlySummary);
+                try
+                {
+                    SecurityService.RecordVisitorActivity(
+                        companyId.Value,
+                        request.UserHostAddress,
+                        friendlySummary);
+                }
+                catch (Exception)
+                {
+                    // Visitor logging must never break page rendering.
+                }
             }
 
             base.OnActionExecuted(filterContext);
