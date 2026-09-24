@@ -1,5 +1,6 @@
 using System;
 using System.Web.Mvc;
+using System.Web.Routing;
 using HR.Web.Services;
 
 namespace HR.Web.Filters
@@ -51,9 +52,30 @@ namespace HR.Web.Filters
                 ? RoleModuleCatalog.ResolveRequiredAccessLevel(filterContext.HttpContext.Request.HttpMethod, actionName)
                 : _requiredAccessLevel;
 
+            if (RolePermissionService.CanGuestBrowseModule(moduleKey, requiredAccessLevel))
+            {
+                var guestUser = filterContext.HttpContext != null ? filterContext.HttpContext.User : null;
+                if (guestUser == null || guestUser.Identity == null || !guestUser.Identity.IsAuthenticated)
+                {
+                    base.OnActionExecuting(filterContext);
+                    return;
+                }
+            }
+
             var permissionService = new RolePermissionService();
             if (!permissionService.CanCurrentUserAccessModule(moduleKey, requiredAccessLevel))
             {
+                var user = filterContext.HttpContext != null ? filterContext.HttpContext.User : null;
+                if (user != null && user.Identity != null && user.Identity.IsAuthenticated)
+                {
+                    var routeValues = new RouteValueDictionary(filterContext.RouteData.Values);
+                    routeValues["controller"] = "Home";
+                    routeValues["action"] = "Forbidden";
+                    var routeName = string.IsNullOrWhiteSpace(routeValues["tenant"] as string) ? "Default" : "Tenant";
+                    filterContext.Result = new RedirectToRouteResult(routeName, routeValues);
+                    return;
+                }
+
                 filterContext.Result = new HttpStatusCodeResult(
                     403,
                     string.Format("Access denied. Your role does not have {0} permission for the {1} module.", requiredAccessLevel, moduleKey));

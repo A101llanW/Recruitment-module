@@ -12,6 +12,15 @@ namespace HR.Web.Services
     {
         private static readonly string CurrentUserContextSlot = typeof(RolePermissionService).FullName + ".CurrentUserContext";
 
+        // Built-in Client (applicant) roles only receive View on these self-service modules.
+        private static readonly HashSet<string> ClientSelfServiceViewModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            RoleModuleCatalog.Positions,
+            RoleModuleCatalog.Applications,
+            RoleModuleCatalog.Interviews,
+            RoleModuleCatalog.Departments
+        };
+
         private sealed class CurrentUserAccessContext
         {
             public bool IsAuthenticated { get; set; }
@@ -23,6 +32,18 @@ namespace HR.Web.Services
             public int? CompanyId { get; set; }
             public int? RoleDefinitionId { get; set; }
             public IDictionary<string, string> PermissionMap { get; set; }
+        }
+
+        public static bool IsClientSelfServiceViewModule(string moduleKey)
+        {
+            return !string.IsNullOrWhiteSpace(moduleKey) &&
+                   ClientSelfServiceViewModules.Contains(moduleKey);
+        }
+
+        public static bool CanGuestBrowseModule(string moduleKey, string requiredAccessLevel)
+        {
+            return IsClientSelfServiceViewModule(moduleKey) &&
+                   MeetsAccessRequirement(RoleAccessLevels.View, requiredAccessLevel);
         }
 
         public bool CanCurrentUserAccessModule(string moduleKey, string requiredAccessLevel)
@@ -148,7 +169,9 @@ namespace HR.Web.Services
         {
             return user != null &&
                    string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) &&
-                   user.RoleDefinitionId.HasValue;
+                   user.RoleDefinitionId.HasValue &&
+                   user.RoleDefinition != null &&
+                   user.RoleDefinition.IsActive;
         }
 
         public bool IsFullCompanyAdmin(User user)
@@ -156,7 +179,7 @@ namespace HR.Web.Services
             return user != null &&
                    string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) &&
                    user.CompanyId.HasValue &&
-                   !user.RoleDefinitionId.HasValue;
+                   !IsCustomAdminRole(user);
         }
 
         public bool CanCurrentUserManageQuestionBank()
@@ -174,13 +197,7 @@ namespace HR.Web.Services
             if (string.Equals(baseRole, "Client", StringComparison.OrdinalIgnoreCase) ||
                 string.IsNullOrWhiteSpace(baseRole))
             {
-                if (string.Equals(moduleKey, RoleModuleCatalog.Reports, StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-
-                if (string.Equals(moduleKey, RoleModuleCatalog.Positions, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(moduleKey, RoleModuleCatalog.Applications, StringComparison.OrdinalIgnoreCase))
+                if (ClientSelfServiceViewModules.Contains(moduleKey))
                 {
                     return MeetsAccessRequirement(RoleAccessLevels.View, requiredAccessLevel);
                 }
@@ -310,15 +327,19 @@ namespace HR.Web.Services
                     }
                 }
 
+                var hasActiveCustomAdminRole = string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) &&
+                                               user.RoleDefinitionId.HasValue &&
+                                               user.RoleDefinition != null &&
+                                               user.RoleDefinition.IsActive;
+
                 return new CurrentUserAccessContext
                 {
                     IsAuthenticated = true,
                     IsActualSuperAdmin = isActualSuperAdmin,
                     IsFullCompanyAdmin = string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) &&
                                          user.CompanyId.HasValue &&
-                                         !user.RoleDefinitionId.HasValue,
-                    HasCustomAdminRole = string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) &&
-                                         user.RoleDefinitionId.HasValue,
+                                         !hasActiveCustomAdminRole,
+                    HasCustomAdminRole = hasActiveCustomAdminRole,
                     BaseRole = string.IsNullOrWhiteSpace(user.Role) ? "Client" : user.Role,
                     CompanyId = user.CompanyId,
                     RoleDefinitionId = user.RoleDefinitionId,

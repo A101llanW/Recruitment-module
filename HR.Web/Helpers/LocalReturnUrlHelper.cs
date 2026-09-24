@@ -51,5 +51,23 @@ namespace HR.Web.Helpers
             var query = HttpUtility.ParseQueryString(returnUri.Query);
             return int.TryParse(query["positionId"], out var positionId) ? (int?)positionId : null;
         }
+
+        public static string ResolveSafeLocalPath(string returnPath)
+        {
+            if (string.IsNullOrWhiteSpace(returnPath))
+            {
+                return null;
+            }
+
+            var trimmed = returnPath.Trim();
+            if (!trimmed.StartsWith("/", StringComparison.Ordinal) ||
+                trimmed.StartsWith("//", StringComparison.Ordinal) ||
+                trimmed.StartsWith(@"/\", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return trimmed;
+        }
     }
 }

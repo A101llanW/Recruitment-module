@@ -52,6 +52,37 @@ namespace HR.Web.Helpers
             }
         }
 
+        /// <summary>When true, show full exception details instead of generic error pages.</summary>
+        public static bool ShowDetailedErrors
+        {
+            get
+            {
+                if (string.Equals(
+                    GetAppSetting("ShowDetailedErrors", string.Empty),
+                    "true",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                return IsRemoteDevelopment;
+            }
+        }
+
+        /// <summary>
+        /// When true, MFA and setup-MFA accept any non-empty code. Disable before production deploy.
+        /// </summary>
+        public static bool AllowDevMfaBypass
+        {
+            get
+            {
+                return string.Equals(
+                    GetAppSetting("AllowDevMfaBypass", "false"),
+                    "true",
+                    StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
         private static string GetAppSetting(string key, string defaultValue)
         {
             var value = WebConfigurationManager.AppSettings[key];

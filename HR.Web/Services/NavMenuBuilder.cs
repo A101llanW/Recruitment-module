@@ -107,6 +107,14 @@ namespace HR.Web.Services
             bool canViewReports = _rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Reports, RoleAccessLevels.View);
             bool canViewDepartments = _rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Departments, RoleAccessLevels.View);
             bool canManageRoleTemplates = _rolePermissionService.CanCurrentUserManageRoleDefinitions();
+            bool isTenantPortalGuest = !isAuthenticated && !string.IsNullOrWhiteSpace(tenantToken);
+            if (isTenantPortalGuest)
+            {
+                canViewPositions = true;
+                canViewApplications = true;
+                canViewInterviews = true;
+                canViewDepartments = true;
+            }
 
             var model = new NavMenuModel
             {
@@ -140,7 +148,7 @@ namespace HR.Web.Services
                 model.SystemGroup = BuildSystemGroup(url, tenantToken, currentController, currentAction);
             }
 
-            if (isClientUser)
+            if (isClientUser || isTenantPortalGuest)
             {
                 AddClientFlatItems(model, url, tenantToken, currentController, canViewPositions, canViewApplications, canViewInterviews, canViewDepartments);
             }
@@ -555,12 +563,15 @@ namespace HR.Web.Services
                     adminItems.Add(CreateItem(context.Url, context.TenantToken, "Email Templates", "Admin", "EmailTemplates", "fas fa-envelope-open-text",
                         IsAdminActionActive(context.CurrentController, context.CurrentAction, "EmailTemplates")));
                 }
-                adminItems.Add(CreateItem(context.Url, context.TenantToken, "HR CC Emails", "Admin", "HrCcEmails", "fas fa-at",
-                    IsAdminActionActive(context.CurrentController, context.CurrentAction, "HrCcEmails")));
-                adminItems.Add(CreateItem(context.Url, context.TenantToken, "Company email (SMTP)", "Admin", "CompanySmtpSettings", "fas fa-mail-bulk",
-                    IsAdminActionActive(context.CurrentController, context.CurrentAction, "CompanySmtpSettings")));
-                adminItems.Add(CreateItem(context.Url, context.TenantToken, "Application notifications", "Admin", "ApplicationNotifyRecipients", "fas fa-bell",
-                    IsAdminActionActive(context.CurrentController, context.CurrentAction, "ApplicationNotifyRecipients")));
+                if (context.CanViewUsers || context.IsImpersonating)
+                {
+                    adminItems.Add(CreateItem(context.Url, context.TenantToken, "HR CC Emails", "Admin", "HrCcEmails", "fas fa-at",
+                        IsAdminActionActive(context.CurrentController, context.CurrentAction, "HrCcEmails")));
+                    adminItems.Add(CreateItem(context.Url, context.TenantToken, "Company email (SMTP)", "Admin", "CompanySmtpSettings", "fas fa-mail-bulk",
+                        IsAdminActionActive(context.CurrentController, context.CurrentAction, "CompanySmtpSettings")));
+                    adminItems.Add(CreateItem(context.Url, context.TenantToken, "Application notifications", "Admin", "ApplicationNotifyRecipients", "fas fa-bell",
+                        IsAdminActionActive(context.CurrentController, context.CurrentAction, "ApplicationNotifyRecipients")));
+                }
             }
 
             return adminItems;

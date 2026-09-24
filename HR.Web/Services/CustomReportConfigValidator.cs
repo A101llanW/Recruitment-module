@@ -16,7 +16,7 @@ namespace HR.Web.Services
         private const int MaxDepartmentIds = 50;
         private const int MaxCustomSpanDays = 3660;
         public const int DefaultRowLimit = 500;
-        public const int MinRowLimit = 10;
+        public const int MinRowLimit = 1;
         public const int MaxRowLimit = 5000;
 
         public static bool TryValidate(

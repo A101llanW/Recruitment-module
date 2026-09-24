@@ -274,6 +274,7 @@
 (function () {
     var currentCaptchaId = '';
     var isLoading = false;
+    var captchaVerified = false;
 
     function getEl(id) {
         return document.getElementById(id);
@@ -370,6 +371,15 @@
         showLoading(false);
     }
 
+    function markCaptchaUnverified() {
+        captchaVerified = false;
+        var input = getEl('captchaInput');
+        if (input) {
+            input.classList.remove('is-valid', 'is-invalid');
+        }
+        hideValidationIcons();
+    }
+
     function validateInput() {
         var input = getEl('captchaInput');
         if (!input) {
@@ -378,22 +388,20 @@
         var value = (input.value || '').trim();
 
         if (value.length === 0) {
-            input.classList.remove('is-valid', 'is-invalid');
-            hideValidationIcons();
+            markCaptchaUnverified();
+            clearFeedback();
             return;
         }
 
-        if (value.length >= 4) {
-            input.classList.remove('is-invalid');
-            input.classList.add('is-valid');
-            showValidationIcon('success');
-            clearFeedback();
-        } else {
-            input.classList.remove('is-valid');
+        markCaptchaUnverified();
+        if (value.length < 4) {
             input.classList.add('is-invalid');
             showValidationIcon('error');
             showFeedback('Please enter at least 4 characters', 'error');
+            return;
         }
+
+        clearFeedback();
     }
 
     function tryGenerateCaptcha(urls) {
@@ -412,8 +420,8 @@
                     }
                     if (input) {
                         input.value = '';
-                        input.classList.remove('is-valid', 'is-invalid');
                     }
+                    markCaptchaUnverified();
                     isLoading = false;
                     showLoading(false);
                 } else {
@@ -443,24 +451,24 @@
         tryGenerateCaptcha(urls);
     }
 
-    function validateCaptcha() {
+    function validateCaptcha(formToSubmit) {
         var input = getEl('captchaInput');
         var urls = readDataUrls();
         var userInput = input ? (input.value || '').trim() : '';
 
         if (!userInput) {
             showFeedback('Please enter the CAPTCHA characters', 'error');
-            return;
+            return Promise.resolve(false);
         }
 
         if (!currentCaptchaId) {
             showFeedback('CAPTCHA not loaded', 'error');
-            return;
+            return Promise.resolve(false);
         }
 
         if (!urls.validate) {
             showFeedback('CAPTCHA configuration error', 'error');
-            return;
+            return Promise.resolve(false);
         }
 
         showLoading(true);
@@ -470,7 +478,8 @@
         if (tokenInput && tokenInput.value) {
             body += '&__RequestVerificationToken=' + encodeURIComponent(tokenInput.value);
         }
-        fetch(urls.validate, {
+
+        return fetch(urls.validate, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -486,40 +495,37 @@
             })
             .then(function (response) {
                 var inputEl = getEl('captchaInput');
-                var container = getEl('captchaContainer');
                 if (response && response.success) {
-                    showFeedback('CAPTCHA verified successfully!', 'success');
+                    captchaVerified = true;
+                    clearFeedback();
                     if (inputEl) {
                         inputEl.classList.add('is-valid');
                         inputEl.classList.remove('is-invalid');
                     }
                     showValidationIcon('success');
-                    var form = container ? container.closest('form') : null;
-                    if (form) {
-                        var canSubmit = typeof form.checkValidity !== 'function' || form.checkValidity();
-                        if (canSubmit) {
-                            setTimeout(function () {
-                                form.submit();
-                            }, 500);
-                        }
-                    }
-                } else {
-                    showFeedback((response && response.message) ? response.message : 'Invalid CAPTCHA', 'error');
-                    if (inputEl) {
-                        inputEl.classList.add('is-invalid');
-                        inputEl.classList.remove('is-valid');
-                    }
-                    showValidationIcon('error');
-                    setTimeout(function () {
-                        loadCaptcha();
-                    }, 2000);
+                    return true;
                 }
+
+                captchaVerified = false;
+                showFeedback((response && response.message) ? response.message : 'Invalid CAPTCHA. Check the image and try again.', 'error');
+                if (inputEl) {
+                    inputEl.classList.add('is-invalid');
+                    inputEl.classList.remove('is-valid');
+                }
+                showValidationIcon('error');
+                setTimeout(function () {
+                    loadCaptcha();
+                }, 1500);
+                return false;
             })
             .catch(function () {
-                showFeedback('Network error during validation', 'error');
+                captchaVerified = false;
+                showFeedback('Network error during CAPTCHA validation. Please try again.', 'error');
+                return false;
             })
-            .then(function () {
+            .then(function (result) {
                 showLoading(false);
+                return result;
             });
     }
 
@@ -565,9 +571,8 @@
                 input: input ? (input.value || '').trim() : ''
             };
         },
-        isValid: function () {
-            var input = getEl('captchaInput');
-            return input && input.classList.contains('is-valid');
+        isVerified: function () {
+            return captchaVerified === true;
         }
     };
 })();

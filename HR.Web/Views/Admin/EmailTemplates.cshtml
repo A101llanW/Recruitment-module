@@ -313,7 +313,9 @@
     }
 </div>
 
-<div class="modal fade" id="resetEmailTemplatesModal" tabindex="-1" role="dialog" aria-labelledby="resetEmailTemplatesModalLabel" aria-describedby="resetEmailTemplatesModalText" aria-hidden="true">
+@section Modals {
+<!-- Modal lives outside .app-page so Bootstrap backdrop stacks correctly -->
+<div class="modal fade email-workflow-modal" id="resetEmailTemplatesModal" tabindex="-1" role="dialog" aria-labelledby="resetEmailTemplatesModalLabel" aria-describedby="resetEmailTemplatesModalText" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-header">
@@ -332,8 +334,10 @@
         </div>
     </div>
 </div>
+}
 
 @section Scripts {
+<script src="@Url.Content("~/Scripts/email-workflow-modals.js")"></script>
 <script>
 (function () {
     var selectionRanges = {};

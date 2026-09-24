@@ -49,8 +49,11 @@ namespace HR.Web.Filters
         private static bool ShouldBypassLicenseCheck(ActionExecutingContext filterContext)
         {
             var controllerName = filterContext.ActionDescriptor.ControllerDescriptor.ControllerName;
+            var actionName = filterContext.ActionDescriptor.ActionName;
             return string.Equals(controllerName, "Account", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(controllerName, "Captcha", StringComparison.OrdinalIgnoreCase);
+                || string.Equals(controllerName, "Captcha", StringComparison.OrdinalIgnoreCase)
+                || (string.Equals(controllerName, "Applications", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(actionName, "NotificationSummary", StringComparison.OrdinalIgnoreCase));
         }
 
         private static bool TrySignOutOrphanedCompanyUser(ActionExecutingContext filterContext, int companyId)

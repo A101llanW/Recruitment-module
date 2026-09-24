@@ -59,6 +59,15 @@
                     </div>
                 }
 
+                @if (Request.QueryString["reason"] == "tab_session_conflict")
+                {
+                    <div class="alert auth-alert alert-warning alert-dismissible fade show mb-4" role="alert">
+                        <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+                        <i class="fas fa-window-restore mr-2"></i>
+                        <strong>Tab session changed:</strong> Another sign-in replaced this browser session. Sign in again to continue in this tab.
+                    </div>
+                }
+
                 @if (Request.QueryString["reason"] == "idle_timeout")
                 {
                     <div class="alert auth-alert alert-info alert-dismissible fade show mb-4" role="alert">
@@ -102,11 +111,19 @@
                     </div>
                 }
 
-                @if (TempData["ErrorMessage"] != null)
+                @if (!string.IsNullOrEmpty(ViewBag.LoginErrorMessage as string))
                 {
-                    <div class="alert alert-warning alert-dismissible fade show mb-4" role="alert">
+                    <div class="alert auth-alert alert-danger alert-dismissible fade show mb-4" role="alert">
                         <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
-                        @TempData["ErrorMessage"]
+                        <i class="fas fa-exclamation-circle mr-2"></i>@ViewBag.LoginErrorMessage
+                    </div>
+                }
+
+                @if (!showLegalModal && !string.IsNullOrEmpty(ViewBag.LoginInfoMessage as string))
+                {
+                    <div class="alert auth-alert alert-info alert-dismissible fade show mb-4" role="alert">
+                        <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+                        <i class="fas fa-info-circle mr-2"></i>@ViewBag.LoginInfoMessage
                     </div>
                 }
 
@@ -117,8 +134,6 @@
                         <i class="fas fa-info-circle mr-2"></i>@TempData["InfoMessage"]
                     </div>
                 }
-
-                @Html.ValidationSummary(true, "", new { @class = "alert auth-alert alert-danger mb-4" })
 
                 @if (ViewBag.GlobalLoginUrl != null)
                 {
@@ -163,46 +178,85 @@
                     </div>
                 }
 
-                @using (Html.BeginForm("Login", "Account", new { tenant = tenantToken }, FormMethod.Post, new { autocomplete = "off", id = "loginForm" })) {
-                    @Html.AntiForgeryToken()
+                @if (showLegalModal)
+                {
+                    var termsLink = ViewBag.LegalTermsUrl as string;
+                    var privacyLink = ViewBag.LegalPrivacyUrl as string;
+                    var displayName = ViewBag.LegalConsentDisplayName as string;
+                    <div class="legal-consent-panel" id="legalConsentPanel" role="region" aria-labelledby="legalConsentPanelTitle">
+                        <div class="alert auth-alert alert-info mb-4" role="status">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            @(ViewBag.LoginInfoMessage as string ?? "Your password was accepted. Please review and accept the updated policies below to finish signing in.")
+                        </div>
+                        <h4 class="legal-consent-panel__title" id="legalConsentPanelTitle">Updated policies</h4>
+                        <p class="text-muted small mb-3">
+                            Hello <strong>@(string.IsNullOrWhiteSpace(displayName) ? "there" : displayName)</strong>, one quick step before you continue.
+                        </p>
+                        <p class="mb-3">Please review the current <strong>Terms &amp; Conditions</strong> and <strong>Privacy Policy</strong>, then accept below to finish signing in.</p>
+                        <p class="mb-4">
+                            <a href="@privacyLink" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mr-2">View Privacy Policy</a>
+                            <a href="@termsLink" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">View Terms &amp; Conditions</a>
+                        </p>
+                        @using (Html.BeginForm("ConfirmLegalConsent", "Account", new { tenant = tenantToken }, FormMethod.Post, new { id = "legalConsentForm" }))
+                        {
+                            @Html.AntiForgeryToken()
+                            @Html.ValidationSummary(true, "", new { @class = "text-danger small mb-3" })
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" name="acceptLegalTerms" id="legalConsentAccept" value="true" required />
+                                <label class="form-check-label small" for="legalConsentAccept">
+                                    I have read and agree to the Terms &amp; Conditions and Privacy Policy.
+                                </label>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100" id="legalConsentSubmitBtn">
+                                <i class="fas fa-check mr-2"></i> Continue
+                            </button>
+                        }
+                    </div>
+                }
+                else
+                {
+                    using (Html.BeginForm("Login", "Account", new { tenant = tenantToken }, FormMethod.Post, new { autocomplete = "off", id = "loginForm" }))
+                    {
+                        @Html.AntiForgeryToken()
 
-                    <div class="row auth-login-fields">
-                        <div class="col-md-6 login-field-group">
-                            <label for="username">Username or Email</label>
-                            <div class="login-input-wrap">
-                                <span class="login-input-icon"><i class="fas fa-user"></i></span>
-                                <input class="login-input" id="username" name="username" type="text"
-                                       placeholder="Username or email" required autocomplete="off" />
+                        <div class="row auth-login-fields">
+                            <div class="col-md-6 login-field-group">
+                                <label for="username">Username or Email</label>
+                                <div class="login-input-wrap">
+                                    <span class="login-input-icon"><i class="fas fa-user"></i></span>
+                                    <input class="login-input" id="username" name="username" type="text"
+                                           placeholder="Username or email" required autocomplete="off" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-6 login-field-group">
+                                <label for="password">Password</label>
+                                <div class="login-input-wrap">
+                                    <span class="login-input-icon"><i class="fas fa-lock"></i></span>
+                                    <input class="login-input" id="password" name="password" type="password"
+                                           placeholder="Password" required autocomplete="new-password" />
+                                    <button class="login-toggle-pwd" type="button" id="togglePwd" tabindex="-1" title="Show/hide password">
+                                        <i class="fas fa-eye" id="togglePwdIcon"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="col-md-6 login-field-group">
-                            <label for="password">Password</label>
-                            <div class="login-input-wrap">
-                                <span class="login-input-icon"><i class="fas fa-lock"></i></span>
-                                <input class="login-input" id="password" name="password" type="password"
-                                       placeholder="Password" required autocomplete="new-password" />
-                                <button class="login-toggle-pwd" type="button" id="togglePwd" tabindex="-1" title="Show/hide password">
-                                    <i class="fas fa-eye" id="togglePwdIcon"></i>
-                                </button>
-                            </div>
+                        <div class="auth-login-captcha">
+                            @Html.Partial("_CaptchaPartial")
                         </div>
-                    </div>
 
-                    <div class="auth-login-captcha">
-                        @Html.Partial("_CaptchaPartial")
-                    </div>
+                        <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
 
-                    <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
-
-                    <div class="auth-login-actions">
-                        <button type="submit" class="btn-primary-mfa" id="loginSubmitBtn">
-                            <i class="fas fa-sign-in-alt mr-2"></i> Sign In
-                        </button>
-                        <a href="@Url.Action("ForgotPassword", "Account")" class="btn-link-mfa auth-login-forgot">
-                            <i class="fas fa-question-circle mr-1"></i> Forgot Password?
-                        </a>
-                    </div>
+                        <div class="auth-login-actions">
+                            <button type="submit" class="btn-primary-mfa" id="loginSubmitBtn">
+                                <i class="fas fa-sign-in-alt mr-2"></i> Sign In
+                            </button>
+                            <a href="@Url.Action("ForgotPassword", "Account", new { tenant = tenantToken })" class="btn-link-mfa auth-login-forgot">
+                                <i class="fas fa-question-circle mr-1"></i> Forgot Password?
+                            </a>
+                        </div>
+                    }
                 }
             </div>
 
@@ -218,43 +272,13 @@
     </div>
 </div>
 
-@if (showLegalModal)
-{
-    var termsLink = ViewBag.LegalTermsUrl as string;
-    var privacyLink = ViewBag.LegalPrivacyUrl as string;
-    var displayName = ViewBag.LegalConsentDisplayName as string;
-    <div class="modal fade legal-consent-modal" id="legalConsentModal" tabindex="-1" role="dialog" aria-labelledby="legalConsentModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="legalConsentModalLabel">Updated policies</h5>
-                </div>
-                <div class="modal-body">
-                    <p class="text-muted small mb-3">Hello <strong>@(string.IsNullOrWhiteSpace(displayName) ? "there" : displayName)</strong>, one quick step before you continue.</p>
-                    <p class="mb-3">Please review the current <strong>Terms &amp; Conditions</strong> and <strong>Privacy Policy</strong>, then accept below to finish signing in.</p>
-                    <p class="mb-4">
-                        <a href="@privacyLink" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary me-2">View Privacy Policy</a>
-                        <a href="@termsLink" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">View Terms &amp; Conditions</a>
-                    </p>
-                    @using (Html.BeginForm("ConfirmLegalConsent", "Account", new { tenant = tenantToken }, FormMethod.Post, new { id = "legalConsentForm" }))
-                    {
-                        @Html.AntiForgeryToken()
-                        <div class="form-check mb-3">
-                            <input class="form-check-input" type="checkbox" name="acceptLegalTerms" id="legalConsentAccept" value="true" required />
-                            <label class="form-check-label small" for="legalConsentAccept">
-                                I have read and agree to the Terms &amp; Conditions and Privacy Policy.
-                            </label>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100">Continue</button>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-}
-
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        if (window.history && window.history.replaceState) {
+            var loginUrl = window.location.pathname + window.location.search;
+            window.history.replaceState(null, document.title, loginUrl);
+        }
+
         // Password visibility toggle
         var toggleBtn = document.getElementById('togglePwd');
         var pwdInput  = document.getElementById('password');
@@ -288,36 +312,24 @@
             });
         }
 
-        // Auto-focus username (skip when policy modal is open)
-        var uInput = document.getElementById('username');
-        @if (!showLegalModal)
-        {
-            <text>
-        if (uInput) { uInput.focus(); }
-            </text>
+        var loginError = document.querySelector('.auth-login-body .alert-danger');
+        if (loginError) {
+            loginError.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
-        @if (showLegalModal)
-        {
-            <text>
-        var legalModalEl = document.getElementById('legalConsentModal');
-        if (legalModalEl && typeof jQuery !== 'undefined') {
-            if (legalModalEl.parentElement !== document.body) {
-                document.body.appendChild(legalModalEl);
-            }
-            var $legalModal = jQuery(legalModalEl);
-            $legalModal.off('shown.bs.modal.legalConsent');
-            $legalModal.on('shown.bs.modal.legalConsent', function () {
-                var backdrops = document.querySelectorAll('.modal-backdrop');
-                if (backdrops.length > 1) {
-                    for (var i = 0; i < backdrops.length - 1; i++) {
-                        backdrops[i].parentNode.removeChild(backdrops[i]);
-                    }
-                }
+        var uInput = document.getElementById('username');
+        if (uInput) { uInput.focus(); }
+
+        var legalConsentForm = document.getElementById('legalConsentForm');
+        var legalConsentBtn = document.getElementById('legalConsentSubmitBtn');
+        if (legalConsentForm && legalConsentBtn) {
+            legalConsentForm.addEventListener('submit', function () {
+                setSubmitBusy(legalConsentBtn, 'fas fa-circle-notch fa-spin mr-2', ' Continuing...');
             });
-            $legalModal.modal({ backdrop: 'static', keyboard: false, show: true });
-        }
-            </text>
+            var legalPanel = document.getElementById('legalConsentPanel');
+            if (legalPanel) {
+                legalPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         }
     });
 </script>

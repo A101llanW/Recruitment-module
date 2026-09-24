@@ -163,7 +163,7 @@
                            max="@CustomReportConfigValidator.MaxRowLimit"
                            value="@(Model.RowLimit > 0 ? Model.RowLimit : CustomReportConfigValidator.DefaultRowLimit)" />
                     <small class="form-text text-muted">
-                        Limits how many people or positions appear in preview and export (10–@CustomReportConfigValidator.MaxRowLimit).
+                        Limits how many people or positions appear in preview and export (@CustomReportConfigValidator.MinRowLimit–@CustomReportConfigValidator.MaxRowLimit).
                     </small>
                 </div>
 

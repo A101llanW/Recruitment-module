@@ -20,6 +20,7 @@ namespace HR.Web.Services
         Task<EmailSendResult> TrySendAsync(string to, string subject, string body, IEnumerable<string> ccRecipients, int? companyId);
         Task SendPasswordResetEmailAsync(string to, string resetLink);
         Task SendPasswordResetEmailAsync(string to, string resetLink, int? companyId);
+        Task<EmailSendResult> TrySendPasswordResetEmailAsync(string to, string resetLink, int? companyId);
         Task SendMfaCodeEmailAsync(string to, string code);
         Task SendMfaCodeEmailAsync(string to, string code, int? companyId);
         Task SendEmailVerificationOtpAsync(string to, string code);
@@ -103,6 +104,27 @@ namespace HR.Web.Services
             try
             {
                 var smtpConfig = _companySmtpSettingsService.ResolveForCompany(companyId);
+                if (smtpConfig != null && smtpConfig.IsCompanyScoped)
+                {
+                    try
+                    {
+                        await SendMailCoreAsync(to, subject, body, ccRecipients, smtpConfig).ConfigureAwait(false);
+                        return EmailSendResult.Succeeded();
+                    }
+                    catch (Exception companyEx)
+                    {
+                        LogEmailFailure(to, companyEx, companyId);
+                        var globalConfig = _companySmtpSettingsService.ResolveGlobal();
+                        if (globalConfig == null || !globalConfig.IsUsable())
+                        {
+                            return EmailSendResult.Failed(companyEx.Message);
+                        }
+
+                        await SendMailCoreAsync(to, subject, body, ccRecipients, globalConfig).ConfigureAwait(false);
+                        return EmailSendResult.Succeeded();
+                    }
+                }
+
                 await SendMailCoreAsync(to, subject, body, ccRecipients, smtpConfig).ConfigureAwait(false);
                 return EmailSendResult.Succeeded();
             }
@@ -163,15 +185,10 @@ namespace HR.Web.Services
 
         private async Task SendCriticalAsync(string to, string subject, string body, int? companyId)
         {
-            try
+            var result = await TrySendAsync(to, subject, body, null, companyId).ConfigureAwait(false);
+            if (!result.Success)
             {
-                var smtpConfig = _companySmtpSettingsService.ResolveForCompany(companyId);
-                await SendMailCoreAsync(to, subject, body, null, smtpConfig).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                LogEmailFailure(to, ex, companyId);
-                throw;
+                throw new InvalidOperationException(result.ErrorMessage ?? "Email could not be sent.");
             }
         }
 
@@ -210,9 +227,14 @@ namespace HR.Web.Services
 
         public async Task SendPasswordResetEmailAsync(string to, string resetLink, int? companyId)
         {
+            await TrySendPasswordResetEmailAsync(to, resetLink, companyId).ConfigureAwait(false);
+        }
+
+        public async Task<EmailSendResult> TrySendPasswordResetEmailAsync(string to, string resetLink, int? companyId)
+        {
             if (string.IsNullOrWhiteSpace(to))
             {
-                return;
+                return EmailSendResult.Skipped();
             }
 
             var link = resetLink ?? string.Empty;
@@ -264,7 +286,7 @@ namespace HR.Web.Services
 </body>
 </html>", link, AppConfig.ProductName, DateTime.UtcNow.Year, AppConfig.PublisherName);
 
-            await SendAsync(to, subject, body, companyId).ConfigureAwait(false);
+            return await TrySendAsync(to, subject, body, companyId).ConfigureAwait(false);
         }
 
         public async Task SendMfaCodeEmailAsync(string to, string code)

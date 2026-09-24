@@ -9,8 +9,8 @@ namespace HR.Web.Helpers
     {
         private const int SaltSize = 16; // 128 bit 
         private const int KeySize = 32; // 256 bit
-        private const int Iterations = 100000; // Strong iteration count for new hashes (matches legacy production hashes)
-        private const int LegacyIterations = 100000; // Existing production hashes
+        private const int Iterations = 1000; // .NET 4.0 default-compatible iteration count for new hashes
+        private const int LegacyIterations = 100000; // Existing production hashes (verify uses stored iteration count)
         public const int MinPasswordLength = 8;
         private const int MaxPasswordLength = 128; // Maximum reasonable length
 
@@ -60,35 +60,6 @@ namespace HR.Web.Helpers
             {
                 return false;
             }
-        }
-
-        /// <summary>
-        /// Returns PBKDF2 iteration count stored in the hash payload, or 0 if unknown format.
-        /// </summary>
-        public static int GetStoredIterations(string hash)
-        {
-            if (string.IsNullOrWhiteSpace(hash))
-            {
-                return 0;
-            }
-
-            var parts = hash.Split(new[] { '.' }, 3);
-            if (parts.Length != 3)
-            {
-                return 0;
-            }
-
-            int iterations;
-            return int.TryParse(parts[0], out iterations) ? iterations : 0;
-        }
-
-        /// <summary>
-        /// True when a verified password should be re-hashed with the current iteration count.
-        /// </summary>
-        public static bool NeedsRehash(string hash)
-        {
-            var storedIterations = GetStoredIterations(hash);
-            return storedIterations > 0 && storedIterations < Iterations;
         }
 
         // Backward compatibility for old password format

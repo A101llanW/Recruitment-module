@@ -225,7 +225,9 @@ namespace HR.Web.Controllers
         public ActionResult Error()
         {
             SafeNotFoundHandler.ApplyBrandedErrorStatus(HttpContext, 500);
-            return View("~/Views/Error/Index.cshtml");
+            var lastError = Server.GetLastError();
+            ViewBag.LastError = lastError;
+            return View("~/Views/Error/Index.cshtml", lastError);
         }
 
         [AllowAnonymous]

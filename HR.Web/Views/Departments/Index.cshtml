@@ -4,7 +4,8 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Departments";
     var canManageDepartments = ViewBag.CanManageDepartments != null ? (bool)ViewBag.CanManageDepartments : false;
-    var canViewDepartments = ViewBag.CanViewDepartments != null ? (bool)ViewBag.CanViewDepartments : canManageDepartments;
+    var canViewDepartmentDetails = ViewBag.CanViewDepartmentDetails != null ? (bool)ViewBag.CanViewDepartmentDetails : canManageDepartments;
+    var hasRowActions = canViewDepartmentDetails || canManageDepartments;
 }
 @if (canManageDepartments)
 {
@@ -17,7 +18,10 @@
                 <th>Name</th>
                 <th>Description</th>
                 <th>Overview</th>
-                <th></th>
+                @if (hasRowActions)
+                {
+                    <th></th>
+                }
             </tr>
         </thead>
         <tbody>
@@ -36,17 +40,20 @@
                         <span>No positions in this department.</span>
                     }
                 </td>
-                <td>
-                    @if (canViewDepartments)
-                    {
-                        @Html.ActionLink("Details", "Details", new { id = item.Id }, new { @class = "btn btn-sm btn-info" })
-                    }
-                    @if (canManageDepartments)
-                    {
-                        @Html.ActionLink("Edit", "Edit", new { id = item.Id }, new { @class = "btn btn-sm btn-secondary" })
-                        @Html.ActionLink("Delete", "Delete", new { id = item.Id }, new { @class = "btn btn-sm btn-danger" })
-                    }
-                </td>
+                @if (hasRowActions)
+                {
+                    <td>
+                        @if (canViewDepartmentDetails)
+                        {
+                            @Html.ActionLink("Details", "Details", new { id = item.Id }, new { @class = "btn btn-sm btn-info" })
+                        }
+                        @if (canManageDepartments)
+                        {
+                            @Html.ActionLink("Edit", "Edit", new { id = item.Id }, new { @class = "btn btn-sm btn-secondary" })
+                            @Html.ActionLink("Delete", "Delete", new { id = item.Id }, new { @class = "btn btn-sm btn-danger" })
+                        }
+                    </td>
+                }
             </tr>
         }
         </tbody>

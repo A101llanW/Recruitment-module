@@ -7,7 +7,6 @@ using HR.Web.Filters;
 
 namespace HR.Web.Controllers
 {
-    [Authorize]
     [ModuleAccess(RoleModuleCatalog.Departments)]
     public class DepartmentsController : Controller
     {
@@ -16,6 +15,12 @@ namespace HR.Web.Controllers
 
         public ActionResult Index()
         {
+            if (!Request.IsAuthenticated)
+            {
+                ViewBag.Message = "Please sign in or create an account to view departments.";
+                return View("GuestAccess");
+            }
+
             var itemsQuery = _uow.Departments.GetAll(d => d.Positions).AsQueryable();
             itemsQuery = _tenantService.ApplyTenantFilter(itemsQuery);
             var items = itemsQuery.ToList();
@@ -25,6 +30,12 @@ namespace HR.Web.Controllers
 
         public ActionResult Details(int id)
         {
+            if (!Request.IsAuthenticated)
+            {
+                ViewBag.Message = "Please sign in or create an account to view department details.";
+                return View("GuestAccess");
+            }
+
             var item = _uow.Departments.Get(id);
             if (item == null)
             {
@@ -50,6 +61,8 @@ namespace HR.Web.Controllers
             ViewBag.CanManageDepartments = isManageCapableUser &&
                 permissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Departments, RoleAccessLevels.Manage);
             ViewBag.CanViewDepartments = Request.IsAuthenticated &&
+                permissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Departments, RoleAccessLevels.View);
+            ViewBag.CanViewDepartmentDetails = isManageCapableUser &&
                 permissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Departments, RoleAccessLevels.View);
         }
 

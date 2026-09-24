@@ -1,9 +1,12 @@
 @model System.Web.Mvc.HandleErrorInfo
+@using HR.Web.Helpers
 
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Error";
     ViewBag.SuppressPageHero = true;
+    ViewBag.HideNavbar = true;
+    var showDetails = AppConfig.ShowDetailedErrors || HttpContext.Current == null || !HttpContext.Current.IsCustomErrorEnabled;
 }
 
 <div class="row justify-content-center mt-5">
@@ -18,14 +21,19 @@
                 Our technical team has been notified and we're looking into it.
             </p>
             
-            @if (HttpContext.Current.IsCustomErrorEnabled == false && Model != null)
+            @if (showDetails && Model != null && Model.Exception != null)
             {
                 <div class="text-left mt-4 p-3 bg-light rounded" style="font-family: monospace; font-size: 0.85rem;">
                     <p><strong>Exception:</strong> @Model.Exception.Message</p>
+                    <p><strong>Type:</strong> @Model.Exception.GetType().FullName</p>
                     <p><strong>Controller:</strong> @Model.ControllerName</p>
                     <p><strong>Action:</strong> @Model.ActionName</p>
+                    @if (Model.Exception.InnerException != null)
+                    {
+                        <p><strong>Inner:</strong> @Model.Exception.InnerException.Message</p>
+                    }
                     <hr />
-                    <pre class="overflow-auto" style="max-height: 200px;">@Model.Exception.StackTrace</pre>
+                    <pre class="overflow-auto" style="max-height: 320px;">@Model.Exception.StackTrace</pre>
                 </div>
             }
 
