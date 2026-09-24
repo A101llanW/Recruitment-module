@@ -11,7 +11,7 @@ namespace HR.Web.Data
     //[DbConfigurationType(typeof(OracleEFConfiguration))] // Commented for local SQL testing; re-enable for Oracle
     public class HrContext : DbContext
     {
-        public HrContext() : base(ResolveConnectionNameOrString())
+        public HrContext() : base(ResolveConnectionString())
         {
             Configuration.LazyLoadingEnabled = false;
         }
@@ -37,16 +37,13 @@ namespace HR.Web.Data
         public DbSet<LoginAttempt> LoginAttempts { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<Report> Reports { get; set; }
+        public DbSet<CustomReportDefinition> CustomReportDefinitions { get; set; }
         public DbSet<PasswordReset> PasswordResets { get; set; }
         public DbSet<LicenseTransaction> LicenseTransactions { get; set; }
         public DbSet<ImpersonationRequest> ImpersonationRequests { get; set; }
         public DbSet<SystemSetting> SystemSettings { get; set; }
         public DbSet<TemporaryCredential> TemporaryCredentials { get; set; }
         public DbSet<CompanyHrCcEmail> CompanyHrCcEmails { get; set; }
-        public DbSet<CompanySmtpSettings> CompanySmtpSettings { get; set; }
-        public DbSet<CompanyApplicationNotifyRecipient> CompanyApplicationNotifyRecipients { get; set; }
-        public DbSet<ApplicationNotificationAccessToken> ApplicationNotificationAccessTokens { get; set; }
-        public DbSet<PositionView> PositionViews { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
@@ -134,6 +131,12 @@ namespace HR.Web.Data
                 .HasForeignKey(t => t.CompanyId)
                 .WillCascadeOnDelete(false);
 
+            modelBuilder.Entity<CustomReportDefinition>()
+                .HasOptional(d => d.Company)
+                .WithMany()
+                .HasForeignKey(d => d.CompanyId)
+                .WillCascadeOnDelete(false);
+
             modelBuilder.Entity<QuestionnaireTemplateQuestion>()
                 .HasRequired(tq => tq.QuestionnaireTemplate)
                 .WithMany(t => t.TemplateQuestions)
@@ -176,50 +179,14 @@ namespace HR.Web.Data
                 .WithMany(c => c.HrCcEmails)
                 .HasForeignKey(e => e.CompanyId)
                 .WillCascadeOnDelete(true);
-
-            modelBuilder.Entity<CompanySmtpSettings>()
-                .HasRequired(s => s.Company)
-                .WithOptional(c => c.SmtpSettings)
-                .WillCascadeOnDelete(true);
-
-            modelBuilder.Entity<CompanyApplicationNotifyRecipient>()
-                .HasRequired(r => r.Company)
-                .WithMany(c => c.ApplicationNotifyRecipients)
-                .HasForeignKey(r => r.CompanyId)
-                .WillCascadeOnDelete(true);
-
-            modelBuilder.Entity<ApplicationNotificationAccessToken>()
-                .HasRequired(t => t.Application)
-                .WithMany()
-                .HasForeignKey(t => t.ApplicationId)
-                .WillCascadeOnDelete(true);
-
-            modelBuilder.Entity<ApplicationNotificationAccessToken>()
-                .HasRequired(t => t.Recipient)
-                .WithMany()
-                .HasForeignKey(t => t.RecipientId)
-                .WillCascadeOnDelete(false);
-
-            modelBuilder.Entity<PositionView>()
-                .HasRequired(v => v.User)
-                .WithMany()
-                .HasForeignKey(v => v.UserId)
-                .WillCascadeOnDelete(false);
-
-            modelBuilder.Entity<PositionView>()
-                .HasRequired(v => v.Position)
-                .WithMany()
-                .HasForeignKey(v => v.PositionId)
-                .WillCascadeOnDelete(false);
         }
 
-        private static string ResolveConnectionNameOrString()
+        private static string ResolveConnectionString()
         {
-            var configuredConnection = ConfigurationManager.ConnectionStrings["HrContext"];
-            if (configuredConnection != null && !string.IsNullOrWhiteSpace(configuredConnection.ConnectionString))
+            var configuredConnectionString = ConfigurationManager.ConnectionStrings["HrContext"]?.ConnectionString;
+            if (!string.IsNullOrWhiteSpace(configuredConnectionString))
             {
-                // Use the named entry so EF6 picks up providerName from Web.config.
-                return "HrContext";
+                return configuredConnectionString;
             }
 
             // EF6 command-line tools do not load a web project's Web.config automatically.

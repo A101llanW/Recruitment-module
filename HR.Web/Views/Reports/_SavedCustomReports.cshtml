@@ -1,0 +1,35 @@
+@model HR.Web.Models.CustomReportListPage
+@{
+    var canManage = ViewData["CanManage"] as bool? ?? false;
+}
+@foreach (var item in Model.Items)
+{
+    <tr>
+        <td>@item.Name</td>
+        <td>@item.DatasetLabel</td>
+        <td>@item.UpdatedOnDisplay</td>
+        <td>@item.CreatedBy</td>
+        <td class="text-nowrap">
+            <a class="btn btn-outline-primary btn-sm" href="@Url.Action("Run", "ReportGenerator", new { id = item.Id })">Run</a>
+            <a class="btn btn-outline-secondary btn-sm" href="@Url.Action("ExportSaved", "ReportGenerator", new { id = item.Id })">Export</a>
+            @if (canManage)
+            {
+                <a class="btn btn-outline-info btn-sm" href="@Url.Action("Edit", "ReportGenerator", new { id = item.Id })">Edit</a>
+                using (Html.BeginForm("DeleteCustom", "ReportGenerator", FormMethod.Post, new { style = "display:inline;", onsubmit = "return confirm('Delete this custom report?');" }))
+                {
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@item.Id" />
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                }
+            }
+        </td>
+    </tr>
+}
+@if (Model.HasMore)
+{
+    <tr id="saved-custom-view-more-row">
+        <td colspan="5">
+            <button type="button" class="btn btn-link p-0" id="saved-custom-view-more" data-next-page="@(Model.Page + 1)">View more</button>
+        </td>
+    </tr>
+}

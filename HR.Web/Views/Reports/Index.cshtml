@@ -1,3 +1,4 @@
+@model HR.Web.ViewModels.CustomReportPageViewModel
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Reports";
@@ -123,12 +124,55 @@
             </div>
         </div>
     </div>
+
+    @if (Model != null)
+    {
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h3 class="mb-0"><i class="fas fa-table"></i> Custom reports</h3>
+                        @if (Model.CanManage)
+                        {
+                            <a class="btn btn-primary btn-sm" href="@Url.Action("Builder", "ReportGenerator")">
+                                <i class="fas fa-plus"></i> New custom report
+                            </a>
+                        }
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm table-hover" id="saved-custom-reports-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Dataset</th>
+                                    <th>Updated</th>
+                                    <th>Created by</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="saved-custom-reports-body">
+                                @if (Model.Saved != null && Model.Saved.Items != null && Model.Saved.Items.Count > 0)
+                                {
+                                    ViewData["CanManage"] = Model.CanManage;
+                                    @Html.Partial("~/Views/Reports/_SavedCustomReports.cshtml", Model.Saved)
+                                }
+                                else
+                                {
+                                    <tr id="saved-custom-empty-row">
+                                        <td colspan="5" class="text-muted">No custom reports yet.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
-@section Modals {
-<!-- Loading + preview modals render outside .app-page so Bootstrap backdrop stacks correctly -->
 <!-- Loading Modal -->
-<div class="modal fade" id="loadingModal" tabindex="-1" role="dialog" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+<div class="modal fade" id="loadingModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-body text-center p-5">
@@ -181,10 +225,9 @@
                         <label for="modalReportFormat" class="mb-0 font-weight-bold" style="font-size: 13px;">Select File Type:</label>
                     </div>
                     <select id="modalReportFormat" class="form-control form-control-sm font-weight-bold border-0 bg-light" style="width: auto; height: 38px; cursor: pointer;">
-                        <option value="html" selected>HTML Report</option>
+                        <option value="pdf" selected>PDF</option>
                         <option value="csv">CSV</option>
                     </select>
-                    <small class="text-muted d-block mt-1" style="font-size: 11px;">Open HTML in your browser, then Print &rarr; Save as PDF if needed.</small>
                 </div>
                 <div class="d-flex align-items-center">
                     <input type="hidden" id="currentReportType" />
@@ -199,15 +242,13 @@
         </div>
     </div>
 </div>
-}
 
 @section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
         var allPages = [];
         var currentPage = 1;
         var totalPages = 1;
-        var REPORT_AJAX_TIMEOUT_MS = 60000;
-        var reportDownloadUrl = '@Url.Action("Download", "ReportGenerator")';
 
         function withAntiForgeryToken(data) {
             data = data || {};
@@ -215,82 +256,28 @@
             return data;
         }
 
-        function showLoadingModal() {
-            $('#loadingModal').modal('show');
-        }
-
-        function hideLoadingModal() {
-            var $loading = $('#loadingModal');
-            $loading.modal('hide');
-
-            // Force-clear loading modal even when another modal (preview) is open.
-            setTimeout(function() {
-                $loading.removeClass('show').attr('aria-hidden', 'true').css('display', 'none');
-
-                var $openModals = $('.modal.show').not('#loadingModal');
-                var $backdrops = $('.modal-backdrop');
-
-                if ($openModals.length === 0) {
-                    $('body').removeClass('modal-open').css('padding-right', '');
-                    $backdrops.remove();
-                    return;
-                }
-
-                // Drop extra backdrops left behind by the loading modal.
-                if ($backdrops.length > $openModals.length) {
-                    $backdrops.slice(0, $backdrops.length - $openModals.length).remove();
-                }
-            }, 300);
-        }
-
-        function cleanupModalStack() {
-            hideLoadingModal();
-            if (!$('.modal.show').length) {
-                $('body').removeClass('modal-open').css('padding-right', '');
-                $('.modal-backdrop').remove();
-            }
-        }
-
-        $(function() {
-            $('#previewModal').on('hidden.bs.modal', cleanupModalStack);
-        });
-
-        function showReportAjaxError(xhr, textStatus, defaultMessage) {
-            if (textStatus === 'timeout') {
-                alert('The request timed out. Try again or use Generate to download the report.');
-            } else if (xhr.responseJSON && xhr.responseJSON.message) {
-                alert(xhr.responseJSON.message);
-            } else {
-                alert(defaultMessage);
-            }
-        }
-
         function previewReport(reportType) {
             $('#currentReportType').val(reportType);
+            $('#loadingModal').modal('show');
             $('#paginationControls').attr('style', 'display:none !important');
-            showLoadingModal();
             
             $.ajax({
                 url: '@Url.Action("Preview", "ReportGenerator")',
                 type: 'POST',
                 data: withAntiForgeryToken({ reportType: reportType }),
-                dataType: 'json',
-                timeout: REPORT_AJAX_TIMEOUT_MS,
                 success: function(response) {
-                    hideLoadingModal();
-                    if (response && response.success) {
+                    $('#loadingModal').modal('hide');
+                    if (response.success) {
                         $('#previewContent').html(response.html);
                         setupPagination();
                         $('#previewModal').modal('show');
                     } else {
-                        alert((response && response.message) || 'Unable to load report preview.');
+                        alert(response.message);
                     }
                 },
-                error: function(xhr, textStatus) {
-                    showReportAjaxError(xhr, textStatus, 'Error connecting to server.');
-                },
-                complete: function() {
-                    hideLoadingModal();
+                error: function() {
+                    $('#loadingModal').modal('hide');
+                    alert('Error connecting to server.');
                 }
             });
         }
@@ -332,72 +319,110 @@
             }
         }
 
-        function triggerReportDownload(fileName) {
-            var url = reportDownloadUrl + '?fileName=' + encodeURIComponent(fileName);
-            var frame = document.getElementById('reportDownloadFrame');
-            if (!frame) {
-                frame = document.createElement('iframe');
-                frame.id = 'reportDownloadFrame';
-                frame.style.display = 'none';
-                frame.setAttribute('aria-hidden', 'true');
-                document.body.appendChild(frame);
-            }
-            frame.src = url;
-        }
-
         function downloadFromPreview() {
             var reportType = $('#currentReportType').val();
-            var format = $('#modalReportFormat').val() || 'html';
-            $('#previewModal').modal('hide');
-            setTimeout(function() {
-                generateReport(reportType, format);
-            }, 300);
+            var format = $('#modalReportFormat').val();
+            
+            if (format === 'pdf') {
+                // Show all pages and breaks for the full PDF capture
+                $(allPages).show();
+                $('.page-break').show();
+                
+                // Set fixed height for preview container to capture full content
+                $('#previewContent').css('height', 'auto');
+                var opt = {
+                    margin:       0.5,
+                    filename:     reportType + '_Report_' + new Date().getTime() + '.pdf',
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 2, useCORS: true },
+                    jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+                };
+                
+                // Show loading state while generating PDF
+                $('#loadingModal').modal('show');
+                $('#previewModal').modal('hide');
+                
+                html2pdf().set(opt).from(document.getElementById('previewContent')).save().then(function() {
+                    $('#loadingModal').modal('hide');
+                    $('body').removeClass('modal-open');
+                    $('.modal-backdrop').remove();
+                    // Restore preview to current page
+                    renderPage();
+                }).catch(function(err) {
+                    console.error('PDF Error:', err);
+                    $('#loadingModal').modal('hide');
+                    $('body').removeClass('modal-open');
+                    $('.modal-backdrop').remove();
+                    alert('Error creating PDF. Please try again.');
+                });
+            } else {
+                $('#previewModal').modal('hide');
+                // Small delay to let preview modal close properly before showing loading
+                setTimeout(function() {
+                    generateReport(reportType, format);
+                }, 300);
+            }
         }
 
         function generateReport(reportType, format) {
-            if (!format) format = 'html';
-            showLoadingModal();
+            // Default to PDF if no format is provided (e.g. direct click from list)
+            if (!format) format = 'pdf'; 
+            $('#loadingModal').modal('show');
             
             $.ajax({
                 url: '@Url.Action("GenerateDirect", "ReportGenerator")',
                 type: 'POST',
                 data: withAntiForgeryToken({ reportType: reportType, format: format }),
-                dataType: 'json',
-                timeout: REPORT_AJAX_TIMEOUT_MS,
                 success: function(response) {
-                    if (response && response.success) {
+                    // Force hide modal immediately
+                    $('#loadingModal').modal('hide');
+                    $('body').removeClass('modal-open');
+                    $('.modal-backdrop').remove();
+                    
+                    if (response.success) {
                         addToRecentReports(response.fileName, reportType);
-                        triggerReportDownload(response.fileName);
+                        setTimeout(function() {
+                            window.location.href = '@Url.Action("Download", "ReportGenerator")?fileName=' + response.fileName;
+                        }, 500);
                     } else {
-                        alert((response && response.message) || 'Error generating report.');
+                        alert(response.message);
                     }
                 },
-                error: function(xhr, textStatus) {
-                    showReportAjaxError(xhr, textStatus, 'Error generating report.');
-                },
-                complete: function() {
-                    hideLoadingModal();
+                error: function() {
+                    $('#loadingModal').modal('hide');
+                    alert('Error generating report.');
                 }
             });
         }
         
+        $(document).on('click', '#saved-custom-view-more', function () {
+            var nextPage = parseInt($(this).data('next-page'), 10) || 2;
+            var button = $(this);
+            button.prop('disabled', true).text('Loading…');
+            $.get('@Url.Action("SavedPage", "ReportGenerator")', { page: nextPage }, function (html) {
+                $('#saved-custom-view-more-row').remove();
+                $('#saved-custom-empty-row').remove();
+                $('#saved-custom-reports-body').append(html);
+            }).always(function () {
+                button.prop('disabled', false).text('View more');
+            });
+        });
+
         function addToRecentReports(fileName, reportType) {
-            var downloadUrl = reportDownloadUrl + '?fileName=' + encodeURIComponent(fileName);
             var reportHtml = '<div class="list-group-item">' +
                 '<div class="d-flex w-100 justify-content-between align-items-center">' +
                 '<div>' +
                 '<h6 class="mb-1">' + reportType.charAt(0).toUpperCase() + reportType.slice(1) + ' Report</h6>' +
                 '<small class="text-muted">' + fileName + '</small>' +
                 '</div>' +
-                '<a href="' + downloadUrl + '" class="btn btn-outline-primary btn-sm" download="' + fileName + '">' +
+                '<a href="@Url.Action("Download", "ReportGenerator")?fileName=' + fileName + '" class="btn btn-outline-primary btn-sm">' +
                 '<i class="fas fa-download"></i> Download' +
                 '</a>' +
                 '</div>' +
                 '</div>';
             
             var recentReportsDiv = $('#recentReports');
-            var placeholder = recentReportsDiv.find('> .text-muted');
-            if (placeholder.length > 0) {
+            if (recentReportsDiv.find('.text-muted').length > 0 && recentReportsDiv.text().trim() === "No recent reports generated.") {
                 recentReportsDiv.html(reportHtml);
             } else {
                 recentReportsDiv.prepend(reportHtml);
