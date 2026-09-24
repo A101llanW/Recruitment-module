@@ -188,6 +188,16 @@ function initQuestionnaireAssignmentEditor(options) {
         var stageCountInputIdOption = options.stageCountInputId;
         var multiStageToggleFieldIdOption = options.multiStageToggleFieldId;
         var stageCountSectionIdOption = options.stageCountSectionId;
+        var lockedStageList = Array.isArray(options.lockedStages) ? options.lockedStages : [];
+        var lockedStages = new Set(lockedStageList.map(function (stage) {
+            return parseInt(stage, 10);
+        }).filter(function (stage) {
+            return !Number.isNaN(stage) && stage > 0;
+        }));
+        var minStageCount = parseIntSafe(options.minStageCount, 1);
+        if (minStageCount < 1) {
+            minStageCount = 1;
+        }
         var form = document.getElementById(formIdOption) || document.getElementById('positionCreateForm') || document.getElementById('positionEditForm') || document.getElementById('templateEditForm');
         if (!form) {
             return undefined;
@@ -214,6 +224,29 @@ function initQuestionnaireAssignmentEditor(options) {
         var questionLocks = new Map();
         var questionStages = new Map();
         var activeQuestionnaireEditorStage = 1;
+
+        function isStageLocked(stage) {
+            return lockedStages.has(stage);
+        }
+
+        function isQuestionOnLockedStage(questionId) {
+            if (!questionStages.has(questionId)) {
+                return false;
+            }
+
+            var stageSet = questionStages.get(questionId);
+            if (!stageSet || !stageSet.size) {
+                return false;
+            }
+
+            var locked = false;
+            stageSet.forEach(function (stage) {
+                if (isStageLocked(stage)) {
+                    locked = true;
+                }
+            });
+            return locked;
+        }
 
         function readStageCountFromInput() {
             if (!stageCountInput) {
@@ -262,9 +295,13 @@ function initQuestionnaireAssignmentEditor(options) {
                     var btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'questionnaire-stage-switcher-btn' + (stageNum === activeQuestionnaireEditorStage ? ' active' : '');
+                    if (isStageLocked(stageNum)) {
+                        btn.className += ' questionnaire-stage-switcher-btn--locked';
+                        btn.title = 'Stage locked because candidates have submitted answers';
+                    }
                     btn.setAttribute('role', 'tab');
                     btn.setAttribute('aria-selected', stageNum === activeQuestionnaireEditorStage ? 'true' : 'false');
-                    btn.textContent = 'Stage ' + stageNum;
+                    btn.textContent = isStageLocked(stageNum) ? ('Stage ' + stageNum + ' (locked)') : ('Stage ' + stageNum);
                     btn.addEventListener('click', () => {
                         activeQuestionnaireEditorStage = stageNum;
                         refreshStageSwitcher();
@@ -287,9 +324,11 @@ function initQuestionnaireAssignmentEditor(options) {
             var n = getQuestionnaireStageCount();
             if (n <= 1) {
                 cb.checked = isQuestionAssignedToAnyStage(questionStages, qid);
+                cb.disabled = isStageLocked(1);
                 return;
             }
             cb.checked = isQuestionAssignedToStage(questionStages, qid, activeQuestionnaireEditorStage);
+            cb.disabled = isStageLocked(activeQuestionnaireEditorStage);
         }
 
         function syncAllCheckboxVisuals() {
@@ -543,7 +582,7 @@ function initQuestionnaireAssignmentEditor(options) {
                     return;
                 }
 
-                var locked = mapIsTrue(questionLocks, questionId);
+                var locked = mapIsTrue(questionLocks, questionId) || isQuestionOnLockedStage(questionId);
                 row.classList.toggle('locked', locked);
 
                 var slider = row.querySelector('.question-weight-slider');
@@ -797,6 +836,10 @@ function initQuestionnaireAssignmentEditor(options) {
                 var checkboxes = Array.prototype.slice.call(document.querySelectorAll('.' + targetGroupClass));
                 var want = groupSelect.checked;
                 var nStages = getQuestionnaireStageCount();
+                if ((nStages <= 1 && isStageLocked(1)) || (nStages > 1 && isStageLocked(activeQuestionnaireEditorStage))) {
+                    syncGroupSelectHeaders();
+                    return;
+                }
                 checkboxes.forEach((box) => {
                     var qid = box.value;
                     if (nStages <= 1) {
@@ -839,6 +882,14 @@ function initQuestionnaireAssignmentEditor(options) {
             cb.addEventListener('change', () => {
                 var nStages = getQuestionnaireStageCount();
                 var want = cb.checked;
+                if (nStages <= 1 && isStageLocked(1)) {
+                    syncCheckboxVisualFor(cb);
+                    return;
+                }
+                if (nStages > 1 && isStageLocked(activeQuestionnaireEditorStage)) {
+                    syncCheckboxVisualFor(cb);
+                    return;
+                }
                 if (nStages <= 1) {
                     if (want) {
                         questionStages.set(qid, new Set([1]));
@@ -901,6 +952,10 @@ function initQuestionnaireAssignmentEditor(options) {
             if (!stageCountInput) {
                 return;
             }
+            if (minStageCount > 1 && !checked) {
+                secondaryStageToggleEl.checked = true;
+                checked = true;
+            }
             var n = readStageCountFromInput();
             if (checked) {
                 if (n < 2) {
@@ -922,7 +977,11 @@ function initQuestionnaireAssignmentEditor(options) {
         }
 
         if (stageCountInput) {
+            stageCountInput.min = String(minStageCount);
             stageCountInput.addEventListener('change', () => {
+                if (readStageCountFromInput() < minStageCount) {
+                    stageCountInput.value = String(minStageCount);
+                }
                 syncHasSecondaryFromStageCount();
                 updateStageCountSectionVisibility();
                 clampActiveEditorStage(getQuestionnaireStageCount());
@@ -930,6 +989,9 @@ function initQuestionnaireAssignmentEditor(options) {
                 renderRows();
             });
             stageCountInput.addEventListener('input', () => {
+                if (readStageCountFromInput() < minStageCount) {
+                    stageCountInput.value = String(minStageCount);
+                }
                 syncHasSecondaryFromStageCount();
                 updateStageCountSectionVisibility();
                 clampActiveEditorStage(getQuestionnaireStageCount());
@@ -976,6 +1038,9 @@ function initQuestionnaireAssignmentEditor(options) {
             var stage = parseInt(item.stageNumber, 10);
             if (Number.isNaN(stage) || stage < 1) {
                 stage = 1;
+            }
+            if (isStageLocked(stage)) {
+                return;
             }
             assignQuestionToStage(questionStages, qid, Math.min(maxStage, stage));
         });

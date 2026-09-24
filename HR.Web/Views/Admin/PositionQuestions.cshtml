@@ -17,6 +17,18 @@
         <div class="alert alert-success">@TempData["Message"]</div>
     }
 
+    @{
+        var questionnaireLockMessage = ViewBag.QuestionnaireLockMessage as string;
+        var questionnaireEditingLocked = ViewBag.QuestionnaireEditingLocked as bool? ?? false;
+    }
+    @if (!string.IsNullOrWhiteSpace(questionnaireLockMessage))
+    {
+        <div class="alert alert-warning" role="alert">
+            <strong><i class="fas fa-lock mr-1"></i>Questionnaire locked.</strong>
+            @questionnaireLockMessage
+        </div>
+    }
+
     <div class="row">
         <div class="col-md-6">
             <div class="card">
@@ -132,7 +144,7 @@
     </div>
 
     <div class="mt-4">
-        <button id="saveAssignments" class="btn btn-success">Save Assignments</button>
+        <button id="saveAssignments" class="btn btn-success" @(questionnaireEditingLocked ? "disabled=\"disabled\"" : "")>Save Assignments</button>
         <a href="@Url.Action("Index", "Positions")" class="btn btn-link">Back to Positions</a>
     </div>
 </div>
@@ -231,9 +243,18 @@
             var $globalHint = $("#globalWeightHint");
             var $redistributeBtn = $("#redistributeWeights");
             var positionId = @Model.PositionId;
+            var questionnaireEditingLocked = @(questionnaireEditingLocked ? "true" : "false");
+
+            if (questionnaireEditingLocked) {
+                $("#availableQuestions .assign-btn").prop("disabled", true);
+                $assignedQuestions.find(".remove-btn, .lock-btn, .weight-slider, .weight-input").prop("disabled", true);
+                $redistributeBtn.prop("disabled", true);
+                $focusSelect.prop("disabled", true);
+                $globalSlider.prop("disabled", true);
+            }
 
             var assignedQuestionsElement = document.getElementById("assignedQuestions");
-            if (window.Sortable && assignedQuestionsElement) {
+            if (window.Sortable && assignedQuestionsElement && !questionnaireEditingLocked) {
                 Sortable.create(assignedQuestionsElement, {
                     animation: 150,
                     ghostClass: "sortable-ghost",
@@ -246,15 +267,24 @@
             }
 
             $("#availableQuestions").on("click", ".assign-btn", function () {
+                if (questionnaireEditingLocked) {
+                    return;
+                }
                 var $questionItem = $(this).closest(".question-item");
                 assignQuestion($questionItem);
             });
 
             $("#availableQuestions").on("dblclick", ".question-item:not(.assigned)", function () {
+                if (questionnaireEditingLocked) {
+                    return;
+                }
                 assignQuestion($(this));
             });
 
             $assignedQuestions.on("click", ".remove-btn", function () {
+                if (questionnaireEditingLocked) {
+                    return;
+                }
                 removeQuestion($(this).closest(".question-item"));
             });
 

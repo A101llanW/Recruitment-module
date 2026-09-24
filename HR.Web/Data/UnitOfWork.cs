@@ -28,6 +28,7 @@ namespace HR.Web.Data
         public Repository<LoginAttempt> LoginAttempts { get { return new Repository<LoginAttempt>(_context); } }
         public Repository<AuditLog> AuditLogs { get { return new Repository<AuditLog>(_context); } }
         public Repository<Report> Reports { get { return new Repository<Report>(_context); } }
+        public Repository<CustomReportDefinition> CustomReportDefinitions { get { return new Repository<CustomReportDefinition>(_context); } }
         public Repository<PasswordReset> PasswordResets { get { return new Repository<PasswordReset>(_context); } }
         public Repository<LicenseTransaction> LicenseTransactions { get { return new Repository<LicenseTransaction>(_context); } }
         public Repository<ImpersonationRequest> ImpersonationRequests { get { return new Repository<ImpersonationRequest>(_context); } }

@@ -5,7 +5,7 @@ namespace HR.Web.Models
 {
     /// <summary>
     /// Per-company SMTP configuration for outbound candidate and tenant-scoped emails.
-    /// When disabled or incomplete, the application falls back to global SMTP settings.
+    /// When incomplete, the application falls back to global SMTP settings automatically.
     /// </summary>
     public class CompanySmtpSettings
     {

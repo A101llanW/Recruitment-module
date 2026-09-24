@@ -2,15 +2,71 @@
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Company email (SMTP)";
+    ViewBag.SuppressPageHero = true;
 }
 
 <div class="container mt-4">
     <h2 class="mb-3">Company email (SMTP)</h2>
 
     <p class="text-muted">
-        Configure outbound email for your company. When enabled, candidate-facing messages (applications, interviews, questionnaires, and similar)
-        are sent using your SMTP server and <strong>From</strong> address. If disabled or incomplete, the system uses the global platform SMTP settings.
+        Configure outbound email for your company. When <strong>SMTP host</strong>, <strong>From email</strong>, and <strong>password</strong> are all saved,
+        candidate-facing messages (applications, interviews, questionnaires, and similar) are sent using your company&apos;s SMTP server and <strong>From</strong> address.
+        If any of those are missing, the system automatically uses the global platform SMTP settings instead &mdash; no separate toggle is required.
     </p>
+
+    <div class="card border-0 bg-light mb-4">
+        <div class="card-body">
+            <h5 class="card-title mb-2"><i class="fas fa-book-open mr-2"></i>How to find your SMTP settings</h5>
+            <p class="small text-muted mb-3">
+                SMTP is the mail server your email provider uses to send messages. You usually get these details from your IT team or your provider&apos;s admin console.
+                Map them to the fields on this page as follows:
+            </p>
+            <ul class="small mb-3 pl-3">
+                <li><strong>SMTP host</strong> &mdash; the outgoing mail server name (for example <code>smtp.gmail.com</code> or <code>smtp.office365.com</code>).</li>
+                <li><strong>SMTP port</strong> &mdash; almost always <strong>587</strong> with SSL/TLS enabled (this page always uses TLS).</li>
+                <li><strong>SMTP username</strong> &mdash; the mailbox you sign in with (often the same as <strong>From email</strong>).</li>
+                <li><strong>SMTP password</strong> &mdash; your mailbox password, or an <strong>app password</strong> / SMTP credential if your provider requires one.</li>
+                <li><strong>From email / From name</strong> &mdash; what candidates see in the <em>From</em> line; must match an address your provider allows this mailbox to send as.</li>
+            </ul>
+
+            <h6 class="font-weight-bold mb-2">Common providers</h6>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="border rounded bg-white p-3 h-100">
+                        <p class="mb-1 font-weight-bold"><i class="fab fa-google mr-1"></i> Gmail / Google Workspace</p>
+                        <ul class="small pl-3 mb-2">
+                            <li>Host: <code>smtp.gmail.com</code></li>
+                            <li>Port: <code>587</code> (TLS)</li>
+                            <li>Username: your full Gmail address</li>
+                            <li>Password: use a Google <strong>App Password</strong> if 2-step verification is on</li>
+                        </ul>
+                        <p class="small mb-0">
+                            <a href="https://support.google.com/mail/answer/7126229" target="_blank" rel="noopener noreferrer">Gmail SMTP settings (Google Help)</a>
+                            &nbsp;&middot;&nbsp;
+                            <a href="https://support.google.com/accounts/answer/185833" target="_blank" rel="noopener noreferrer">Create an app password</a>
+                        </p>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="border rounded bg-white p-3 h-100">
+                        <p class="mb-1 font-weight-bold"><i class="fab fa-microsoft mr-1"></i> Microsoft 365 / Outlook</p>
+                        <ul class="small pl-3 mb-2">
+                            <li>Host: <code>smtp.office365.com</code></li>
+                            <li>Port: <code>587</code> (STARTTLS)</li>
+                            <li>Username: your Microsoft 365 sign-in email</li>
+                            <li>Password: mailbox password (SMTP AUTH must be enabled by your admin)</li>
+                        </ul>
+                        <p class="small mb-0">
+                            <a href="https://learn.microsoft.com/en-us/exchange/clients-and-mobile-in-exchange-online/authenticated-client-smtp-submission" target="_blank" rel="noopener noreferrer">Microsoft 365 SMTP submission (Microsoft Learn)</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <p class="small text-muted mb-0">
+                Using another provider? Search their documentation for &ldquo;SMTP settings&rdquo; or &ldquo;outgoing mail server&rdquo;, or ask your email/hosting support for the host, port, username, and password.
+            </p>
+        </div>
+    </div>
 
     @if (Model.IsSuperAdmin && Model.CompanyChoices != null && Model.CompanyChoices.Any())
     {
@@ -41,14 +97,15 @@
         {
             <div class="alert alert-secondary">
                 <i class="fas fa-info-circle mr-1"></i>
-                This company currently uses the <strong>global</strong> email configuration for outbound mail.
+                This company is using the <strong>global</strong> email configuration because company SMTP is not fully configured yet
+                (host, from email, and password are all required).
             </div>
         }
         else
         {
             <div class="alert alert-success">
                 <i class="fas fa-check-circle mr-1"></i>
-                Company SMTP is active. Outbound mail for this tenant uses the settings below.
+                Company SMTP is complete. Outbound mail for this tenant uses the settings below.
             </div>
         }
 
@@ -63,37 +120,50 @@
                     @Html.HiddenFor(m => m.Form.CompanyId)
                     <input type="hidden" name="Form.SmtpEnableSsl" value="true" />
 
-                    <div class="custom-control custom-checkbox mb-3">
-                        @Html.CheckBoxFor(m => m.Form.IsEnabled, new { @class = "custom-control-input", id = "smtpEnabled" })
-                        <label class="custom-control-label" for="smtpEnabled">Enable company SMTP for outbound email</label>
-                    </div>
-
                     <div class="form-row">
                         <div class="form-group col-md-8">
                             @Html.LabelFor(m => m.Form.SmtpHost)
-                            @Html.TextBoxFor(m => m.Form.SmtpHost, new { @class = "form-control", placeholder = "smtp.example.com" })
+                            @Html.TextBoxFor(m => m.Form.SmtpHost, new { @class = "form-control", placeholder = "smtp.example.com", aria_describedby = "smtpHostHelp" })
+                            <small id="smtpHostHelp" class="form-text text-muted">Outgoing mail server from your email provider (see guide above).</small>
                         </div>
                         <div class="form-group col-md-4">
                             @Html.LabelFor(m => m.Form.SmtpPort)
-                            @Html.TextBoxFor(m => m.Form.SmtpPort, new { @class = "form-control", type = "number", min = "1", max = "65535" })
+                            @Html.TextBoxFor(m => m.Form.SmtpPort, new { @class = "form-control", type = "number", min = "1", max = "65535", aria_describedby = "smtpPortHelp" })
+                            <small id="smtpPortHelp" class="form-text text-muted">Use <strong>587</strong> unless your provider specifies otherwise.</small>
                         </div>
                     </div>
 
                     <div class="form-row">
                         <div class="form-group col-md-6">
                             @Html.LabelFor(m => m.Form.SmtpUser)
-                            @Html.TextBoxFor(m => m.Form.SmtpUser, new { @class = "form-control", autocomplete = "off" })
+                            @Html.TextBoxFor(m => m.Form.SmtpUser, new { @class = "form-control", autocomplete = "off", aria_describedby = "smtpUserHelp" })
+                            <small id="smtpUserHelp" class="form-text text-muted">Usually the full email address of the sending mailbox.</small>
                         </div>
                         <div class="form-group col-md-6">
                             @Html.LabelFor(m => m.Form.SmtpPassword)
-                            @Html.PasswordFor(m => m.Form.SmtpPassword, new { @class = "form-control", autocomplete = "new-password" })
                             @if (Model.HasStoredPassword)
                             {
-                                <small class="form-text text-muted">A password is stored. Leave the field empty to keep it, or enter a new value to replace it.</small>
+                                <span class="badge badge-success ml-2" id="smtpPasswordSavedBadge">Password saved</span>
+                            }
+                            @Html.PasswordFor(m => m.Form.SmtpPassword, new
+                            {
+                                @class = "form-control",
+                                autocomplete = "new-password",
+                                placeholder = Model.HasStoredPassword ? "Leave blank to keep saved password" : "Enter SMTP password or app password",
+                                aria_describedby = "smtpPasswordHelp"
+                            })
+                            @if (Model.HasStoredPassword)
+                            {
+                                <small id="smtpPasswordHelp" class="form-text text-muted">
+                                    <strong>A password is already saved for this company.</strong> The field is intentionally left empty for security &mdash; we never show stored passwords.
+                                    Leave it blank when saving other changes to keep the current password, or type a new password to replace it.
+                                </small>
                             }
                             else
                             {
-                                <small class="form-text text-muted">Required when enabling SMTP.</small>
+                                <small id="smtpPasswordHelp" class="form-text text-muted">
+                                    Required when enabling SMTP. Use your mailbox password or an app-specific password from your provider.
+                                </small>
                             }
                         </div>
                     </div>
@@ -101,11 +171,13 @@
                     <div class="form-row">
                         <div class="form-group col-md-6">
                             @Html.LabelFor(m => m.Form.FromEmail)
-                            @Html.TextBoxFor(m => m.Form.FromEmail, new { @class = "form-control", type = "email", placeholder = "recruiting@yourcompany.com" })
+                            @Html.TextBoxFor(m => m.Form.FromEmail, new { @class = "form-control", type = "email", placeholder = "recruiting@yourcompany.com", aria_describedby = "fromEmailHelp" })
+                            <small id="fromEmailHelp" class="form-text text-muted">Reply-to address candidates see; must be allowed by your SMTP provider.</small>
                         </div>
                         <div class="form-group col-md-6">
                             @Html.LabelFor(m => m.Form.FromName)
-                            @Html.TextBoxFor(m => m.Form.FromName, new { @class = "form-control", placeholder = Model.CompanyName })
+                            @Html.TextBoxFor(m => m.Form.FromName, new { @class = "form-control", placeholder = Model.CompanyName, aria_describedby = "fromNameHelp" })
+                            <small id="fromNameHelp" class="form-text text-muted">Display name shown alongside the From email (for example your company or HR team name).</small>
                         </div>
                     </div>
 
@@ -125,7 +197,13 @@
                 <hr class="my-4" />
 
                 <h5 class="mb-3">Send test email</h5>
-                <p class="text-muted small">Sends a test message using the saved company SMTP settings (not unsaved form values).</p>
+                <p class="text-muted small mb-1">Sends a test message using the <strong>saved</strong> company SMTP settings (not unsaved form values). Save first if you changed host, username, or password.</p>
+                @if (Model.HasStoredPassword)
+                {
+                    <p class="text-muted small mb-2">
+                        <i class="fas fa-lock mr-1"></i>Your saved SMTP password will be used even though the password field above is empty.
+                    </p>
+                }
                 @using (Html.BeginForm("SendCompanySmtpTestEmail", "Admin", FormMethod.Post, new { @class = "form-inline" }))
                 {
                     @Html.AntiForgeryToken()

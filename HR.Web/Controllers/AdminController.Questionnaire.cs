@@ -4,6 +4,7 @@ using System.Data.Entity;
 using System.Linq;
 using System.Web.Mvc;
 using HR.Web.Data;
+using HR.Web.Helpers;
 using HR.Web.Models;
 using HR.Web.ViewModels;
 
@@ -41,6 +42,11 @@ namespace HR.Web.Controllers
 
             ApplyDisplayWeights(assignedQuestions);
 
+            var lockInfo = PositionQuestionnaireLockHelper.GetLockInfo(_uow.Context, positionId);
+            ViewBag.QuestionnaireLockInfo = lockInfo;
+            ViewBag.QuestionnaireLockMessage = lockInfo.BuildLockMessage();
+            ViewBag.QuestionnaireEditingLocked = lockInfo.LockedStageNumbers != null && lockInfo.LockedStageNumbers.Contains(1);
+
             var viewModel = new PositionQuestionViewModel
             {
                 Position = position,
@@ -72,6 +78,20 @@ namespace HR.Web.Controllers
             {
                 var normalizedAssignments = NormalizeAssignments(assignments);
 
+                var existingAssignments = _uow.Context.Set<PositionQuestion>()
+                    .Where(pq => pq.PositionId == positionId)
+                    .ToList();
+
+                var lockInfo = PositionQuestionnaireLockHelper.GetLockInfo(_uow.Context, positionId);
+                var lockError = PositionQuestionnaireLockHelper.ValidateLegacyQuestionAssignments(
+                    lockInfo,
+                    existingAssignments,
+                    normalizedAssignments);
+                if (!string.IsNullOrEmpty(lockError))
+                {
+                    return Json(new { success = false, message = lockError });
+                }
+
                 var incomingQuestionIds = normalizedAssignments
                     .Select(a => a.QuestionId)
                     .Distinct()
@@ -87,10 +107,6 @@ namespace HR.Web.Controllers
                 {
                     return Json(new { success = false, message = "One or more selected questions are invalid." });
                 }
-
-                var existingAssignments = _uow.Context.Set<PositionQuestion>()
-                    .Where(pq => pq.PositionId == positionId)
-                    .ToList();
 
                 var incomingIdSet = new HashSet<int>(incomingQuestionIds);
                 var assignmentsToRemove = existingAssignments
