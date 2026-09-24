@@ -237,7 +237,8 @@
     .position-applied-meta i {
         opacity: 0.85;
     }
-    #posAppliedStatus {
+    #posAppliedStatus,
+    #modalPosAppliedStatus {
         display: none;
         margin-bottom: 0.85rem;
         padding: 0.55rem 0.75rem;
@@ -245,7 +246,8 @@
         font-size: 0.88rem;
         font-weight: 500;
     }
-    #posAppliedStatus.is-visible {
+    #posAppliedStatus.is-visible,
+    #modalPosAppliedStatus.is-visible {
         display: block;
     }
     @@keyframes applied-badge-pulse {
@@ -496,11 +498,13 @@ else
                             <div class="flex-grow-1">
                                 <h5 class="mb-1">
                                     @p.Title
-                                    @if (candidateAction.HasApplied && !string.IsNullOrEmpty(candidateAction.BadgeLabel))
+                                    @if (candidateAction.HasApplied)
                                     {
-                                        <span class="position-applied-badge @(candidateAction.BadgeCssClass)">
+                                        var appliedBadgeLabel = string.IsNullOrEmpty(candidateAction.BadgeLabel) ? "Applied" : candidateAction.BadgeLabel;
+                                        var appliedBadgeClass = string.IsNullOrEmpty(candidateAction.BadgeCssClass) ? "position-applied-badge--applied" : candidateAction.BadgeCssClass;
+                                        <span class="position-applied-badge @appliedBadgeClass">
                                             <i class="fas fa-check-circle" aria-hidden="true"></i>
-                                            @candidateAction.BadgeLabel
+                                            @appliedBadgeLabel
                                         </span>
                                     }
                                     else if (candidateAction.ShowRecentlyViewed)
@@ -595,6 +599,7 @@ else if (ViewBag.IsReadOnly != true)
         </button>
       </div>
       <div class="modal-body">
+        <div id="modalPosAppliedStatus" role="status" aria-live="polite"></div>
         <p class="text-muted mb-2" id="modalPosDept"></p>
         <div id="modalPosDesc" class="mb-3"></div>
         <div id="modalPosResponsibilities" class="mb-3" style="display:none;">
@@ -670,6 +675,7 @@ else if (ViewBag.IsReadOnly != true)
                 var linkViewApplications = document.getElementById('posViewApplications');
                 var linkQuestionWeights = document.getElementById('posQuestionWeights');
                 var appliedStatus = document.getElementById('posAppliedStatus');
+                var modalAppliedStatus = document.getElementById('modalPosAppliedStatus');
                 var positionModal = document.getElementById('positionModal');
                 var modalTitle = document.getElementById('modalPosTitle');
                 var modalDesc = document.getElementById('modalPosDesc');
@@ -737,6 +743,7 @@ else if (ViewBag.IsReadOnly != true)
                     if (modalApply) updateCandidateActionLink(modalApply, src);
                     if (modalViewApplications) modalViewApplications.href = src.getAttribute('data-url-applications') || '#';
                     if (modalQuestionWeights) modalQuestionWeights.href = src.getAttribute('data-url-question-weights') || '#';
+                    renderAppliedStatus(src, modalAppliedStatus);
                 }
 
                 function openPositionModal(src) {
@@ -753,12 +760,12 @@ else if (ViewBag.IsReadOnly != true)
                     document.body.classList.add('modal-open');
                 }
 
-                function updateAppliedStatus(el) {
-                    if (!appliedStatus) return;
+                function renderAppliedStatus(el, statusEl) {
+                    if (!statusEl) return;
                     var hasApplied = el && el.getAttribute('data-has-applied') === 'true';
                     if (!hasApplied) {
-                        appliedStatus.classList.remove('is-visible');
-                        appliedStatus.innerHTML = '';
+                        statusEl.classList.remove('is-visible');
+                        statusEl.innerHTML = '';
                         return;
                     }
 
@@ -767,38 +774,42 @@ else if (ViewBag.IsReadOnly != true)
                     var appliedOn = el.getAttribute('data-applied-on') || '';
                     var appliedMeta = appliedOn ? ' &middot; Submitted ' + appliedOn : '';
 
-                    appliedStatus.className = 'is-visible';
-                    appliedStatus.style.background = '';
-                    appliedStatus.style.color = '';
-                    appliedStatus.style.border = '';
+                    statusEl.className = 'is-visible';
+                    statusEl.style.background = '';
+                    statusEl.style.color = '';
+                    statusEl.style.border = '';
 
                     if (badgeClass.indexOf('--action') !== -1) {
-                        appliedStatus.style.background = 'rgba(196, 122, 23, 0.12)';
-                        appliedStatus.style.color = '#8a5310';
-                        appliedStatus.style.border = '1px solid rgba(196, 122, 23, 0.28)';
+                        statusEl.style.background = 'rgba(196, 122, 23, 0.12)';
+                        statusEl.style.color = '#8a5310';
+                        statusEl.style.border = '1px solid rgba(196, 122, 23, 0.28)';
                     } else if (badgeClass.indexOf('--hired') !== -1) {
-                        appliedStatus.style.background = 'rgba(40, 167, 69, 0.12)';
-                        appliedStatus.style.color = '#1d6b32';
-                        appliedStatus.style.border = '1px solid rgba(40, 167, 69, 0.28)';
+                        statusEl.style.background = 'rgba(40, 167, 69, 0.12)';
+                        statusEl.style.color = '#1d6b32';
+                        statusEl.style.border = '1px solid rgba(40, 167, 69, 0.28)';
                     } else if (badgeClass.indexOf('--offer') !== -1) {
-                        appliedStatus.style.background = 'rgba(111, 66, 193, 0.12)';
-                        appliedStatus.style.color = '#5b2f9e';
-                        appliedStatus.style.border = '1px solid rgba(111, 66, 193, 0.28)';
+                        statusEl.style.background = 'rgba(111, 66, 193, 0.12)';
+                        statusEl.style.color = '#5b2f9e';
+                        statusEl.style.border = '1px solid rgba(111, 66, 193, 0.28)';
                     } else if (badgeClass.indexOf('--closed') !== -1) {
-                        appliedStatus.style.background = 'rgba(108, 117, 125, 0.1)';
-                        appliedStatus.style.color = '#5a6268';
-                        appliedStatus.style.border = '1px solid rgba(108, 117, 125, 0.22)';
+                        statusEl.style.background = 'rgba(108, 117, 125, 0.1)';
+                        statusEl.style.color = '#5a6268';
+                        statusEl.style.border = '1px solid rgba(108, 117, 125, 0.22)';
                     } else if (badgeClass.indexOf('--review') !== -1) {
-                        appliedStatus.style.background = 'rgba(61, 143, 173, 0.12)';
-                        appliedStatus.style.color = '#2a6f87';
-                        appliedStatus.style.border = '1px solid rgba(61, 143, 173, 0.28)';
+                        statusEl.style.background = 'rgba(61, 143, 173, 0.12)';
+                        statusEl.style.color = '#2a6f87';
+                        statusEl.style.border = '1px solid rgba(61, 143, 173, 0.28)';
                     } else {
-                        appliedStatus.style.background = 'rgba(46, 125, 96, 0.12)';
-                        appliedStatus.style.color = '#1f5c45';
-                        appliedStatus.style.border = '1px solid rgba(46, 125, 96, 0.28)';
+                        statusEl.style.background = 'rgba(46, 125, 96, 0.12)';
+                        statusEl.style.color = '#1f5c45';
+                        statusEl.style.border = '1px solid rgba(46, 125, 96, 0.28)';
                     }
 
-                    appliedStatus.innerHTML = '<i class="fas fa-check-circle mr-1"></i> You applied here' + appliedMeta + ' &mdash; <strong>' + badgeLabel + '</strong>';
+                    statusEl.innerHTML = '<i class="fas fa-check-circle mr-1"></i> You applied here' + appliedMeta + ' &mdash; <strong>' + badgeLabel + '</strong>';
+                }
+
+                function updateAppliedStatus(el) {
+                    renderAppliedStatus(el, appliedStatus);
                 }
 
                 function updateCandidateActionLink(linkEl, el) {

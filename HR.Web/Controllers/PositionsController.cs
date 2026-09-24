@@ -82,10 +82,18 @@ namespace HR.Web.Controllers
             ViewBag.IsAdmin = canManagePositions;
             ViewBag.IsReadOnly = isReadOnly;
             
-            // For non-admin users (clients/guests), only show open positions
+            // Candidates see open positions plus any closed roles they already applied to.
             if (!canManagePositions && !isReadOnly)
             {
-                query = query.Where(p => p.IsOpen);
+                if (isAuthenticated)
+                {
+                    var appliedPositionIds = GetAppliedPositionIdsForCurrentCandidate();
+                    query = query.Where(p => p.IsOpen || appliedPositionIds.Contains(p.Id));
+                }
+                else
+                {
+                    query = query.Where(p => p.IsOpen);
+                }
             }
             
             var result = query.OrderByDescending(p => p.PostedOn).ToList();
@@ -106,10 +114,13 @@ namespace HR.Web.Controllers
 
             ClosePositionIfExpired(position);
             
-            // Prevent non-admin users from accessing closed positions
+            // Prevent non-admin users from accessing closed positions unless they already applied.
             if (!position.IsOpen && (User == null || !User.IsInRole("Admin")))
             {
-                return new HttpStatusCodeResult(403, "This position is not available for application.");
+                if (!Request.IsAuthenticated || !CandidateHasApplicationForPosition(position.Id))
+                {
+                    return new HttpStatusCodeResult(403, "This position is not available for application.");
+                }
             }
 
             ViewBag.CanManagePositions = Request.IsAuthenticated &&
@@ -207,6 +218,14 @@ namespace HR.Web.Controllers
                 : new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>();
 
             ViewBag.QuestionnaireTemplates = new QuestionnaireTemplateService().GetActiveTemplatesForCurrentTenant();
+
+            var lockInfo = PositionQuestionnaireLockHelper.GetLockInfo(_uow.Context, id);
+            ViewBag.QuestionnaireLockInfo = lockInfo;
+            ViewBag.QuestionnaireLockedStages = lockInfo.LockedStageNumbers != null
+                ? lockInfo.LockedStageNumbers.OrderBy(s => s).ToList()
+                : new List<int>();
+            ViewBag.QuestionnaireLockMessage = lockInfo.BuildLockMessage();
+            ViewBag.QuestionnaireMinStageCount = lockInfo.MinAllowedStageCount;
 
             return View(position);
         }
@@ -427,13 +446,23 @@ namespace HR.Web.Controllers
             }
 
             var applicationsByPositionId = LoadCandidateApplicationsByPositionId(positions);
+            var interviewedApplicationIds = LoadInterviewedApplicationIds(
+                applicationsByPositionId.Values.Select(a => a.Id));
             var actions = positions.ToDictionary(
                 p => p.Id,
-                p => PositionCandidateActionHelper.Resolve(
-                    Request.IsAuthenticated,
-                    applicationsByPositionId.ContainsKey(p.Id) ? applicationsByPositionId[p.Id] : null,
-                    p,
-                    Url));
+                p =>
+                {
+                    Application existingApplication;
+                    applicationsByPositionId.TryGetValue(p.Id, out existingApplication);
+                    var hasScheduledInterview = existingApplication != null
+                        && interviewedApplicationIds.Contains(existingApplication.Id);
+                    return PositionCandidateActionHelper.Resolve(
+                        Request.IsAuthenticated,
+                        existingApplication,
+                        p,
+                        Url,
+                        hasScheduledInterview);
+                });
 
             ViewBag.CandidateActionsByPositionId = actions;
         }
@@ -453,13 +482,24 @@ namespace HR.Web.Controllers
             }
 
             Application existingApplication = null;
+            var hasScheduledInterview = false;
             if (Request.IsAuthenticated)
             {
                 var applicationsByPositionId = LoadCandidateApplicationsByPositionId(new[] { position });
-                applicationsByPositionId.TryGetValue(position.Id, out existingApplication);
+                if (applicationsByPositionId.TryGetValue(position.Id, out existingApplication)
+                    && existingApplication != null)
+                {
+                    hasScheduledInterview = LoadInterviewedApplicationIds(new[] { existingApplication.Id })
+                        .Contains(existingApplication.Id);
+                }
             }
 
-            return PositionCandidateActionHelper.Resolve(Request.IsAuthenticated, existingApplication, position, Url);
+            return PositionCandidateActionHelper.Resolve(
+                Request.IsAuthenticated,
+                existingApplication,
+                position,
+                Url,
+                hasScheduledInterview);
         }
 
         private Dictionary<int, Application> LoadCandidateApplicationsByPositionId(IEnumerable<Position> positions)
@@ -470,8 +510,8 @@ namespace HR.Web.Controllers
                 return result;
             }
 
-            var email = User.Identity.Name;
-            if (string.IsNullOrWhiteSpace(email))
+            var user = ResolveCandidateUser();
+            if (user == null)
             {
                 return result;
             }
@@ -483,22 +523,7 @@ namespace HR.Web.Controllers
             }
 
             var positionIds = positionList.Select(p => p.Id).Distinct().ToList();
-            var companyIds = positionList
-                .Where(p => p.CompanyId.HasValue)
-                .Select(p => p.CompanyId.Value)
-                .Distinct()
-                .ToList();
-            if (!companyIds.Any())
-            {
-                return result;
-            }
-
-            var normalizedEmail = email.Trim().ToLowerInvariant();
-            var applicantIds = _uow.Context.Set<Applicant>()
-                .AsNoTracking()
-                .Where(a => a.Email.ToLower() == normalizedEmail && companyIds.Contains(a.CompanyId.Value))
-                .Select(a => a.Id)
-                .ToList();
+            var applicantIds = ResolveCandidateApplicantIds(user);
             if (!applicantIds.Any())
             {
                 return result;

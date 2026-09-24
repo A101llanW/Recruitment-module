@@ -1,5 +1,4 @@
 using System;
-using System.Web.Mvc;
 using HR.Web.Models;
 using HR.Web.ViewModels;
 
@@ -11,7 +10,8 @@ namespace HR.Web.Helpers
             bool isAuthenticated,
             Application existingApplication,
             Position position,
-            System.Web.Mvc.UrlHelper url)
+            System.Web.Mvc.UrlHelper url,
+            bool hasScheduledInterview = false)
         {
             if (position == null)
             {
@@ -63,17 +63,21 @@ namespace HR.Web.Helpers
             {
                 action = new PositionCandidateActionViewModel
                 {
-                    Label = "View Application",
-                    Url = url.Action("Details", "Applications", new { id = existingApplication.Id }),
+                    Label = "My Applications",
+                    Url = url.Action("Index", "Applications", new { tenant = tenantSlug }),
                     IconClass = "fas fa-file-alt"
                 };
             }
 
-            ApplyApplicationBadge(existingApplication, action);
+            ApplyApplicationBadge(existingApplication, position, hasScheduledInterview, action);
             return action;
         }
 
-        private static void ApplyApplicationBadge(Application application, PositionCandidateActionViewModel action)
+        private static void ApplyApplicationBadge(
+            Application application,
+            Position position,
+            bool hasScheduledInterview,
+            PositionCandidateActionViewModel action)
         {
             if (application == null || action == null)
             {
@@ -90,30 +94,68 @@ namespace HR.Web.Helpers
                 return;
             }
 
-            var status = (application.Status ?? string.Empty).Trim();
-            switch (status.ToLowerInvariant())
+            var status = (application.Status ?? string.Empty).Trim().ToLowerInvariant();
+            switch (status)
             {
                 case "hired":
                     action.BadgeLabel = "Hired";
                     action.BadgeCssClass = "position-applied-badge--hired";
-                    break;
+                    return;
                 case "offer":
                     action.BadgeLabel = "Offer received";
                     action.BadgeCssClass = "position-applied-badge--offer";
-                    break;
+                    return;
                 case "rejected":
                     action.BadgeLabel = "Not selected";
                     action.BadgeCssClass = "position-applied-badge--closed";
-                    break;
+                    return;
+            }
+
+            if (hasScheduledInterview)
+            {
+                action.BadgeLabel = "Interview scheduled";
+                action.BadgeCssClass = "position-applied-badge--review";
+                return;
+            }
+
+            switch (status)
+            {
                 case "interviewing":
                     action.BadgeLabel = "In review";
                     action.BadgeCssClass = "position-applied-badge--review";
-                    break;
-                default:
-                    action.BadgeLabel = "Applied";
+                    return;
+                case "shortlisted":
+                    action.BadgeLabel = "Shortlisted";
+                    action.BadgeCssClass = "position-applied-badge--offer";
+                    return;
+                case "approved":
+                    action.BadgeLabel = "Approved";
+                    action.BadgeCssClass = "position-applied-badge--review";
+                    return;
+                case "pending":
+                    action.BadgeLabel = "Application received";
                     action.BadgeCssClass = "position-applied-badge--applied";
-                    break;
+                    return;
             }
+
+            var maxStages = position != null ? Math.Max(1, position.QuestionnaireStageCount) : 1;
+            var completedStages = Math.Max(0, application.LastCompletedQuestionnaireStage);
+            if (maxStages > 1 && completedStages > 0 && completedStages < maxStages)
+            {
+                action.BadgeLabel = "Awaiting next stage";
+                action.BadgeCssClass = "position-applied-badge--review";
+                return;
+            }
+
+            if (completedStages >= maxStages && completedStages > 0)
+            {
+                action.BadgeLabel = "Under review";
+                action.BadgeCssClass = "position-applied-badge--review";
+                return;
+            }
+
+            action.BadgeLabel = "Applied";
+            action.BadgeCssClass = "position-applied-badge--applied";
         }
     }
 }

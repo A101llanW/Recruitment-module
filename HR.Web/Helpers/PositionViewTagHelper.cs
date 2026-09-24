@@ -4,8 +4,6 @@ namespace HR.Web.Helpers
 {
     public static class PositionViewTagHelper
     {
-        public const int LoginsUntilTagHides = 5;
-
         public static bool ShouldShowRecentlyViewed(PositionView view, int currentLoginCount, bool positionIsOpen, bool hasApplied)
         {
             if (view == null || hasApplied)
@@ -13,18 +11,8 @@ namespace HR.Web.Helpers
                 return false;
             }
 
-            if (view.IsOpenAtView != positionIsOpen)
-            {
-                return false;
-            }
-
-            var loginsSinceView = currentLoginCount - view.LoginCountAtView;
-            if (loginsSinceView < 0)
-            {
-                loginsSinceView = 0;
-            }
-
-            return loginsSinceView < LoginsUntilTagHides;
+            // Keep the tag while the position is still in the same open/closed state the candidate saw.
+            return view.IsOpenAtView == positionIsOpen;
         }
     }
 }

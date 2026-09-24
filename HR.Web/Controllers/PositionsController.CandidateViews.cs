@@ -122,14 +122,106 @@ namespace HR.Web.Controllers
                 return null;
             }
 
+            return ResolveCandidateUser();
+        }
+
+        private User ResolveCandidateUser()
+        {
+            if (!Request.IsAuthenticated || User?.Identity == null || !User.Identity.IsAuthenticated)
+            {
+                return null;
+            }
+
             var name = User.Identity.Name;
             if (string.IsNullOrWhiteSpace(name))
             {
                 return null;
             }
 
-            var normalized = name.Trim();
-            return _uow.Context.Users.FirstOrDefault(u => u.UserName == normalized);
+            var lowerUsername = name.Trim().ToLowerInvariant();
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            var query = _uow.Context.Users.AsNoTracking()
+                .Where(u => u.UserName != null && u.UserName.ToLower() == lowerUsername);
+
+            if (companyId.HasValue)
+            {
+                query = query.Where(u => u.CompanyId == companyId.Value);
+            }
+
+            return query.FirstOrDefault();
+        }
+
+        private List<int> ResolveCandidateApplicantIds(User user)
+        {
+            if (user == null)
+            {
+                return new List<int>();
+            }
+
+            var normalizedEmail = (user.Email ?? string.Empty).Trim().ToLowerInvariant();
+            var normalizedUsername = (user.UserName ?? string.Empty).Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(normalizedEmail) && string.IsNullOrEmpty(normalizedUsername))
+            {
+                return new List<int>();
+            }
+
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            var query = _uow.Context.Applicants.AsNoTracking().AsQueryable();
+            if (companyId.HasValue)
+            {
+                query = query.Where(a => a.CompanyId == companyId.Value);
+            }
+
+            return query
+                .Where(a => a.Email != null &&
+                    ((!string.IsNullOrEmpty(normalizedEmail) && a.Email.ToLower() == normalizedEmail)
+                     || (!string.IsNullOrEmpty(normalizedUsername) && a.Email.ToLower() == normalizedUsername)))
+                .Select(a => a.Id)
+                .Distinct()
+                .ToList();
+        }
+
+        private HashSet<int> GetAppliedPositionIdsForCurrentCandidate()
+        {
+            var user = ResolveCandidateUser();
+            if (user == null)
+            {
+                return new HashSet<int>();
+            }
+
+            var applicantIds = ResolveCandidateApplicantIds(user);
+            if (!applicantIds.Any())
+            {
+                return new HashSet<int>();
+            }
+
+            var companyId = _tenantService.GetCurrentUserCompanyId();
+            var applicationsQuery = _uow.Context.Applications.AsNoTracking()
+                .Where(a => applicantIds.Contains(a.ApplicantId));
+            if (companyId.HasValue)
+            {
+                applicationsQuery = applicationsQuery.Where(a => a.CompanyId == companyId.Value);
+            }
+
+            return new HashSet<int>(applicationsQuery.Select(a => a.PositionId));
+        }
+
+        private bool CandidateHasApplicationForPosition(int positionId)
+        {
+            return GetAppliedPositionIdsForCurrentCandidate().Contains(positionId);
+        }
+
+        private HashSet<int> LoadInterviewedApplicationIds(IEnumerable<int> applicationIds)
+        {
+            var ids = applicationIds == null ? new List<int>() : applicationIds.Where(id => id > 0).Distinct().ToList();
+            if (!ids.Any())
+            {
+                return new HashSet<int>();
+            }
+
+            return new HashSet<int>(_uow.Context.Interviews.AsNoTracking()
+                .Where(i => ids.Contains(i.ApplicationId))
+                .Select(i => i.ApplicationId));
         }
     }
 }
