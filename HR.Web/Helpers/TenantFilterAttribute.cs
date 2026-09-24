@@ -159,6 +159,16 @@ namespace HR.Web.Helpers
                        string.Equals(action, "Details", StringComparison.OrdinalIgnoreCase);
             }
 
+            if (string.Equals(controller, "Interviews", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(action, "Index", StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (string.Equals(controller, "Departments", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(action, "Index", StringComparison.OrdinalIgnoreCase);
+            }
+
             if (string.Equals(controller, "Account", StringComparison.OrdinalIgnoreCase))
             {
                 return string.Equals(action, "Logout", StringComparison.OrdinalIgnoreCase) ||
