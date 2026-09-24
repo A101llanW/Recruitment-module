@@ -402,10 +402,10 @@ namespace HR.Web.Controllers
         {
             var tenantCookie = new HttpCookie("PreferredTenant", tenantToken)
             {
-                Expires = DateTime.Now.AddDays(30),
-                Path = "/"
+                HttpOnly = true,
+                Secure = Request.IsSecureConnection,
+                Expires = DateTime.Now.AddDays(30)
             };
-
             Response.Cookies.Add(tenantCookie);
         }
 

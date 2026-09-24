@@ -39,8 +39,12 @@ namespace HR.Web.Controllers
         }
 
         [AllowAnonymous]
+        [OutputCache(NoStore = true, Duration = 0, VaryByParam = "*")]
         public ActionResult Login(string returnUrl = null)
         {
+            Response.Cache.SetCacheability(HttpCacheability.NoCache);
+            Response.Cache.SetNoStore();
+            Response.Cache.SetExpires(DateTime.UtcNow.AddMinutes(-1));
             return LoginCore(ParseReturnUriOrNull(returnUrl));
         }
 
@@ -64,7 +68,12 @@ namespace HR.Web.Controllers
                 }
             }
 
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
+            ApplyLoginFlashState(urlTenantToken);
+            if (ViewBag.ReturnUrl == null)
+            {
+                ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
+            }
+
             return View();
         }
 
@@ -337,11 +346,7 @@ namespace HR.Web.Controllers
         public ActionResult Logout()
         {
             var username = GetAuthenticatedUsername();
-            
-            FormsAuthentication.SignOut();
-            Session.Clear();
-            Session.Abandon();
-            
+            InvalidateAuthenticatedSession();
             AuditSvc.LogLogout(username);
             return RedirectToAction("Login");
         }
@@ -543,28 +548,39 @@ namespace HR.Web.Controllers
                 var identity = User?.Identity;
                 string username = Session["PendingMfaUsername"] as string
                     ?? (identity != null && identity.IsAuthenticated ? identity.Name : null);
+                var tenantToken = RouteData.Values["tenant"] as string;
                 if (string.IsNullOrEmpty(username))
                 {
-                    return RedirectToAction("Login");
+                    return RedirectToLoginWithFlash(
+                        "Your sign-in session expired. Please sign in again.",
+                        tenantToken,
+                        null);
                 }
 
                 var user = FindPendingMfaUser(username);
                 if (user == null)
                 {
-                    return RedirectToAction("Login");
+                    return RedirectToLoginWithFlash(
+                        "Your sign-in session expired. Please sign in again.",
+                        tenantToken,
+                        null);
                 }
 
                 ViewBag.MfaMethod = user.MfaMethod ?? "Email";
                 ViewBag.EmailHint = MaskContactInfo(user.Email);
+                ViewBag.StatusMessage = TempData["InfoMessage"];
+                ViewBag.MfaSendError = ViewBag.MfaSendError ?? TempData["MfaSendError"];
+                ViewBag.HasActiveMfaCode = HasActiveMfaCode(user);
 
-                if (UsesEmailMfa(user))
+                if (UsesEmailMfa(user) && !ViewBag.HasActiveMfaCode)
                 {
-                    if (!HasActiveMfaCode(user))
+                    if (!SendMfaCode(user))
                     {
-                        if (!SendMfaCode(user))
-                        {
-                            ViewBag.MfaSendError = "We could not send a verification email. Check SMTP settings or use Resend below.";
-                        }
+                        ViewBag.MfaSendError = "We could not send a verification email. Check SMTP settings or use Resend below.";
+                    }
+                    else
+                    {
+                        ViewBag.HasActiveMfaCode = true;
                     }
                 }
 

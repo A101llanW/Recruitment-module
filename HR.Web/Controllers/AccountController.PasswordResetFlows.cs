@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Data.Entity;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Web.Mvc;
@@ -13,6 +15,7 @@ namespace HR.Web.Controllers
         private async Task<ActionResult> HandleForgotPassword(ForgotPasswordViewModel model)
         {
             var clientIp = GetClientIp();
+            var tenantToken = RouteData.Values["tenant"] as string;
             if (IsForgotPasswordRateLimited(clientIp))
             {
                 AuditSvc.LogAction(
@@ -33,14 +36,46 @@ namespace HR.Web.Controllers
 
             try
             {
-                var user = _uow.Context.Users.FirstOrDefault(u => u.Email == model.Email);
-                if (user != null)
+                var normalizedEmail = model.Email.Trim();
+                var targetCompanyId = ResolveTargetCompanyId(tenantToken);
+                var matchingUsers = FindForgotPasswordUsers(normalizedEmail, targetCompanyId);
+
+                if (matchingUsers.Count > 1 && !targetCompanyId.HasValue)
                 {
-                    await CreateAndSendPasswordResetToken(user, clientIp);
+                    ViewBag.ForgotPasswordEmail = normalizedEmail;
+                    ViewBag.ForgotPasswordCandidates = matchingUsers;
+                    ViewBag.Message =
+                        "We found multiple accounts for this email. Select the correct company portal below to receive a reset link for that account.";
+                    return View("ForgotPassword", model);
+                }
+
+                if (matchingUsers.Count == 1)
+                {
+                    await CreateAndSendPasswordResetToken(matchingUsers[0], clientIp);
+                }
+                else if (targetCompanyId.HasValue)
+                {
+                    AuditSvc.LogAction(
+                        "GUEST",
+                        "PASSWORD_RESET_ATTEMPT",
+                        "Account",
+                        "",
+                        null,
+                        null,
+                        false,
+                        string.Format("Email not found in tenant {0}: {1}", tenantToken, normalizedEmail));
                 }
                 else
                 {
-                    AuditSvc.LogAction("GUEST", "PASSWORD_RESET_ATTEMPT", "Account", "", null, null, false, "Email not found: " + model.Email);
+                    AuditSvc.LogAction(
+                        "GUEST",
+                        "PASSWORD_RESET_ATTEMPT",
+                        "Account",
+                        "",
+                        null,
+                        null,
+                        false,
+                        "Email not found: " + normalizedEmail);
                 }
 
                 ViewBag.SuccessMessage = "If an account with that email exists, a password reset link has been sent.";
@@ -76,6 +111,26 @@ namespace HR.Web.Controllers
             return recentRequestCount >= maxForgotRequests;
         }
 
+        private List<User> FindForgotPasswordUsers(string email, int? targetCompanyId)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return new List<User>();
+            }
+
+            var normalizedEmail = email.Trim();
+            var query = _uow.Context.Users
+                .Include(u => u.Company)
+                .Where(u => u.Email != null && u.Email == normalizedEmail);
+
+            if (targetCompanyId.HasValue)
+            {
+                query = query.Where(u => u.CompanyId == targetCompanyId.Value);
+            }
+
+            return query.OrderBy(u => u.CompanyId).ThenBy(u => u.Id).ToList();
+        }
+
         private void RecordForgotPasswordAttempt(ForgotPasswordViewModel model, string clientIp)
         {
             _uow.LoginAttempts.Add(
@@ -108,12 +163,16 @@ namespace HR.Web.Controllers
             _uow.Complete();
 
             var tenantToken = RouteData.Values["tenant"] as string;
-            var resetUrl = Url.Action("ResetPassword", "Account", new { tenant = tenantToken, token = token }, Request.Url.Scheme);
+            var resetUrl = BuildPasswordResetUrl(user, token);
             DevDiagnostics.LogOneTimeCode("PASSWORD RESET TOKEN", user.Email, token);
 
-            if (EmailSvc != null)
+            var sendResult = await EmailSvc.TrySendPasswordResetEmailAsync(user.Email, resetUrl, user.CompanyId);
+            if (sendResult == null || !sendResult.Success)
             {
-                await EmailSvc.SendPasswordResetEmailAsync(user.Email, resetUrl, user.CompanyId);
+                var emailError = sendResult != null && !string.IsNullOrWhiteSpace(sendResult.ErrorMessage)
+                    ? sendResult.ErrorMessage
+                    : "Password reset email could not be sent. Check SMTP settings or contact your administrator.";
+                throw new InvalidOperationException(emailError);
             }
 
             AuditSvc.LogAction(
@@ -134,6 +193,19 @@ namespace HR.Web.Controllers
             {
                 existingToken.IsUsed = true;
             }
+        }
+
+        private string BuildPasswordResetUrl(User user, string token)
+        {
+            string tenantSlug = null;
+            if (user != null && user.CompanyId.HasValue)
+            {
+                var company = _uow.Companies.Get(user.CompanyId.Value);
+                tenantSlug = company != null ? company.Slug : null;
+            }
+
+            var relativeUrl = Url.Action("ResetPassword", "Account", new { tenant = tenantSlug, token = token });
+            return ExternalUrlHelper.ToAbsoluteUrl(Request, relativeUrl);
         }
 
         private static string BuildExceptionMessage(Exception ex)
@@ -221,9 +293,11 @@ namespace HR.Web.Controllers
 
         private void SetPasswordResetSuccessMessage(bool ipMismatch)
         {
-            ViewBag.SuccessMessage = ipMismatch
+            var message = ipMismatch
                 ? "Your password has been reset. NOTE: This reset was completed from a different location than where it was requested. If you did not initiate this reset, please contact your administrator immediately."
                 : "Your password has been successfully reset. You can now login with your new password.";
+
+            Session[LoginFlashSuccessSessionKey] = message;
         }
     }
 }

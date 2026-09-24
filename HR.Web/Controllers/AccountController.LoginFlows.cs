@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data.Entity;
 using System.Globalization;
 using System.Collections.Generic;
@@ -14,6 +14,14 @@ namespace HR.Web.Controllers
 {
     public partial class AccountController
     {
+        private const string LoginFlashErrorSessionKey = "LoginFlashError";
+        private const string LoginFlashInfoSessionKey = "LoginFlashInfo";
+        private const string LoginFlashSuccessSessionKey = "LoginFlashSuccess";
+        private const string LoginFlashReturnUrlSessionKey = "LoginFlashReturnUrl";
+        private const string LoginFlashRetryUsernameSessionKey = "LoginFlashRetryUsername";
+        private const string LoginFlashRetryModeSessionKey = "LoginFlashRetryMode";
+        private const string LoginFlashGlobalLoginUrlSessionKey = "LoginFlashGlobalLoginUrl";
+
         private sealed class LoginRequestModel
         {
             public string Username { get; set; }
@@ -103,8 +111,12 @@ namespace HR.Web.Controllers
                     "",
                     wasSuccessful: false,
                     errorMessage: "CRASH: " + ex.Message + " | Stack: " + ex.StackTrace);
-                ModelState.AddModelError("", "A system error occurred. Our team has been notified.");
-                return View();
+                Uri crashReturnUri;
+                LocalReturnUrlHelper.TryParseLocalReturnUri(returnPath, Url, out crashReturnUri);
+                return RedirectToLoginWithFlash(
+                    "A system error occurred. Our team has been notified.",
+                    RouteData.Values["tenant"] as string,
+                    crashReturnUri);
             }
         }
 
@@ -155,8 +167,12 @@ namespace HR.Web.Controllers
                 return BuildCaptchaFailureResult("CAPTCHA expired. Please try again.", request.ReturnUrl);
             }
 
-            if (string.IsNullOrEmpty(request.Captcha) ||
-                !string.Equals(request.Captcha, sessionCaptchaText, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(request.Captcha))
+            {
+                return BuildCaptchaFailureResult("Please enter the security verification code.", request.ReturnUrl);
+            }
+
+            if (!string.Equals(request.Captcha, sessionCaptchaText, StringComparison.OrdinalIgnoreCase))
             {
                 return BuildCaptchaFailureResult("Invalid security code. Please try again.", request.ReturnUrl);
             }
@@ -174,18 +190,14 @@ namespace HR.Web.Controllers
 
         private ActionResult BuildCaptchaFailureResult(string message, Uri returnUri)
         {
-            ModelState.AddModelError("", message);
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
-            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(RouteData.Values["tenant"] as string);
-            return View();
+            return RedirectToLoginWithFlash(message, RouteData.Values["tenant"] as string, returnUri);
         }
 
         private ActionResult ValidateLoginInputs(LoginRequestModel request, int? targetCompanyId)
         {
             if (request == null)
             {
-                ModelState.AddModelError("", "Invalid login request.");
-                return View();
+                return RedirectToLoginWithFlash("Invalid login request.", RouteData.Values["tenant"] as string, null);
             }
 
             var loginRequest = request;
@@ -207,12 +219,9 @@ namespace HR.Web.Controllers
 
         private ActionResult BuildMissingCredentialResult(string message, LoginRequestModel request, int? targetCompanyId, string failureReason)
         {
-            ModelState.AddModelError("", message);
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, failureReason);
             AuditSvc.LogLogin(request.Username, false, failureReason);
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
-            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
-            return View();
+            return RedirectToLoginWithFlash(message, request.TenantToken, request.ReturnUrl);
         }
 
         private ActionResult ValidateIpRateLimit(string clientIp)
@@ -235,9 +244,10 @@ namespace HR.Web.Controllers
                 "Account",
                 "",
                 string.Format("IP {0} blocked after {1} failed attempts in {2} minutes", clientIp, ipFailureCount, ipWindowMinutes));
-            ModelState.AddModelError("", "Too many failed login attempts from your location. Please wait 15 minutes before trying again.");
-            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(RouteData.Values["tenant"] as string);
-            return View();
+            return RedirectToLoginWithFlash(
+                "Too many failed login attempts from your location. Please wait 15 minutes before trying again.",
+                RouteData.Values["tenant"] as string,
+                null);
         }
 
         private LoginCandidateModel DiscoverLoginCandidates(LoginRequestModel request, int? targetCompanyId)
@@ -286,29 +296,34 @@ namespace HR.Web.Controllers
             var lockoutEndTime = SecuritySvc.GetLockoutEndTime(request.Username, effectiveCompanyId);
             var remainingTime = lockoutEndTime.HasValue ? lockoutEndTime.Value - DateTime.Now : TimeSpan.Zero;
 
-            ModelState.AddModelError("", string.Format("Account is locked. Please try again in {0} minutes.", remainingTime.Minutes));
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, effectiveCompanyId, "Account locked");
             AuditSvc.LogLogin(request.Username, false, string.Format("Account locked. Try again in {0} minutes", remainingTime.Minutes));
-            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
-            return View();
+            return RedirectToLoginWithFlash(
+                string.Format("Account is locked. Please try again in {0} minutes.", remainingTime.Minutes),
+                request.TenantToken,
+                request.ReturnUrl);
         }
 
         private ActionResult HandleLoginDisambiguation(LoginRequestModel request, List<User> candidates, int? targetCompanyId)
         {
             if (!request.IsEmailLogin && candidates.Count > 1 && !targetCompanyId.HasValue)
             {
-                ModelState.AddModelError("", "This username is used by multiple companies. Please use your email address to help us find the right account.");
-                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
-                return View();
+                return RedirectToLoginWithFlash(
+                    "This username is used by multiple companies. Please use your email address to help us find the right account.",
+                    request.TenantToken,
+                    request.ReturnUrl,
+                    request.Username,
+                    "username_collision");
             }
 
             if (candidates.Count > 1 && !targetCompanyId.HasValue)
             {
-                ViewBag.MultiCandidates = candidates;
-                ModelState.AddModelError("", "We found multiple accounts for this email. Please select the correct portal below.");
-                ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
-                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
-                return View();
+                return RedirectToLoginWithFlash(
+                    "We found multiple accounts for this email. Please select the correct portal below.",
+                    request.TenantToken,
+                    request.ReturnUrl,
+                    request.Username,
+                    "email_disambiguation");
             }
 
             return null;
@@ -326,8 +341,6 @@ namespace HR.Web.Controllers
             {
                 return passwordFailure;
             }
-
-            TryUpgradePasswordHashIfNeeded(user, request.Password);
 
             var companyAccessFailure = ValidateCompanyPortalAccessForLogin(user);
             if (companyAccessFailure != null)
@@ -349,16 +362,18 @@ namespace HR.Web.Controllers
             var company = _uow.Companies.Get(companyId);
             if (company == null)
             {
-                ModelState.AddModelError("", "Your company record could not be found. Contact support.");
-                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(RouteData.Values["tenant"] as string);
-                return View();
+                return RedirectToLoginWithFlash(
+                    "Your company record could not be found. Contact support.",
+                    RouteData.Values["tenant"] as string,
+                    null);
             }
 
             if (!company.IsActive)
             {
-                ModelState.AddModelError("", "Your company portal is inactive. Contact your system administrator.");
-                ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(RouteData.Values["tenant"] as string);
-                return View();
+                return RedirectToLoginWithFlash(
+                    "Your company portal is inactive. Contact your system administrator.",
+                    RouteData.Values["tenant"] as string,
+                    null);
             }
 
             var tenantService = new TenantService(_uow);
@@ -372,8 +387,7 @@ namespace HR.Web.Controllers
 
         private ActionResult BuildIdentifierNotFoundFailure(LoginRequestModel request, int? targetCompanyId)
         {
-            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
-            ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
+            var formattedReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
 
             if (targetCompanyId.HasValue)
             {
@@ -383,66 +397,62 @@ namespace HR.Web.Controllers
 
                 if (accountsElsewhere.Count > 0)
                 {
-                    ViewBag.MultiCandidates = accountsElsewhere;
                     var identifierLabel = request.IsEmailLogin ? "email" : "username";
-
+                    string message;
                     if (accountsElsewhere.Count == 1)
                     {
                         var otherCompanyName = accountsElsewhere[0].Company != null
                             ? accountsElsewhere[0].Company.Name
                             : "another company";
-                        ModelState.AddModelError(
-                            "",
-                            string.Format(
-                                CultureInfo.InvariantCulture,
-                                "No account with this {0} is registered for {1}. Your {0} is associated with {2}. Sign in using that company's portal below.",
-                                identifierLabel,
-                                targetCompanyName,
-                                otherCompanyName));
+                        message = string.Format(
+                            CultureInfo.InvariantCulture,
+                            "No account with this {0} is registered for {1}. Your {0} is associated with {2}. Sign in using that company's portal below.",
+                            identifierLabel,
+                            targetCompanyName,
+                            otherCompanyName);
                     }
                     else
                     {
-                        ModelState.AddModelError(
-                            "",
-                            string.Format(
-                                CultureInfo.InvariantCulture,
-                                "No account with this {0} is registered for {1}. Matching accounts were found at other companies—select the correct portal below.",
-                                identifierLabel,
-                                targetCompanyName));
+                        message = string.Format(
+                            CultureInfo.InvariantCulture,
+                            "No account with this {0} is registered for {1}. Matching accounts were found at other companies�select the correct portal below.",
+                            identifierLabel,
+                            targetCompanyName);
                     }
 
                     SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, "Identifier not found in tenant");
                     AuditSvc.LogLogin(request.Username, false, "Identifier not in tenant, found elsewhere: " + request.Username);
-                    return View();
+                    return RedirectToLoginWithFlash(message, request.TenantToken, request.ReturnUrl, request.Username, "elsewhere");
                 }
 
                 if (!request.IsEmailLogin && TryGetGlobalManagementUser(request.LowerUsername) != null)
                 {
-                    ModelState.AddModelError(
-                        "",
-                        "System administrators must sign in from the global login page, not a company portal URL.");
-                    ViewBag.GlobalLoginUrl = Url.Action("Login", "Account", new { tenant = (string)null, returnUrl = ViewBag.ReturnUrl });
+                    var globalLoginUrl = Url.Action("Login", "Account", new { tenant = (string)null, returnUrl = formattedReturnUrl });
                     SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, "Global admin used tenant portal");
                     AuditSvc.LogLogin(request.Username, false, "Global admin attempted tenant portal login");
-                    return View();
+                    return RedirectToLoginWithFlash(
+                        "System administrators must sign in from the global login page, not a company portal URL.",
+                        request.TenantToken,
+                        request.ReturnUrl,
+                        globalLoginUrl: globalLoginUrl);
                 }
 
                 if (request.IsEmailLogin && TryGetGlobalManagementUserByEmail(request.LowerUsername) != null)
                 {
-                    ModelState.AddModelError(
-                        "",
-                        "System administrators must sign in from the global login page, not a company portal URL.");
-                    ViewBag.GlobalLoginUrl = Url.Action("Login", "Account", new { tenant = (string)null, returnUrl = ViewBag.ReturnUrl });
+                    var globalLoginUrl = Url.Action("Login", "Account", new { tenant = (string)null, returnUrl = formattedReturnUrl });
                     SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, "Global admin used tenant portal");
                     AuditSvc.LogLogin(request.Username, false, "Global admin attempted tenant portal login via email");
-                    return View();
+                    return RedirectToLoginWithFlash(
+                        "System administrators must sign in from the global login page, not a company portal URL.",
+                        request.TenantToken,
+                        request.ReturnUrl,
+                        globalLoginUrl: globalLoginUrl);
                 }
             }
 
-            ModelState.AddModelError("", "Invalid username or password.");
             SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, targetCompanyId, "Identifier not found");
             AuditSvc.LogLogin(request.Username, false, "Invalid identifier: " + request.Username);
-            return View();
+            return RedirectToLoginWithFlash("Invalid username or password.", request.TenantToken, request.ReturnUrl);
         }
 
         private User TryGetGlobalManagementUser(string lowerUsername)
@@ -496,7 +506,8 @@ namespace HR.Web.Controllers
         private ActionResult ValidateUserPassword(LoginRequestModel request, User user)
         {
             var freshUser = _uow.Users.Get(user.Id) ?? user;
-            if (IsPasswordValid(freshUser, request.Password))
+            var passwordValid = IsPasswordValid(freshUser, request.Password);
+            if (passwordValid)
             {
                 return null;
             }
@@ -509,53 +520,13 @@ namespace HR.Web.Controllers
                 SecuritySvc.RecordLoginAttempt(request.Username, request.ClientIp, false, freshUser.CompanyId, "Invalid password");
             }
 
-            ModelState.AddModelError("", warningMessage);
             AuditSvc.LogLogin(request.Username, false, "Invalid password");
-            ViewBag.IsTenantCompanyPortal = !string.IsNullOrEmpty(request.TenantToken);
-            return View();
+            return RedirectToLoginWithFlash(warningMessage, request.TenantToken, request.ReturnUrl);
         }
 
         private static bool IsPasswordValid(User user, string password)
         {
             return !string.IsNullOrEmpty(user.PasswordHash) && PasswordHelper.VerifyPassword(user.PasswordHash, password);
-        }
-
-        private void TryUpgradePasswordHashIfNeeded(User user, string plaintextPassword)
-        {
-            if (user == null || string.IsNullOrWhiteSpace(plaintextPassword) || string.IsNullOrWhiteSpace(user.PasswordHash))
-            {
-                return;
-            }
-
-            if (!PasswordHelper.NeedsRehash(user.PasswordHash))
-            {
-                return;
-            }
-
-            try
-            {
-                user.PasswordHash = PasswordHelper.HashPassword(plaintextPassword);
-                _uow.Users.Update(user);
-                _uow.Complete();
-                AuditSvc.LogAction(
-                    user.UserName,
-                    "PASSWORD_REHASH",
-                    "Account",
-                    user.Id.ToString(),
-                    true,
-                    "Password hash upgraded to current PBKDF2 iteration count after successful login");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Trace.WriteLine("Password rehash on login failed for user " + user.UserName + ": " + ex.Message);
-                AuditSvc.LogAction(
-                    user.UserName,
-                    "PASSWORD_REHASH_FAILED",
-                    "Account",
-                    user.Id.ToString(),
-                    false,
-                    ex.Message);
-            }
         }
 
         private static string BuildInvalidPasswordMessage(int remainingAttempts)
@@ -571,10 +542,14 @@ namespace HR.Web.Controllers
             if (!LegalPolicyHelper.UserMeetsCurrentPolicyVersions(user, relationship))
             {
                 StorePendingLegalLogin(request, user);
-                PopulateLegalConsentModalViewBag(request, user);
-                ConfigureLoginPortalViewBag(request);
-                ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
-                return View("Login");
+                Session[LoginFlashInfoSessionKey] =
+                    "Your password was accepted. Please review and accept the updated policies below to finish signing in.";
+                if (request.ReturnUrl != null)
+                {
+                    Session[LoginFlashReturnUrlSessionKey] =
+                        LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
+                }
+                return RedirectToTenantLogin(request.TenantToken);
             }
 
             PersistUserLegalAcceptance(user);
@@ -682,16 +657,20 @@ namespace HR.Web.Controllers
             if (!userId.HasValue || !LegalConsentSession.IsFresh(Session))
             {
                 LegalConsentSession.Clear(Session);
-                TempData["ErrorMessage"] = "Your sign-in confirmation expired. Please sign in again.";
-                return RedirectToAction("Login", new { tenant = RouteData.Values["tenant"] as string });
+                return RedirectToLoginWithFlash(
+                    "Your sign-in confirmation expired. Please sign in again.",
+                    RouteData.Values["tenant"] as string,
+                    null);
             }
 
             var user = _uow.Users.Get(userId.Value);
             if (user == null)
             {
                 LegalConsentSession.Clear(Session);
-                TempData["ErrorMessage"] = "Your sign-in confirmation is no longer valid. Please sign in again.";
-                return RedirectToAction("Login", new { tenant = RouteData.Values["tenant"] as string });
+                return RedirectToLoginWithFlash(
+                    "Your sign-in confirmation is no longer valid. Please sign in again.",
+                    RouteData.Values["tenant"] as string,
+                    null);
             }
 
             var relationship = LegalPolicyHelper.ResolveUserLegalRelationship(user);
@@ -701,6 +680,8 @@ namespace HR.Web.Controllers
             {
                 ModelState.AddModelError("", "Please accept the Terms & Conditions and Privacy Policy to continue.");
                 PopulateLegalConsentModalViewBag(resumeRequest, user);
+                ViewBag.LoginInfoMessage =
+                    "Your password was accepted. Please review and accept the updated policies below to finish signing in.";
                 ViewBag.ReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(resumeRequest.ReturnUrl);
                 return View("Login");
             }
@@ -885,7 +866,11 @@ namespace HR.Web.Controllers
             if (safeReturnResult != null)
             {
                 AuditSvc.LogAction(request.Username, "LOGIN_REDIRECT_RETURNURL", "Account", user.Id.ToString(), true, "Redirecting to validated return target");
-                return safeReturnResult;
+                var safeReturnUrl = LocalReturnUrlHelper.FormatReturnPathAndQuery(request.ReturnUrl);
+                if (!string.IsNullOrWhiteSpace(safeReturnUrl))
+                {
+                    return Redirect(safeReturnUrl);
+                }
             }
 
             AuditSvc.LogAction(request.Username, "LOGIN_REDIRECT_DEFAULT", "Account", user.Id.ToString(), true, "Redirecting to default dashboard for " + tenantSlug);
@@ -895,6 +880,185 @@ namespace HR.Web.Controllers
         private void ConfigureLoginPortalViewBag(LoginRequestModel request)
         {
             ViewBag.IsTenantCompanyPortal = request != null && !string.IsNullOrEmpty(request.TenantToken);
+        }
+
+        private void TryRestorePendingLegalConsentOnLoginGet(string tenantToken)
+        {
+            var userId = LegalConsentSession.TryReadUserId(Session);
+            if (!userId.HasValue || !LegalConsentSession.IsFresh(Session))
+            {
+                return;
+            }
+
+            var user = _uow.Users.Get(userId.Value);
+            if (user == null)
+            {
+                LegalConsentSession.Clear(Session);
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(tenantToken))
+            {
+                var targetCompanyId = ResolveTargetCompanyId(tenantToken);
+                if (targetCompanyId.HasValue && user.CompanyId != targetCompanyId.Value)
+                {
+                    return;
+                }
+            }
+
+            var relationship = LegalPolicyHelper.ResolveUserLegalRelationship(user);
+            if (LegalPolicyHelper.UserMeetsCurrentPolicyVersions(user, relationship))
+            {
+                LegalConsentSession.Clear(Session);
+                return;
+            }
+
+            var request = new LoginRequestModel { TenantToken = tenantToken };
+            PopulateLegalConsentModalViewBag(request, user);
+            ViewBag.LoginInfoMessage =
+                "Your password was accepted. Please review and accept the updated policies below to finish signing in.";
+        }
+
+        private void ApplyLoginFlashState(string tenantToken)
+        {
+            TryRestorePendingLegalConsentOnLoginGet(tenantToken);
+
+            var flashError = Session[LoginFlashErrorSessionKey] as string;
+            if (string.IsNullOrEmpty(flashError))
+            {
+                flashError = TempData["LoginErrorMessage"] as string;
+            }
+
+            if (string.IsNullOrEmpty(flashError))
+            {
+                flashError = TempData["ErrorMessage"] as string;
+            }
+
+            if (!string.IsNullOrEmpty(flashError))
+            {
+                ViewBag.LoginErrorMessage = flashError;
+                Session.Remove(LoginFlashErrorSessionKey);
+            }
+
+            var flashInfo = Session[LoginFlashInfoSessionKey] as string
+                ?? TempData["InfoMessage"] as string;
+            if (!string.IsNullOrEmpty(flashInfo))
+            {
+                ViewBag.LoginInfoMessage = flashInfo;
+                Session.Remove(LoginFlashInfoSessionKey);
+            }
+
+            var flashSuccess = Session[LoginFlashSuccessSessionKey] as string
+                ?? TempData["SuccessMessage"] as string;
+            if (!string.IsNullOrEmpty(flashSuccess))
+            {
+                ViewBag.SuccessMessage = flashSuccess;
+                Session.Remove(LoginFlashSuccessSessionKey);
+            }
+
+            var flashReturnUrl = Session[LoginFlashReturnUrlSessionKey] as string;
+            if (!string.IsNullOrEmpty(flashReturnUrl))
+            {
+                ViewBag.ReturnUrl = flashReturnUrl;
+                Session.Remove(LoginFlashReturnUrlSessionKey);
+            }
+
+            var globalLoginUrl = Session[LoginFlashGlobalLoginUrlSessionKey] as string
+                ?? TempData["LoginGlobalLoginUrl"] as string;
+            if (!string.IsNullOrEmpty(globalLoginUrl))
+            {
+                ViewBag.GlobalLoginUrl = globalLoginUrl;
+                Session.Remove(LoginFlashGlobalLoginUrlSessionKey);
+            }
+
+            var retryUsername = Session[LoginFlashRetryUsernameSessionKey] as string
+                ?? TempData["LoginRetryUsername"] as string;
+            var retryMode = Session[LoginFlashRetryModeSessionKey] as string
+                ?? TempData["LoginRetryMode"] as string;
+            if (!string.IsNullOrWhiteSpace(retryUsername))
+            {
+                RestoreLoginMultiCandidates(retryUsername, retryMode, tenantToken);
+                Session.Remove(LoginFlashRetryUsernameSessionKey);
+                Session.Remove(LoginFlashRetryModeSessionKey);
+            }
+        }
+
+        private void RestoreLoginMultiCandidates(string username, string retryMode, string tenantToken)
+        {
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return;
+            }
+
+            var trimmedUsername = username.Trim();
+            var request = new LoginRequestModel
+            {
+                Username = trimmedUsername,
+                LowerUsername = trimmedUsername.ToLower(),
+                IsEmailLogin = trimmedUsername.Contains("@"),
+                TenantToken = tenantToken
+            };
+
+            var targetCompanyId = ResolveTargetCompanyId(tenantToken);
+            if (string.Equals(retryMode, "elsewhere", StringComparison.OrdinalIgnoreCase) && targetCompanyId.HasValue)
+            {
+                var accountsElsewhere = FindAccountsInOtherCompanies(request, targetCompanyId.Value);
+                if (accountsElsewhere.Count > 0)
+                {
+                    ViewBag.MultiCandidates = accountsElsewhere;
+                }
+
+                return;
+            }
+
+            var candidates = DiscoverLoginCandidates(request, targetCompanyId);
+            if (candidates.Candidates != null && candidates.Candidates.Count > 1)
+            {
+                ViewBag.MultiCandidates = candidates.Candidates;
+            }
+        }
+
+        private ActionResult RedirectToLoginWithFlash(
+            string errorMessage,
+            string tenantToken,
+            Uri returnUri,
+            string retryUsername = null,
+            string retryMode = null,
+            string globalLoginUrl = null)
+        {
+            if (!string.IsNullOrEmpty(errorMessage))
+            {
+                Session[LoginFlashErrorSessionKey] = errorMessage;
+            }
+
+            if (returnUri != null)
+            {
+                Session[LoginFlashReturnUrlSessionKey] = LocalReturnUrlHelper.FormatReturnPathAndQuery(returnUri);
+            }
+
+            if (!string.IsNullOrWhiteSpace(retryUsername))
+            {
+                Session[LoginFlashRetryUsernameSessionKey] = retryUsername.Trim();
+                Session[LoginFlashRetryModeSessionKey] = retryMode ?? string.Empty;
+            }
+
+            if (!string.IsNullOrEmpty(globalLoginUrl))
+            {
+                Session[LoginFlashGlobalLoginUrlSessionKey] = globalLoginUrl;
+            }
+
+            return RedirectToTenantLogin(tenantToken);
+        }
+
+        private ActionResult RedirectToTenantLogin(string tenantToken)
+        {
+            var tenant = tenantToken ?? RouteData.Values["tenant"] as string;
+            if (!string.IsNullOrEmpty(tenant))
+            {
+                return RedirectToRoute("Tenant", new { tenant = tenant, controller = "Account", action = "Login" });
+            }
+
+            return RedirectToAction("Login", "Account");
         }
 
         private void PersistUserLegalAcceptance(User user)
@@ -920,8 +1084,9 @@ namespace HR.Web.Controllers
         {
             var prefCookie = new HttpCookie("PreferredTenant", tenantSlug)
             {
-                Expires = DateTime.Now.AddDays(30),
-                Path = "/"
+                HttpOnly = true,
+                Secure = Request.IsSecureConnection,
+                Expires = DateTime.Now.AddDays(30)
             };
             Response.Cookies.Add(prefCookie);
         }
