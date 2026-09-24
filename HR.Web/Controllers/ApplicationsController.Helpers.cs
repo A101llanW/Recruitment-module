@@ -625,6 +625,23 @@ namespace HR.Web.Controllers
                    user.Role == "SuperAdmin";
         }
 
+        private bool IsApplicantClientUser(User user)
+        {
+            if (user == null || IsManagementUser(user))
+            {
+                return false;
+            }
+
+            if (User.IsInRole("Panelist") || string.Equals(user.Role, "Panelist", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return User.IsInRole("Client") ||
+                   string.IsNullOrWhiteSpace(user.Role) ||
+                   string.Equals(user.Role, "Client", StringComparison.OrdinalIgnoreCase);
+        }
+
         private bool CanViewApplicationScores(User user)
         {
             return IsManagementUser(user);

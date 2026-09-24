@@ -63,9 +63,7 @@ namespace HR.Web.Helpers
             {
                 action = new PositionCandidateActionViewModel
                 {
-                    Label = "My Applications",
-                    Url = url.Action("Index", "Applications", new { tenant = tenantSlug }),
-                    IconClass = "fas fa-file-alt"
+                    ShowPrimaryAction = false
                 };
             }
 

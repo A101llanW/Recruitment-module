@@ -489,6 +489,7 @@ else
                        data-candidate-action-url="@candidateAction.Url"
                        data-candidate-action-label="@candidateAction.Label"
                        data-candidate-action-icon="@candidateAction.IconClass"
+                       data-show-candidate-action="@(candidateAction.ShowPrimaryAction ? "true" : "false")"
                        data-has-applied="@(candidateAction.HasApplied ? "true" : "false")"
                        data-applied-badge-label="@(candidateAction.BadgeLabel ?? "")"
                        data-applied-badge-class="@(candidateAction.BadgeCssClass ?? "")"
@@ -814,6 +815,11 @@ else if (ViewBag.IsReadOnly != true)
 
                 function updateCandidateActionLink(linkEl, el) {
                     if (!linkEl || !el) return;
+                    var showAction = el.getAttribute('data-show-candidate-action') !== 'false';
+                    linkEl.style.display = showAction ? '' : 'none';
+                    if (!showAction) {
+                        return;
+                    }
                     var actionUrl = el.getAttribute('data-candidate-action-url') || el.getAttribute('data-url-apply') || '#';
                     var actionLabel = el.getAttribute('data-candidate-action-label');
                     var actionIcon = el.getAttribute('data-candidate-action-icon') || 'fas fa-paper-plane';

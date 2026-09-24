@@ -111,9 +111,13 @@ namespace HR.Web.Services
             if (isTenantPortalGuest)
             {
                 canViewPositions = true;
-                canViewApplications = true;
                 canViewInterviews = true;
                 canViewDepartments = true;
+            }
+
+            if (isClientUser && user != null && user.IsInRole("Client"))
+            {
+                canViewApplications = false;
             }
 
             var model = new NavMenuModel

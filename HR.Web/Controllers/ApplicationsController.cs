@@ -368,30 +368,35 @@ namespace HR.Web.Controllers
 
             if (!IsCurrentUserAuthenticated())
             {
-                ViewBag.Message = "Please sign in or create account first to view your applications.";
-                return View("GuestAccess");
+                return new HttpStatusCodeResult(403, "Access denied.");
             }
 
             var user = GetCurrentUser();
             if (user == null)
             {
-                return View(Enumerable.Empty<Application>());
+                return new HttpStatusCodeResult(403, "Access denied.");
             }
 
-            if (IsManagementUser(user))
+            if (IsApplicantClientUser(user))
             {
-                PopulateFailedCandidateEmailApplicationIdsForIndexView();
-                ViewBag.IsManagementApplicationsView = true;
-                ViewBag.CanViewApplicationScores = CanViewApplicationScores(user);
-                ViewBag.CanManageApplications = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Applications, RoleAccessLevels.Manage);
-                ViewBag.CanRepairApplicationScores = _tenantService.IsImpersonating() && _tenantService.IsActualSuperAdmin();
-                ViewBag.CanInviteQuestionnaireSecondaryStage = rolePermissionService.IsFullCompanyAdmin(user) ||
-                    _tenantService.IsActualSuperAdmin();
-                return View(BuildManagementApplicationsView());
+                var tenantToken = RouteData.Values["tenant"] as string;
+                return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
             }
 
-            ViewBag.CanInviteQuestionnaireSecondaryStage = false;
-            return View(GetApplicantApplications(user));
+            if (!IsManagementUser(user))
+            {
+                ViewBag.CanInviteQuestionnaireSecondaryStage = false;
+                return View(GetApplicantApplications(user));
+            }
+
+            PopulateFailedCandidateEmailApplicationIdsForIndexView();
+            ViewBag.IsManagementApplicationsView = true;
+            ViewBag.CanViewApplicationScores = CanViewApplicationScores(user);
+            ViewBag.CanManageApplications = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Applications, RoleAccessLevels.Manage);
+            ViewBag.CanRepairApplicationScores = _tenantService.IsImpersonating() && _tenantService.IsActualSuperAdmin();
+            ViewBag.CanInviteQuestionnaireSecondaryStage = rolePermissionService.IsFullCompanyAdmin(user) ||
+                _tenantService.IsActualSuperAdmin();
+            return View(BuildManagementApplicationsView());
         }
 
         [Authorize]
@@ -408,6 +413,12 @@ namespace HR.Web.Controllers
             if (user == null)
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
+            }
+
+            if (IsApplicantClientUser(user))
+            {
+                var tenantToken = RouteData.Values["tenant"] as string;
+                return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
             }
 
             var accessCheck = ValidateDetailsAccess(user, app);

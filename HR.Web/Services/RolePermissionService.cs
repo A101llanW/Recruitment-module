@@ -21,6 +21,14 @@ namespace HR.Web.Services
             RoleModuleCatalog.Departments
         };
 
+        // Anonymous guests may browse these modules (login prompt); not Applications — status is on Positions.
+        private static readonly HashSet<string> ClientSelfServiceGuestBrowseModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            RoleModuleCatalog.Positions,
+            RoleModuleCatalog.Interviews,
+            RoleModuleCatalog.Departments
+        };
+
         private sealed class CurrentUserAccessContext
         {
             public bool IsAuthenticated { get; set; }
@@ -42,7 +50,8 @@ namespace HR.Web.Services
 
         public static bool CanGuestBrowseModule(string moduleKey, string requiredAccessLevel)
         {
-            return IsClientSelfServiceViewModule(moduleKey) &&
+            return !string.IsNullOrWhiteSpace(moduleKey) &&
+                   ClientSelfServiceGuestBrowseModules.Contains(moduleKey) &&
                    MeetsAccessRequirement(RoleAccessLevels.View, requiredAccessLevel);
         }
 
