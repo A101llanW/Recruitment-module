@@ -71,10 +71,6 @@
 }
 <div class="mt-3">
     @Html.ActionLink("Back", "Index", null, new { @class = "btn btn-secondary btn-sm" })
-    @if (Model.PendingQuestionnaireStage.HasValue)
-    {
-        @Html.ActionLink("Continue questionnaire", "Questionnaire", "Applications", new { positionId = Model.PositionId, tenant = tenantToken }, new { @class = "btn btn-primary btn-sm ml-2" })
-    }
     @if (canManageApplicationDetails)
     {
         using (Html.BeginForm("DeleteConfirmed", "Applications", new { id = Model.Id, tenant = tenantToken }, FormMethod.Post, new { @class = "d-inline-block", onsubmit = "return confirm('Delete this application?');" }))

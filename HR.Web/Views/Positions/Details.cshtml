@@ -196,10 +196,13 @@
                     &mdash; <strong>@detailsBadgeLabel</strong>
                 </div>
             }
-            <a href="@candidateAction.Url" class="btn btn-blue">
-                <i class="@candidateAction.IconClass mr-1"></i> @candidateAction.Label
-            </a>
-            <a href="@Url.Action("Index")" class="btn btn-secondary ml-2">
+            @if (candidateAction.ShowPrimaryAction && !string.IsNullOrWhiteSpace(candidateAction.Url))
+            {
+                <a href="@candidateAction.Url" class="btn btn-blue">
+                    <i class="@(candidateAction.IconClass ?? "fas fa-paper-plane") mr-1"></i> @candidateAction.Label
+                </a>
+            }
+            <a href="@Url.Action("Index")" class="btn btn-secondary @(candidateAction.ShowPrimaryAction && !string.IsNullOrWhiteSpace(candidateAction.Url) ? "ml-2" : "")">
                 <i class="fas fa-arrow-left mr-1"></i> Back to List
             </a>
         }

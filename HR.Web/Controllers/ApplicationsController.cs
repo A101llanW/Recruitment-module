@@ -400,6 +400,7 @@ namespace HR.Web.Controllers
         }
 
         [Authorize]
+        [ModuleAccess(RoleModuleCatalog.Applications, RoleAccessLevels.Manage)]
         public ActionResult Details(int id)
         {
             var app = _uow.Applications.GetAll(a => a.Applicant, a => a.Position)
@@ -413,12 +414,6 @@ namespace HR.Web.Controllers
             if (user == null)
             {
                 return new HttpStatusCodeResult(403, "Access Denied");
-            }
-
-            if (IsApplicantClientUser(user))
-            {
-                var tenantToken = RouteData.Values["tenant"] as string;
-                return RedirectToAction("Index", "Positions", new { tenant = tenantToken });
             }
 
             var accessCheck = ValidateDetailsAccess(user, app);
