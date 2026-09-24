@@ -7,7 +7,8 @@ param(
     [string] $AppPoolName = "Hirehub_Pool",
     [int] $Port = 5002,
     [string] $PhysicalPath = "C:\inetpub\wwwroot\Hirehub",
-    [switch] $SkipBuild
+    [switch] $SkipBuild,
+    [switch] $ShowDetailedErrors
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,7 +17,12 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Write-Host "=== Deploy to IIS: $PhysicalPath ===" -ForegroundColor Cyan
 
 if (-not $SkipBuild) {
-    & (Join-Path $repoRoot "tools\dev\Sync-Publish.ps1")
+    if ($ShowDetailedErrors) {
+        & (Join-Path $repoRoot "tools\dev\Sync-Publish.ps1") -ShowDetailedErrors
+    }
+    else {
+        & (Join-Path $repoRoot "tools\dev\Sync-Publish.ps1")
+    }
 }
 
 $publish = Join-Path $repoRoot "Publish"
@@ -68,6 +74,13 @@ Start-Website -Name $SiteName
 
 Restart-WebAppPool -Name $AppPoolName
 Write-Host "Recycled app pool: $AppPoolName"
+
+if ($ShowDetailedErrors) {
+    $enableErrorsScript = Join-Path $repoRoot "tools\dev\Enable-IisDetailedErrors.ps1"
+    if (Test-Path $enableErrorsScript) {
+        & $enableErrorsScript
+    }
+}
 
 Write-Host ""
 Write-Host "Deploy complete." -ForegroundColor Green

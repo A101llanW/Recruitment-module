@@ -368,13 +368,15 @@ namespace HR.Web.Controllers
 
             if (!IsCurrentUserAuthenticated())
             {
-                return new HttpStatusCodeResult(403, "Access denied.");
+                ViewBag.Message = "Please sign in or create an account to view your applications.";
+                return View("GuestAccess");
             }
 
             var user = GetCurrentUser();
             if (user == null)
             {
-                return new HttpStatusCodeResult(403, "Access denied.");
+                ViewBag.Message = "Please sign in or create an account to view your applications.";
+                return View("GuestAccess");
             }
 
             if (IsApplicantClientUser(user))
@@ -400,7 +402,7 @@ namespace HR.Web.Controllers
         }
 
         [Authorize]
-        [ModuleAccess(RoleModuleCatalog.Applications, RoleAccessLevels.Manage)]
+        [ModuleAccess(RoleModuleCatalog.Applications, "Manage")]
         public ActionResult Details(int id)
         {
             var app = _uow.Applications.GetAll(a => a.Applicant, a => a.Position)

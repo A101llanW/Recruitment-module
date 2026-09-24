@@ -21,10 +21,11 @@ namespace HR.Web.Services
             RoleModuleCatalog.Departments
         };
 
-        // Anonymous guests may browse these modules (login prompt); not Applications — status is on Positions.
+        // Anonymous guests may open these modules (GuestAccess login/register prompt on Index).
         private static readonly HashSet<string> ClientSelfServiceGuestBrowseModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             RoleModuleCatalog.Positions,
+            RoleModuleCatalog.Applications,
             RoleModuleCatalog.Interviews,
             RoleModuleCatalog.Departments
         };

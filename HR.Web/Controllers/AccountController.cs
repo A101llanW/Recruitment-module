@@ -346,7 +346,11 @@ namespace HR.Web.Controllers
         public ActionResult Logout()
         {
             var username = GetAuthenticatedUsername();
-            InvalidateAuthenticatedSession();
+
+            FormsAuthentication.SignOut();
+            Session.Clear();
+            Session.Abandon();
+
             AuditSvc.LogLogout(username);
             return RedirectToAction("Login");
         }

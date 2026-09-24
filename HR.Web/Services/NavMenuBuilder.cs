@@ -111,6 +111,7 @@ namespace HR.Web.Services
             if (isTenantPortalGuest)
             {
                 canViewPositions = true;
+                canViewApplications = true;
                 canViewInterviews = true;
                 canViewDepartments = true;
             }

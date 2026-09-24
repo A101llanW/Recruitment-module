@@ -42,25 +42,34 @@ function New-RandomPassword {
     -join $chars
 }
 
-function Get-PasswordHash {
+function Get-PasswordHashFromApp {
     param(
-        [Parameter(Mandatory)][string]$Password,
-        [int]$Iterations = 100000,
-        [int]$SaltSize = 16,
-        [int]$KeySize = 32
+        [Parameter(Mandatory)][string]$Password
     )
 
-    $derive = New-Object System.Security.Cryptography.Rfc2898DeriveBytes($Password, $SaltSize, $Iterations)
-    $salt = [Convert]::ToBase64String($derive.Salt)
-    $key = [Convert]::ToBase64String($derive.GetBytes($KeySize))
-    return "$Iterations.$salt.$key"
+    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+    $bin = Join-Path $repoRoot "Publish\bin"
+    if (-not (Test-Path (Join-Path $bin "HR.Web.dll"))) {
+        $bin = Join-Path $repoRoot "HR.Web\bin\Release"
+    }
+
+    foreach ($dll in Get-ChildItem $bin -Filter *.dll | Sort-Object Name) {
+        try {
+            [void][System.Reflection.Assembly]::LoadFrom($dll.FullName)
+        }
+        catch {
+            # Ignore optional dependency load failures.
+        }
+    }
+
+    return [HR.Web.Helpers.PasswordHelper]::HashPassword($Password)
 }
 
 if ([string]::IsNullOrWhiteSpace($NewPassword)) {
     $NewPassword = New-RandomPassword
 }
 
-$hash = Get-PasswordHash -Password $NewPassword
+$hash = Get-PasswordHashFromApp -Password $NewPassword
 $escapedUser = $UserName.Replace("'", "''")
 $query = @"
 UPDATE Users

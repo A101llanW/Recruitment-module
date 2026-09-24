@@ -72,13 +72,26 @@ function Set-ProductionWebConfig {
     }
 
     [xml]$doc = Get-Content -Path $WebConfigPath
+    $hasShowDetailedErrors = $false
     foreach ($add in $doc.configuration.appSettings.add) {
         if ($add.key -eq "AppEnvironment") {
             $add.SetAttribute("value", $(if ($DetailedErrors) { "Remote/Dev" } else { "Production" }))
         }
+        elseif ($add.key -eq "ShowDetailedErrors") {
+            $add.SetAttribute("value", $(if ($DetailedErrors) { "true" } else { "false" }))
+            $hasShowDetailedErrors = $true
+        }
         elseif ($add.key -eq "LastRestart") {
             $add.SetAttribute("value", (Get-Date -Format "yyyy-MM-dd") + "-prod")
         }
+    }
+
+    if (-not $hasShowDetailedErrors) {
+        $appSettings = $doc.configuration.appSettings
+        $showDetailedNode = $doc.CreateElement("add")
+        $showDetailedNode.SetAttribute("key", "ShowDetailedErrors")
+        $showDetailedNode.SetAttribute("value", $(if ($DetailedErrors) { "true" } else { "false" }))
+        $null = $appSettings.AppendChild($showDetailedNode)
     }
 
     $systemWeb = $doc.configuration."system.web"
