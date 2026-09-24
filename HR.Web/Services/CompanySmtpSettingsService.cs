@@ -19,7 +19,6 @@ namespace HR.Web.Services
 
     public sealed class CompanySmtpSettingsInput
     {
-        public bool IsEnabled { get; set; }
         public string SmtpHost { get; set; }
         public int SmtpPort { get; set; }
         public string SmtpUser { get; set; }
@@ -107,7 +106,6 @@ namespace HR.Web.Services
                 _context.CompanySmtpSettings.Add(entity);
             }
 
-            entity.IsEnabled = input.IsEnabled;
             entity.SmtpHost = NormalizeOptional(input.SmtpHost);
             entity.SmtpPort = input.SmtpPort > 0 ? input.SmtpPort : 587;
             entity.SmtpUser = NormalizeOptional(input.SmtpUser);
@@ -125,13 +123,14 @@ namespace HR.Web.Services
                 entity.SmtpPasswordEncrypted = EncryptionHelper.Encrypt(input.SmtpPassword.Trim());
             }
 
+            entity.IsEnabled = IsStoredSettingsComplete(entity);
             _context.SaveChanges();
         }
 
         private SmtpConfiguration TryResolveCompanySettings(int companyId)
         {
             var settings = GetForCompany(companyId);
-            if (settings == null || !settings.IsEnabled)
+            if (settings == null || !IsStoredSettingsComplete(settings))
             {
                 return null;
             }
@@ -144,7 +143,26 @@ namespace HR.Web.Services
             var password = string.Empty;
             if (!string.IsNullOrWhiteSpace(settings.SmtpPasswordEncrypted))
             {
-                password = EncryptionHelper.Decrypt(settings.SmtpPasswordEncrypted);
+                try
+                {
+                    password = EncryptionHelper.Decrypt(settings.SmtpPasswordEncrypted);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Missing SystemEncryptionKey or wrong deployment key — fall back to global SMTP.
+                    return null;
+                }
+
+                if (string.Equals(password, settings.SmtpPasswordEncrypted, StringComparison.Ordinal))
+                {
+                    // Decrypt failed silently and returned ciphertext — treat as unusable.
+                    return null;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                return null;
             }
 
             return new SmtpConfiguration
@@ -195,24 +213,20 @@ namespace HR.Web.Services
                 return "Company is required.";
             }
 
-            if (!input.IsEnabled)
-            {
-                return null;
-            }
+            var hasHost = !string.IsNullOrWhiteSpace(input.SmtpHost);
+            var hasFromEmail = !string.IsNullOrWhiteSpace(input.FromEmail);
 
-            if (string.IsNullOrWhiteSpace(input.SmtpHost))
+            if (hasHost)
             {
-                return "SMTP host is required when company email is enabled.";
-            }
+                if (input.SmtpHost.IndexOf('@') >= 0 || input.SmtpHost.IndexOf('.') < 0)
+                {
+                    return "SMTP host must be a mail server name, such as smtp.gmail.com, not an email address.";
+                }
 
-            if (input.SmtpHost.IndexOf('@') >= 0 || input.SmtpHost.IndexOf('.') < 0)
-            {
-                return "SMTP host must be a mail server name, such as smtp.gmail.com, not an email address.";
-            }
-
-            if (input.SmtpHost.Length > 255)
-            {
-                return "SMTP host must be 255 characters or fewer.";
+                if (input.SmtpHost.Length > 255)
+                {
+                    return "SMTP host must be 255 characters or fewer.";
+                }
             }
 
             if (input.SmtpPort <= 0 || input.SmtpPort > 65535)
@@ -225,12 +239,7 @@ namespace HR.Web.Services
                 return "SMTP username must be 255 characters or fewer.";
             }
 
-            if (string.IsNullOrWhiteSpace(input.FromEmail))
-            {
-                return "From email is required when company email is enabled.";
-            }
-
-            if (!new EmailAddressAttribute().IsValid(input.FromEmail.Trim()))
+            if (hasFromEmail && !new EmailAddressAttribute().IsValid(input.FromEmail.Trim()))
             {
                 return "From email is not a valid email address.";
             }
@@ -240,13 +249,25 @@ namespace HR.Web.Services
                 return "From display name must be 150 characters or fewer.";
             }
 
-            var hasExistingPassword = HasConfiguredPassword(companyId);
-            if (!hasExistingPassword && string.IsNullOrWhiteSpace(input.SmtpPassword) && !input.ClearStoredPassword)
+            if (hasHost && hasFromEmail)
             {
-                return "SMTP password is required when enabling company email for the first time.";
+                var hasExistingPassword = HasConfiguredPassword(companyId) && !input.ClearStoredPassword;
+                var hasNewPassword = !string.IsNullOrWhiteSpace(input.SmtpPassword);
+                if (!hasExistingPassword && !hasNewPassword)
+                {
+                    return "SMTP password is required when saving a complete company SMTP configuration.";
+                }
             }
 
             return null;
+        }
+
+        private static bool IsStoredSettingsComplete(CompanySmtpSettings settings)
+        {
+            return settings != null &&
+                   !string.IsNullOrWhiteSpace(settings.SmtpHost) &&
+                   !string.IsNullOrWhiteSpace(settings.FromEmail) &&
+                   !string.IsNullOrWhiteSpace(settings.SmtpPasswordEncrypted);
         }
 
         private static string NormalizeOptional(string value)

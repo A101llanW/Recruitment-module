@@ -19,9 +19,6 @@ namespace HR.Web.ViewModels
     {
         public int CompanyId { get; set; }
 
-        [Display(Name = "Enable company SMTP")]
-        public bool IsEnabled { get; set; }
-
         [Display(Name = "SMTP host")]
         [StringLength(255)]
         public string SmtpHost { get; set; }

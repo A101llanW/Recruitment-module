@@ -67,16 +67,20 @@ namespace HR.Web.Controllers
             try
             {
                 _companySmtpSettingsService.Save(targetCompanyId, MapFormToInput(form));
+                var resolved = _companySmtpSettingsService.ResolveForCompany(targetCompanyId);
                 _auditService.LogAction(
                     User.Identity.Name,
                     "COMPANY_SMTP_SETTINGS_SAVED",
                     "CompanySmtpSettings",
                     targetCompanyId.ToString(),
-                    newValues: string.Format("Updated company SMTP settings (enabled={0}) for company {1}", form.IsEnabled, targetCompanyId));
+                    newValues: string.Format(
+                        "Updated company SMTP settings (companyScoped={0}) for company {1}",
+                        resolved.IsCompanyScoped,
+                        targetCompanyId));
 
-                TempData["SuccessMessage"] = form.IsEnabled
-                    ? "Company SMTP settings saved. Candidate emails for this company will use these settings."
-                    : "Company SMTP settings saved. This company will use the global email configuration.";
+                TempData["SuccessMessage"] = resolved.IsCompanyScoped
+                    ? "Company SMTP settings saved. Outbound email for this company will use these settings."
+                    : "Company SMTP settings saved. Outbound email will use the global platform configuration until host, from email, and password are all provided.";
             }
             catch (ArgumentException ex)
             {
@@ -116,7 +120,7 @@ namespace HR.Web.Controllers
                     isSuperAdmin,
                     actorCompanyId,
                     targetCompanyId,
-                    "Company SMTP is not enabled or complete. Save valid settings before sending a test email.");
+                    "Company SMTP is not fully configured. Save host, from email, and password before sending a test email.");
             }
 
             var emailService = new EmailService(new SettingsService(), _companySmtpSettingsService);
@@ -163,7 +167,6 @@ namespace HR.Web.Controllers
             vm.Form = new CompanySmtpSettingsFormModel
             {
                 CompanyId = targetCompanyId,
-                IsEnabled = settings != null && settings.IsEnabled,
                 SmtpHost = settings != null ? settings.SmtpHost : string.Empty,
                 SmtpPort = settings != null && settings.SmtpPort > 0 ? settings.SmtpPort : 587,
                 SmtpUser = settings != null ? settings.SmtpUser : string.Empty,
@@ -177,7 +180,6 @@ namespace HR.Web.Controllers
         {
             return new CompanySmtpSettingsInput
             {
-                IsEnabled = form.IsEnabled,
                 SmtpHost = form.SmtpHost,
                 SmtpPort = form.SmtpPort,
                 SmtpUser = form.SmtpUser,
