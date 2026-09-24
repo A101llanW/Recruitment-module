@@ -11,6 +11,7 @@
     var interviewers = ViewBag.Interviewers as List<HR.Web.Models.User>;
     var interviewedAppIds = ViewBag.InterviewedAppIds as List<int> ?? new List<int>();
     var canManageApplications = ViewBag.CanManageApplications != null ? (bool)ViewBag.CanManageApplications : false;
+    var canRepairApplicationScores = ViewBag.CanRepairApplicationScores != null && (bool)ViewBag.CanRepairApplicationScores;
     var canViewApplicationScores = ViewBag.CanViewApplicationScores != null && (bool)ViewBag.CanViewApplicationScores;
     var isManagementApplicationsView = ViewBag.IsManagementApplicationsView != null && (bool)ViewBag.IsManagementApplicationsView;
     var canInviteQuestionnaireSecondaryStage = ViewBag.CanInviteQuestionnaireSecondaryStage != null && (bool)ViewBag.CanInviteQuestionnaireSecondaryStage;
@@ -480,17 +481,20 @@
                 <option value="name">Name (A-Z)</option>
             </select>
         </div>
-        <div class="mt-2 mt-md-0">
-            @using (Html.BeginForm("RepairApplicationScores", "Applications", FormMethod.Post, new { @class = "d-inline" }))
-            {
-                @Html.AntiForgeryToken()
-                <button type="submit"
-                        class="btn btn-outline-warning"
-                        onclick="return confirm('Recalculate scores for applications showing scoring errors or missing scores?');">
-                    <i class="fas fa-sync-alt"></i> Repair Scoring Errors
-                </button>
-            }
-        </div>
+        @if (canRepairApplicationScores)
+        {
+            <div class="mt-2 mt-md-0">
+                @using (Html.BeginForm("RepairApplicationScores", "Applications", new { tenant = tenantToken }, FormMethod.Post, new { @class = "d-inline" }))
+                {
+                    @Html.AntiForgeryToken()
+                    <button type="submit"
+                            class="btn btn-outline-warning"
+                            onclick="return confirm('Recalculate scores for applications showing scoring errors or missing scores?');">
+                        <i class="fas fa-sync-alt"></i> Repair Scoring Errors
+                    </button>
+                }
+            </div>
+        }
     </div>
 
 }

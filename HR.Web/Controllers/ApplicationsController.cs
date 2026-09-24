@@ -361,6 +361,7 @@ namespace HR.Web.Controllers
         {
             var rolePermissionService = new RolePermissionService();
             ViewBag.CanManageApplications = false;
+            ViewBag.CanRepairApplicationScores = false;
             ViewBag.CanInviteQuestionnaireSecondaryStage = false;
             ViewBag.CanViewApplicationScores = false;
             ViewBag.IsManagementApplicationsView = false;
@@ -383,6 +384,7 @@ namespace HR.Web.Controllers
                 ViewBag.IsManagementApplicationsView = true;
                 ViewBag.CanViewApplicationScores = CanViewApplicationScores(user);
                 ViewBag.CanManageApplications = rolePermissionService.CanCurrentUserAccessModule(RoleModuleCatalog.Applications, RoleAccessLevels.Manage);
+                ViewBag.CanRepairApplicationScores = _tenantService.IsImpersonating() && _tenantService.IsActualSuperAdmin();
                 ViewBag.CanInviteQuestionnaireSecondaryStage = rolePermissionService.IsFullCompanyAdmin(user) ||
                     _tenantService.IsActualSuperAdmin();
                 return View(BuildManagementApplicationsView());
@@ -496,6 +498,8 @@ namespace HR.Web.Controllers
             _uow.Applications.Add(applicationModel);
             _uow.Complete();
 
+            NotifyCompanyOfNewApplication(applicationModel.Id);
+
             var persistedApplication = _uow.Applications.GetAll(a => a.Applicant, a => a.Position)
                 .FirstOrDefault(a => a.Id == applicationModel.Id);
             if (persistedApplication != null &&
@@ -513,7 +517,6 @@ namespace HR.Web.Controllers
                 }
             }
 
-            NotifyCompanyOfNewApplication(applicationModel.Id);
             return RedirectToAction("Index");
         }
 
@@ -596,6 +599,30 @@ namespace HR.Web.Controllers
                 success = true,
                 passMark = normalizedPassMark
             });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin, SuperAdmin")]
+        [RoleBasedAuthorization("Admin")]
+        public ActionResult RepairApplicationScores()
+        {
+            if (!_tenantService.IsImpersonating() || !_tenantService.IsActualSuperAdmin())
+            {
+                return new HttpStatusCodeResult(403, "Access denied. Repair scoring is only available while impersonating a company as SuperAdmin.");
+            }
+
+            var user = GetCurrentUser();
+            if (user == null || !IsManagementUser(user))
+            {
+                return new HttpStatusCodeResult(403, "Access denied.");
+            }
+
+            var repaired = RepairBrokenApplicationScoresForCurrentTenant();
+            TempData["SuccessMessage"] = repaired > 0
+                ? string.Format("Repaired scores for {0} application(s).", repaired)
+                : "No applications needed score repair.";
+            return RedirectToAction("Index");
         }
 
         [HttpPost]

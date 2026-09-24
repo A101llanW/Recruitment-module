@@ -10,8 +10,8 @@
 }
 <h3>Application</h3>
 <dl class="row">
-    <dt class="col-sm-3">Applicant</dt><dd class="col-sm-9">@Model.Applicant?.FullName</dd>
-    <dt class="col-sm-3">Position</dt><dd class="col-sm-9">@Model.Position?.Title</dd>
+    <dt class="col-sm-3">Applicant</dt><dd class="col-sm-9">@(Model.Applicant != null ? Model.Applicant.FullName : "N/A")</dd>
+    <dt class="col-sm-3">Position</dt><dd class="col-sm-9">@(Model.Position != null ? Model.Position.Title : "N/A")</dd>
     <dt class="col-sm-3">Status</dt><dd class="col-sm-9">@Model.Status</dd>
     <dt class="col-sm-3">Applied</dt><dd class="col-sm-9">@Model.AppliedOn</dd>
     @if (canViewApplicationScores && Model.Score.HasValue)
@@ -19,7 +19,7 @@
         <dt class="col-sm-3">Score</dt>
         <dd class="col-sm-9">@Model.Score.Value.ToString("F1")</dd>
     }
-    else if (canViewApplicationScores && !string.IsNullOrEmpty(Model.ScoreReason) && Model.ScoreReason.StartsWith("Scoring failed", StringComparison.OrdinalIgnoreCase))
+    else if (canViewApplicationScores && !string.IsNullOrEmpty(Model.ScoreReason) && Model.ScoreReason.StartsWith("Scoring failed", System.StringComparison.OrdinalIgnoreCase))
     {
         <dt class="col-sm-3">Score</dt>
         <dd class="col-sm-9">
@@ -53,19 +53,21 @@
 }
 @if (canManageApplicationDetails)
 {
-    @using (Html.BeginForm("UpdateStatus", "Applications", FormMethod.Post))
-    {
-        @Html.AntiForgeryToken()
-        @Html.Hidden("id", Model.Id)
-        <div class="form-row align-items-center">
-            <div class="col-auto">
-                <input name="status" class="form-control" placeholder="New Status" />
+    <div class="mb-3">
+        @using (Html.BeginForm("UpdateStatus", "Applications", new { tenant = tenantToken }, FormMethod.Post))
+        {
+            @Html.AntiForgeryToken()
+            @Html.Hidden("id", Model.Id)
+            <div class="form-row align-items-center">
+                <div class="col-auto">
+                    <input name="status" class="form-control" placeholder="New Status" />
+                </div>
+                <div class="col-auto">
+                    <button class="btn btn-sm btn-primary" type="submit">Update Status</button>
+                </div>
             </div>
-            <div class="col-auto">
-                <button class="btn btn-sm btn-primary" type="submit">Update Status</button>
-            </div>
-        </div>
-    }
+        }
+    </div>
 }
 <div class="mt-3">
     @Html.ActionLink("Back", "Index", null, new { @class = "btn btn-secondary btn-sm" })
@@ -75,7 +77,7 @@
     }
     @if (canManageApplicationDetails)
     {
-        using (Html.BeginForm("DeleteConfirmed", "Applications", new { id = Model.Id }, FormMethod.Post, new { @class = "d-inline-block", onsubmit = "return confirm('Delete this application?');" }))
+        using (Html.BeginForm("DeleteConfirmed", "Applications", new { id = Model.Id, tenant = tenantToken }, FormMethod.Post, new { @class = "d-inline-block", onsubmit = "return confirm('Delete this application?');" }))
         {
             @Html.AntiForgeryToken()
             <button type="submit" class="btn btn-danger btn-sm ml-2">Delete</button>

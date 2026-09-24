@@ -3,6 +3,7 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewBag.Title = "Application summary";
     ViewBag.SuppressPageHero = true;
+    ViewBag.HideNavbar = true;
 }
 
 <div class="container mt-5 mb-5" style="max-width: 640px;">
@@ -33,9 +34,10 @@
 
                     <dt class="col-sm-4">Score</dt>
                     <dd class="col-sm-8">
-                        @if (Model.HasScore)
+                        @if (Model.HasScore && Model.Score.HasValue)
                         {
-                            @($"{Model.Score:0.##} points")
+                            @Model.Score.Value.ToString("0.##")
+                            @: points
                         }
                         else
                         {

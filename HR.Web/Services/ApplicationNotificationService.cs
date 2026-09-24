@@ -61,24 +61,14 @@ namespace HR.Web.Services
                 return;
             }
 
-            var portalBaseUrl = ExternalUrlHelper.GetBaseUri(request).ToString().TrimEnd('/');
-            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            try
             {
-                try
-                {
-                    using (var context = new HrContext())
-                    {
-                        var smtpSettings = new CompanySmtpSettingsService(context, new SettingsService());
-                        var emailService = new EmailService(smtpSettings);
-                        var service = new ApplicationNotificationService(context, emailService, new SecurityService());
-                        service.SendNewApplicationNotificationsAsync(applicationId, portalBaseUrl).GetAwaiter().GetResult();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Trace.WriteLine("[ApplicationNotification] Failed for application " + applicationId + ": " + ex.Message);
-                }
-            });
+                SendNewApplicationNotificationsAsync(applicationId, request).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                LogNotificationFailure(applicationId, "QueueNewApplicationNotifications", ex);
+            }
         }
 
         public Task SendNewApplicationNotificationsAsync(int applicationId, HttpRequestBase request)
@@ -103,6 +93,7 @@ namespace HR.Web.Services
 
             if (application == null || !companyId.HasValue)
             {
+                LogNotificationDiagnostic(applicationId, "SendNewApplicationNotificationsAsync", "Application or company context missing.");
                 return;
             }
 
@@ -114,6 +105,10 @@ namespace HR.Web.Services
 
             if (!recipients.Any())
             {
+                LogNotificationDiagnostic(
+                    applicationId,
+                    "SendNewApplicationNotificationsAsync",
+                    string.Format("No active notification recipients for company {0}.", companyId.Value));
                 return;
             }
 
@@ -140,17 +135,39 @@ namespace HR.Web.Services
                     continue;
                 }
 
-                var detailsUrl = BuildDetailsUrl(recipient, application, tenantSlug, portalBaseUrl);
-                var subject = string.Format("New application: {0} — {1}", candidateName, positionTitle);
-                var body = BuildNotificationEmailBody(
-                    candidateName,
-                    positionTitle,
-                    companyName,
-                    rankResult,
-                    detailsUrl,
-                    recipient.AccessMode);
+                try
+                {
+                    var detailsUrl = BuildDetailsUrl(recipient, application, tenantSlug, portalBaseUrl);
+                    var subject = string.Format("New application: {0} — {1}", candidateName, positionTitle);
+                    var body = BuildNotificationEmailBody(
+                        candidateName,
+                        positionTitle,
+                        companyName,
+                        rankResult,
+                        detailsUrl,
+                        recipient.AccessMode);
 
-                await _emailService.SendAsync(recipient.Email.Trim(), subject, body, companyId).ConfigureAwait(false);
+                    var sendResult = await _emailService.TrySendAsync(
+                        recipient.Email.Trim(),
+                        subject,
+                        body,
+                        companyId).ConfigureAwait(false);
+
+                    if (!sendResult.Success)
+                    {
+                        LogNotificationDiagnostic(
+                            applicationId,
+                            "SendNewApplicationNotificationsAsync",
+                            string.Format(
+                                "Failed to email recipient {0}: {1}",
+                                recipient.Email.Trim(),
+                                sendResult.ErrorMessage ?? "unknown error"));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogNotificationFailure(applicationId, "SendNewApplicationNotificationsAsync:" + recipient.Email, ex);
+                }
             }
         }
 
@@ -362,6 +379,19 @@ namespace HR.Web.Services
                 IsValid = false,
                 ErrorMessage = message
             };
+        }
+
+        private static void LogNotificationFailure(int applicationId, string location, Exception ex)
+        {
+            var message = ex != null ? ex.Message : "unknown error";
+            System.Diagnostics.Trace.WriteLine(
+                "[ApplicationNotification] Failed for application " + applicationId + " at " + location + ": " + message);
+        }
+
+        private static void LogNotificationDiagnostic(int applicationId, string location, string message)
+        {
+            System.Diagnostics.Trace.WriteLine(
+                "[ApplicationNotification] Application " + applicationId + " at " + location + ": " + message);
         }
     }
 }

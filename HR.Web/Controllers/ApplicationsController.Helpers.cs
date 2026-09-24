@@ -1192,6 +1192,8 @@ namespace HR.Web.Controllers
             _uow.Applications.Update(application);
             _uow.Complete();
             ClearPendingCoverLetter();
+            NotifyCompanyOfNewApplication(application.Id);
+
             if (!ScoreQuestionnaireApplication(application))
             {
                 TempData["ErrorMessage"] =
@@ -1206,7 +1208,6 @@ namespace HR.Web.Controllers
                     "Your application was submitted, but we could not send the confirmation email. Our team has your submission.";
             }
 
-            NotifyCompanyOfNewApplication(application.Id);
             return null;
         }
 
