@@ -369,7 +369,7 @@
 
             function runPreview(page, append) {
                 var btn = $('#previewBtn');
-                btn.prop('disabled', true).text('Previewing…');
+                btn.prop('disabled', true).text('Previewing...');
 
                 $.ajax({
                     url: '@Url.Action("PreviewCustom", "ReportGenerator")',

@@ -398,7 +398,7 @@
         $(document).on('click', '#saved-custom-view-more', function () {
             var nextPage = parseInt($(this).data('next-page'), 10) || 2;
             var button = $(this);
-            button.prop('disabled', true).text('Loading…');
+            button.prop('disabled', true).text('Loading...');
             $.get('@Url.Action("SavedPage", "ReportGenerator")', { page: nextPage }, function (html) {
                 $('#saved-custom-view-more-row').remove();
                 $('#saved-custom-empty-row').remove();
